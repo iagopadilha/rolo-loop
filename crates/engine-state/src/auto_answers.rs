@@ -134,7 +134,9 @@ pub fn try_auto_answer(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Value,
         return false;
     }
     let question = SPACES.replace_lit(&text_of(state.get("reason")), " ").trim().to_string();
-    let _ = write_answer(work, &format!("{text} [automatic answer from the loop: option {number}, {why}]"));
+    if let Ok(message) = write_answer(work, &format!("{text} [automatic answer from the loop: option {number}, {why}]")) {
+        println!("{message}");
+    }
     auto_state.total += 1;
     bump(&mut auto_state.per_feature, &key);
     meta_list(meta, "auto_answers").push(json!({"turn": turn, "feature": key, "option": number}));
@@ -175,7 +177,7 @@ pub fn try_gate_tiebreak(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Valu
         map.insert("options".into(), json!(["approve the spec and run it, remaining findings become notes for the executor", "finish without the feature"]));
     }
     let _ = save_json(&state_file(work, "LOOP.json"), &state);
-    let _ = write_answer(
+    if let Ok(message) = write_answer(
         work,
         &format!(
             "Gate tiebreak (automatic loop decision): after several rejections, APPROVE the spec of {slugs} (status=approved) without redoing the gate. \
@@ -183,7 +185,9 @@ pub fn try_gate_tiebreak(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Valu
              TEST-ENVIRONMENT.md does not cover becomes not-covered in regression.md. Record it in VALIDATE.md and move on to execution with \
              baseline and regression: build and regression decide, not the spec wording."
         ),
-    );
+    ) {
+        println!("{message}");
+    }
     for slug in &stuck {
         bump(&mut auto_state.tiebreaks, slug);
     }
