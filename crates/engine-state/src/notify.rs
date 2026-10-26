@@ -509,7 +509,11 @@ fn channel_webhook(env: &Env, subject: &str, body: &str, ctx: &Value) -> (bool, 
     (false, format!("no response from the webhook: {last}"))
 }
 
-fn missing_config(env: &Env, name: &str) -> Vec<String> {
+/// The channels the notices can use.
+pub const CHANNELS: [&str; 5] = ["console", "toast", "file", "email", "webhook"];
+
+/// The variables a channel still needs before it can send (names only).
+pub fn missing_config(env: &Env, name: &str) -> Vec<String> {
     let required: Vec<String> = match name {
         "email" => email::required_variables(env),
         "webhook" => vec!["LOOP_WEBHOOK_URL".into()],

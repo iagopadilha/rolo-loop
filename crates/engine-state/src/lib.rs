@@ -34,6 +34,7 @@ pub mod mcp_discovery;
 pub mod monitor_proc;
 pub mod network_policy;
 pub mod notify;
+pub mod preflight_checks;
 pub mod prod_database_script;
 pub mod project_repos;
 pub mod readiness_checks;
