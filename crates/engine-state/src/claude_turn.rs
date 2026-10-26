@@ -91,7 +91,7 @@ pub fn claude_command(ctx: &AppCtx, opts: &LoopOpts, prompt: &str) -> Vec<String
 }
 
 /// `str(float)`: `5.0`, `2.5`, `10.0`.
-fn py_float(value: f64) -> String {
+pub fn py_float(value: f64) -> String {
     if value.fract() == 0.0 && value.abs() < 1e16 { format!("{value:.1}") } else { format!("{value}") }
 }
 

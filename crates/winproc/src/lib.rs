@@ -46,6 +46,41 @@ pub fn pid_alive(pid: u32) -> bool {
     }
 }
 
+static INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(windows)]
+unsafe extern "system" fn on_console_event(kind: u32) -> i32 {
+    // CTRL_C_EVENT = 0, CTRL_BREAK_EVENT = 1
+    if kind <= 1 {
+        INTERRUPTED.store(true, std::sync::atomic::Ordering::SeqCst);
+        return 1;
+    }
+    0
+}
+
+/// Makes Ctrl+C set the flag read by [`interrupted`] instead of ending the process at once (the loop then stops cleanly).
+#[cfg(windows)]
+pub fn install_ctrl_c_handler() {
+    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+    // SAFETY: registers a handler that only stores to an atomic; the function pointer lives for the whole process.
+    unsafe {
+        SetConsoleCtrlHandler(Some(on_console_event), 1);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn install_ctrl_c_handler() {}
+
+/// True once Ctrl+C was pressed after [`install_ctrl_c_handler`].
+pub fn interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Clears the flag (tests).
+pub fn clear_interrupt() {
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[cfg(not(windows))]
 pub fn process_start_time(_pid: u32) -> Option<u64> {
     None

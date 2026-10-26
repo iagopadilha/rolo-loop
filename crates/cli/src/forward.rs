@@ -74,3 +74,13 @@ pub fn deliver(f: Forwarded) -> i32 {
     let (code, out, err) = engine_state::delivery::run_cli(&f.args, &mut env);
     emit(code, &out, &err)
 }
+
+pub fn run_loop(f: Forwarded) -> i32 {
+    engine_state::run_loop::run_cli(&f.args)
+}
+
+pub fn close_loop(f: Forwarded) -> i32 {
+    let env = cfg::Env::process();
+    let (code, out) = engine_state::close_loop::run_cli(&f.args, &env);
+    emit(code, &out, "")
+}

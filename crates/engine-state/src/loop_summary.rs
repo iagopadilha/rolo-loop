@@ -52,6 +52,15 @@ fn parse_roadmap(text: &str) -> Vec<Stage> {
     stages
 }
 
+/// `[(slug, status or "?")]` of every feature of the ROADMAP text, in file order.
+pub fn feature_statuses(text: &str) -> Vec<(String, String)> {
+    parse_roadmap(text)
+        .iter()
+        .flat_map(|stage| stage.features.iter())
+        .map(|f| (field(f, "slug").unwrap_or("").to_string(), field(f, "status").unwrap_or("?").to_string()))
+        .collect()
+}
+
 fn set(fields: &mut Vec<(String, String)>, key: &str, value: &str) {
     if let Some(slot) = fields.iter_mut().find(|(k, _)| k == key) {
         slot.1 = value.to_string();

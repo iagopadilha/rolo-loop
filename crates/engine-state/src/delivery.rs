@@ -85,7 +85,7 @@ fn features_of(root: &str) -> Features {
 }
 
 /// Items of VALIDATE.md: what the orchestrator decided on its own and the user should check.
-fn validate_items(root: &str) -> Vec<String> {
+pub fn validate_items(root: &str) -> Vec<String> {
     read(&state_file(root, "VALIDATE.md")).lines().map(str::trim).filter(|l| l.starts_with("- ")).map(|l| l[2..].trim().to_string()).collect()
 }
 

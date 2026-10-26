@@ -46,6 +46,10 @@ enum Command {
     Notify(forward::Forwarded),
     /// Pushes the feature branch and opens the PR at the end of the flow
     Deliver(forward::Forwarded),
+    /// The unsupervised loop: runs claude in turns until it finishes or gets stuck
+    Loop(forward::Forwarded),
+    /// Finishes a loop safely: verified backup, durable plan back, worktree removal
+    CloseLoop(forward::Forwarded),
 }
 
 fn main() {
@@ -64,6 +68,8 @@ fn main() {
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
         Command::Deliver(a) => forward::deliver(a),
+        Command::Loop(a) => forward::run_loop(a),
+        Command::CloseLoop(a) => forward::close_loop(a),
     };
     std::process::exit(code);
 }

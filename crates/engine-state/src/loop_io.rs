@@ -488,6 +488,12 @@ pub fn run_process(argv: &[String], cwd: &str, env: &[(String, String)], stdin_t
                 let _ = child.kill();
                 break (child.wait().ok(), true);
             }
+            Ok(None) if winproc::interrupted() => {
+                // Ctrl+C: the loop stops cleanly after this turn, so the child must not outlive it
+                kill_tree(pid);
+                let _ = child.kill();
+                break (child.wait().ok(), false);
+            }
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
             Err(_) => break (None, false),
         }
