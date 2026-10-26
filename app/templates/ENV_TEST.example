@@ -1,0 +1,15 @@
+# .specs/project/.env.test: THIS project's test values, the ONLY credential source of the loop. SECRET: ignored by git, never commit,
+# never paste into a document. Same names the project's TEST-ENVIRONMENT.md mentions as $NAME; values reach the agents only through
+# `testenv.py exec`. Nothing else is read at run time (not the real environment, not ~/.loop-harness/.env, not any shared .env).
+# To start from a machine file, use "Import from machine sources" in the Test environment tab (it copies the NAMES you choose from the
+# files listed in `env_sources`, Settings; the harness never fills this file by itself and never overwrites a line you wrote).
+# Only DEV and localhost values. Quote a value with # & % { } ? ^ using single quotes. Lists use `;` (write \; for a literal ;).
+
+# Test users: lists aligned by position (same number of items in each).
+# TEST_USER_EMAILS=first@example.com;second@example.com
+# TEST_USER_PASSWORDS=
+# TEST_USER_ROLES=customer;admin
+
+# LOCAL_URL=https://localhost:5001
+# ROUTE_PREFIX=/api/v1
+# ADMIN_TOKEN=
