@@ -26,7 +26,7 @@ pub fn normalize(path: &str) -> String {
     path.replace('\\', "/").trim().trim_matches('/').to_string()
 }
 
-fn skill_by_stack(stack: &str) -> &'static str {
+pub fn skill_by_stack(stack: &str) -> &'static str {
     match stack {
         "dotnet" | "nestjs" => "backend-dev",
         "react" => "frontend-dev",
@@ -114,7 +114,7 @@ fn basename(path: &str) -> &str {
     path.rsplit(['\\', '/']).next().unwrap_or("")
 }
 
-fn infer_stack(folder: &Path) -> String {
+pub fn infer_stack(folder: &Path) -> String {
     let files = project_files_within(folder, PROJECT_FILE_DEPTH);
     let names: Vec<&str> = files.iter().map(|p| basename(p)).collect();
     if names.iter().any(|n| {
@@ -152,7 +152,7 @@ fn infer_stack(folder: &Path) -> String {
     "unknown".into()
 }
 
-fn has_code_files(folder: &Path) -> bool {
+pub fn has_code_files(folder: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(folder) else { return false };
     let mut dirs = Vec::new();
     for e in entries.flatten() {

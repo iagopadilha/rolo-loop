@@ -447,6 +447,13 @@ pub fn resolve_base_branch(app: &App, loop_settings: &ParsedSettings) -> Value {
     json!({"name": name, "source": source})
 }
 
+/// Base/integration branch (where new worktrees start and the PR target): the ROADMAP `**Branch base:**` first, then LOOP_PR_BASE /
+/// LOOP_INTEGRATION_BRANCH, then `developer`. The one helper every payload uses (same order as the engine's delivery).
+pub fn get_integration_branch(app: &App, roadmap_text: &str) -> String {
+    let from_roadmap = engine_state::roadmap_settings::read_roadmap_base_branch(roadmap_text);
+    if from_roadmap.is_empty() { get_environment_integration_branch(app) } else { from_roadmap }
+}
+
 /// LOOP_PR_BASE / LOOP_INTEGRATION_BRANCH (environment, then the app .env), else the default.
 pub fn get_environment_integration_branch(app: &App) -> String {
     let mut env = app.env.clone();

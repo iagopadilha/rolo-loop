@@ -25,6 +25,13 @@ pub mod claude_call_log;
 pub mod claude_jobs;
 pub mod code_inventory;
 pub mod context_block;
+pub mod engine_script;
+pub mod loop_control;
+pub mod loop_status;
+pub mod planning_repos;
+pub mod project_capabilities;
+pub mod readiness;
+pub mod repo_registry;
 pub mod planning_gates;
 pub mod planning_requirement;
 pub mod project;
@@ -71,6 +78,13 @@ pub struct App {
     /// Project id -> (when, planning gates): the last gates computed, for the chat send's cheap refusal.
     pub gates_cache: Mutex<BTreeMap<String, (Instant, Value)>>,
     pub started_at: String,
+    /// Test replacements of the engine commands (`run_loop`, `delivery`...), see `engine_script`.
+    pub engine_overrides: Mutex<engine_script::EngineOverrides>,
+    /// Loop control: one relaunch lock per project and the pid of the loop this app launched.
+    pub relaunch_locks: Mutex<BTreeMap<String, Arc<Mutex<()>>>>,
+    pub relaunched_pids: Mutex<BTreeMap<String, i64>>,
+    /// Readiness: checks scheduled or running per work dir, and one run lock per work dir.
+    pub readiness: readiness::ReadinessState,
     /// `MONITOR.json` path -> project id, and project id -> work dir where it was written.
     pub monitors: Mutex<(Vec<(String, String)>, BTreeMap<String, String>)>,
     me: Weak<App>,
@@ -122,6 +136,10 @@ impl App {
             app_url: Mutex::new(String::new()),
             gates_cache: Mutex::new(BTreeMap::new()),
             started_at: crate::repositories::loop_command_file::now_iso(),
+            engine_overrides: Mutex::new(BTreeMap::new()),
+            relaunch_locks: Mutex::new(BTreeMap::new()),
+            relaunched_pids: Mutex::new(BTreeMap::new()),
+            readiness: readiness::ReadinessState::default(),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
             config,
             me: me.clone(),

@@ -16,6 +16,8 @@ use std::sync::LazyLock;
 pub const ROLE_EDIT: &str = "edit";
 pub const ROLE_REFERENCE: &str = "reference";
 pub const LOOP_WORKTREE_SUFFIX: &str = "-worktree-loop";
+/// `scope_source` of a scope applied from the planning chat's REPOS-SUGGESTED.json.
+pub const SCOPE_SOURCE_PLANNING: &str = "planning";
 
 static REPO_PATH_PREFIX: LazyLock<Re> = LazyLock::new(|| Re::new(r"^([a-z0-9._-]+):(?![/\\])(.+)\z"));
 static NAME_INVALID: LazyLock<Re> = LazyLock::new(|| Re::new(r"[^a-z0-9._-]+"));

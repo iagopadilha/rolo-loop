@@ -43,6 +43,7 @@ pub mod preflight_checks;
 pub mod prod_database_script;
 pub mod project_repos;
 pub mod readiness_checks;
+pub mod repo_catalog;
 pub mod repos;
 pub mod roadmap_settings;
 pub mod rules;
