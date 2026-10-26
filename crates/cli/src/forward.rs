@@ -37,3 +37,8 @@ pub fn scale(f: Forwarded) -> i32 {
     let (code, out) = engine_state::scale::run_cli(&f.args);
     emit(code, &out, "")
 }
+
+pub fn audit(f: Forwarded) -> i32 {
+    let (code, out) = engine_state::audit_deps::run_cli(&f.args);
+    emit(code, &out, "")
+}

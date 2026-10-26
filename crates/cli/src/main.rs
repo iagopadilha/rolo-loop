@@ -32,6 +32,8 @@ enum Command {
     Classify(forward::Forwarded),
     /// Sizes the brownfield mapping
     Scale(forward::Forwarded),
+    /// Audits forgotten dependencies between ROADMAP features
+    Audit(forward::Forwarded),
 }
 
 fn main() {
@@ -43,6 +45,7 @@ fn main() {
         Command::Graph(a) => forward::graph(a),
         Command::Classify(a) => forward::classify(a),
         Command::Scale(a) => forward::scale(a),
+        Command::Audit(a) => forward::audit(a),
     };
     std::process::exit(code);
 }

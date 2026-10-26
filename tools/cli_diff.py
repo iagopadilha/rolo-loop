@@ -142,6 +142,36 @@ for name, files in SCALE.items():
 scenario("scale", "usage", {}, ["scale"])
 
 
+AUDIT = {
+    "ts-relative": {".specs/project/ROADMAP.md": "- [users-api] status=approved paths=src/users\n- [orders-api] status=approved paths=src/orders\n",
+                    "src/orders/svc.ts": "import { User } from '../users/model';\nconst x = require('./local');\nexport * from '../users/index';\n", "src/users/model.ts": "export class User {}\n"},
+    "ts-alias": {".specs/project/ROADMAP.md": "- [core-lib] status=pending paths=packages/core\n- [web-app] status=approved paths=apps/web\n",
+                 "tsconfig.json": "{\n  // comment\n  \"compilerOptions\": {\"baseUrl\": \".\", \"paths\": {\"@core/*\": [\"packages/core/*\"],},}\n}\n",
+                 "apps/web/page.tsx": "import { thing } from '@core/thing';\n", "packages/core/thing.ts": "export const thing = 1;\n"},
+    "python": {".specs/project/ROADMAP.md": "- [data-layer] status=approved paths=app/data\n- [api-layer] status=approved paths=app/api\n",
+               "app/api/views.py": "from app.data import models\nimport app.data.util as u\nfrom . import helpers\n", "app/data/models.py": "x = 1\n", "app/data/util.py": "y = 2\n", "app/api/helpers.py": "z = 3\n"},
+    "csharp": {".specs/project/ROADMAP.md": "- [billing] status=approved paths=src/Billing\n- [orders] status=approved paths=src/Orders\n",
+               "src/Billing/Invoice.cs": "namespace Shop.Billing\n{\n}\n", "src/Orders/Order.cs": "using Shop.Billing;\nnamespace Shop.Orders {}\n"},
+    "csproj": {".specs/project/ROADMAP.md": "- [lib-x] status=approved paths=src/LibX\n- [app-x] status=approved paths=src/AppX\n",
+               "src/AppX/AppX.csproj": "<Project><ItemGroup><ProjectReference Include=\"..\\LibX\\LibX.csproj\" /></ItemGroup></Project>\n", "src/LibX/LibX.csproj": "<Project/>\n"},
+    "spec-text": {".specs/project/ROADMAP.md": "- [auth-service] status=approved paths=src/auth\n- [profile-page] status=approved paths=src/profile\n",
+                  ".specs/features/profile-page/spec.md": "# Profile\nNeeds auth-service tokens.\n## Out of scope\nauth-service admin\n", ".specs/features/profile-page/tasks.md": "uses src/auth/token.ts\n"},
+    "cycle": {".specs/project/ROADMAP.md": "- [alpha-feature] status=approved paths=src/a deps=beta-feature\n- [beta-feature] status=approved paths=src/b\n",
+              ".specs/features/beta-feature/spec.md": "Needs alpha-feature first.\n"},
+    "reverse-review": {".specs/project/ROADMAP.md": "- [one-feature] status=approved paths=src/one deps=two-feature\n- [two-feature] status=approved paths=src/two\n"},
+    "verified-skipped": {".specs/project/ROADMAP.md": "- [done-one] status=verified paths=src/d\n- [next-one] status=approved paths=src/n\n", "src/n/a.ts": "import '../d/x';\n", "src/d/x.ts": ""},
+    "refused-mark": {".specs/project/ROADMAP.md": "- [users-api] status=approved paths=src/users\n- [orders-api] status=approved paths=src/orders\n",
+                     "src/orders/svc.ts": "import x from '../users/model';\n", ".specs/project/loop/DEPENDENCIES.md": "- [refused] orders-api -> users-api | import | deps=users-api | x\n"},
+    "empty": {},
+}
+for name, files in AUDIT.items():
+    scenario("audit", "show/" + name, files, ["audit", "{work}"])
+    scenario("audit", "json/" + name, files, ["audit", "{work}", "--json"])
+    scenario("audit", "write/" + name, files, ["audit", "{work}", "--write"], mutates=True)
+    scenario("audit", "apply/" + name, files, ["audit", "{work}", "--apply"], mutates=True)
+scenario("audit", "usage", {}, ["audit"])
+
+
 def make_project(root, name, files, work):
     base = os.path.join(root, name)
     shutil.rmtree(base, ignore_errors=True)

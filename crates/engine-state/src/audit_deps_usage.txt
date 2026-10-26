@@ -1,0 +1,18 @@
+Audits forgotten dependencies between ROADMAP features (skill orchestrator-audit-dependencies). Stdlib only, no AI.
+
+Usage:
+  python audit_deps.py <root> [--write] [--apply] [--json]
+
+Looks for evidence that feature B needs feature A while B does not declare `deps=A`:
+  1) IMPORT (code that already exists): imports/using/ProjectReference of files in B.paths that fall inside A.paths
+     (TypeScript/JavaScript: relative and tsconfig alias; Python: the repo's own module; C#: using -> namespace -> folder, ProjectReference).
+  2) TEXT (code that does not exist yet): B's spec (.specs/features/B/*.md) mentions A's slug or a path of A, or lists A in the Dependencies section.
+  3) REVERSE: a declared `deps=A` with no evidence at all -> "review" (may be a legitimate ordering dependency; nothing is removed).
+Only suggests an A that is not yet `verified` (if A is already done there is nothing to wait for). A suggestion that would close a cycle becomes `cycle` (not applied).
+
+--write    writes .specs/project/loop/DEPENDENCIES.md (`[pending]` suggestions, `[applied]`/`[refused]` decisions preserved)
+--apply    writes `deps=` into ROADMAP.md for the `[pending]` suggestions with evidence (validates the grammar; undoes if it breaks) and marks `[applied]`
+--json     prints the result as JSON
+Never decides on its own in interactive mode: the orchestrator shows the suggestions to the user; in the unsupervised loop it applies them
+(erring on the serial side only costs time; erring on the parallel side corrupts code).
+Limit: a dependency on code that does not exist yet and that the spec does not mention stays invisible.
