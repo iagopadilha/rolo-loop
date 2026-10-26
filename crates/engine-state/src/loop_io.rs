@@ -363,3 +363,43 @@ pub fn copy2(source: &Path, target: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+/// `shutil.copytree(source, target, dirs_exist_ok=True, ignore=ignore_patterns(*ignore))`: copies with modification times, following
+/// links, skipping any entry whose name is in `ignore`.
+pub fn copy_tree(source: &Path, target: &Path, ignore: &[&str]) -> std::io::Result<()> {
+    std::fs::create_dir_all(target)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if ignore.contains(&name.to_string_lossy().as_ref()) {
+            continue;
+        }
+        let (from, to) = (entry.path(), target.join(&name));
+        if from.is_dir() {
+            copy_tree(&from, &to, ignore)?;
+        } else {
+            copy2(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+pub const DELIVERY_PENDING_NAME: &str = "delivery-pending.json";
+
+/// The app wrote the delivery choices before the worktree existed (`<repo>/.specs/project/loop/internal/delivery-pending.json`): they
+/// become `meta["delivery"]` and the pending file is deleted.
+pub fn merge_pending_delivery(repo: &str, meta: &mut Value) {
+    let path = crate::loop_state::internal_dir(repo).join(DELIVERY_PENDING_NAME);
+    if let Value::Object(pending) = load_json(&path) {
+        if !pending.is_empty() {
+            if let Some(map) = meta.as_object_mut() {
+                let mut delivery = map.get("delivery").and_then(Value::as_object).cloned().unwrap_or_default();
+                for (k, v) in pending {
+                    delivery.insert(k, v);
+                }
+                map.insert("delivery".into(), Value::Object(delivery));
+            }
+        }
+    }
+    let _ = std::fs::remove_file(path);
+}
