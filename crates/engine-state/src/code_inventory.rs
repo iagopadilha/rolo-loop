@@ -15,6 +15,8 @@ use std::sync::LazyLock;
 pub const DEFAULT_GIANT_LINES: i64 = 1500;
 pub const DEFAULT_GIANT_KB: i64 = 200;
 pub const ROOT_NAME: &str = "_root";
+/// Where the inventories live, relative to the repository root (forward slashes).
+pub const INVENTORY_RELATIVE_DIR: &str = ".specs/project/loop/internal/inventory";
 const LOCK_FILES: [&str; 8] = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock", "poetry.lock", "gemfile.lock", "cargo.lock", "go.sum"];
 const HEADER_BYTES: usize = 1024;
 const HINT_SCAN_BYTES: usize = 4 * 1024 * 1024;
@@ -289,7 +291,7 @@ pub fn inventory_path(root: &str, name: &str) -> PathBuf {
     path.join(format!("{name}.json"))
 }
 
-fn write_atomically(path: &Path, document: &Value) -> std::io::Result<()> {
+pub fn write_atomically(path: &Path, document: &Value) -> std::io::Result<()> {
     let mut text = py_json_dumps_indent(document, false, 2);
     text.push('\n');
     crate::loop_io::atomic_write_text(path, &text)

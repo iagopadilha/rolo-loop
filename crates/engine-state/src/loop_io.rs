@@ -425,6 +425,13 @@ pub fn local_from_epoch(epoch: i64) -> Option<time::PrimitiveDateTime> {
     Some(time::PrimitiveDateTime::new(local.date(), local.time()))
 }
 
+/// `naive_local.timestamp()`: the epoch seconds of a naive local date and time.
+pub fn local_to_epoch(moment: time::PrimitiveDateTime) -> i64 {
+    let guess = moment.assume_utc();
+    let offset = time::UtcOffset::local_offset_at(guess).unwrap_or(time::UtcOffset::UTC);
+    moment.assume_offset(offset).unix_timestamp()
+}
+
 /// `moment.isoformat(timespec="seconds")`.
 pub fn iso_seconds(moment: time::PrimitiveDateTime) -> String {
     moment.format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]")).unwrap_or_default()
