@@ -265,6 +265,18 @@ scenario("notify", "test-unknown", NOTIFY_OFF, ["notify", "--test", "--channels"
 scenario("notify", "custom-console", NOTIFY_OFF, ["notify", "--subject", "Hello", "--body", "line <1>", "--channels", "console"])
 scenario("notify", "usage", NOTIFY_OFF, ["notify"])
 
+DELIVER_OPEN = {".specs/project/ROADMAP.md": "## Stage 1\n- [a] status=verified\n- [b] status=building\n"}
+DELIVER_DONE = {".specs/project/ROADMAP.md": "## Stage 1\n- [a] status=verified\n- [b] status=blocked\n"}
+scenario("deliver", "detached", DELIVER_DONE, ["deliver", "{work}"], mutates=True)
+scenario("deliver", "protected", DELIVER_DONE, ["deliver", "{work}", "--branch", "main"], mutates=True)
+scenario("deliver", "protected-case", DELIVER_DONE, ["deliver", "{work}", "--branch", "refs/heads/Master"], mutates=True)
+scenario("deliver", "refspec", DELIVER_DONE, ["deliver", "{work}", "--branch", "loop/x:developer"], mutates=True)
+scenario("deliver", "is-base", DELIVER_DONE, ["deliver", "{work}", "--branch", "loop/x", "--base", "loop/x"], mutates=True)
+scenario("deliver", "open-features", DELIVER_OPEN, ["deliver", "{work}", "--branch", "loop/x"], mutates=True)
+scenario("deliver", "no-origin", DELIVER_DONE, ["deliver", "{work}", "--branch", "loop/x"], mutates=True)
+scenario("deliver", "dry-run", DELIVER_DONE, ["deliver", "{work}", "--branch", "loop/x", "--dry-run"], mutates=True)
+scenario("deliver", "no-root", DELIVER_DONE, ["deliver"])
+
 STAMP = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?|\d\d/\d\d/\d{4} \d\d:\d\d")
 
 SUMMARY_FILES = {

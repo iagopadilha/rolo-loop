@@ -196,3 +196,77 @@ mod tests {
         assert_eq!(worktree_of("C:\\work\\proj"), "C:\\work\\proj-worktree-loop");
     }
 }
+
+/// Like [`run`] with a time limit and stdout NOT stripped; a timeout kills the process and reads as `(1, "", message)`.
+pub fn run_timeout_raw(program: &str, args: &[&str], cwd: Option<&str>, seconds: u64) -> (i32, String, String) {
+    use std::io::Read;
+    let mut cmd = Command::new(program);
+    cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(error) => return (1, String::new(), error.to_string()),
+    };
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let out_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(p) = out_pipe.as_mut() {
+            let _ = p.read_to_end(&mut bytes);
+        }
+        bytes
+    });
+    let err_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(p) = err_pipe.as_mut() {
+            let _ = p.read_to_end(&mut bytes);
+        }
+        bytes
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Some(s),
+            Ok(None) if std::time::Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
+            Err(error) => return (1, String::new(), error.to_string()),
+        }
+    };
+    let out = out_reader.join().unwrap_or_default();
+    let err = err_reader.join().unwrap_or_default();
+    match status {
+        Some(s) => (s.code().unwrap_or(1), String::from_utf8_lossy(&out).into_owned(), String::from_utf8_lossy(&err).trim().to_string()),
+        None => (1, String::new(), format!("Command '{program}' timed out after {seconds} seconds")),
+    }
+}
+
+/// Like [`run`] with a time limit.
+pub fn run_timeout(program: &str, args: &[&str], cwd: Option<&str>, seconds: u64) -> (i32, String, String) {
+    let (code, out, err) = run_timeout_raw(program, args, cwd, seconds);
+    (code, out.trim().to_string(), err)
+}
+
+/// `shutil.which`: the first `name` (with a PATHEXT extension on Windows) found on PATH.
+pub fn which(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    let exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT").unwrap_or(".COM;.EXE;.BAT;.CMD".into()).split(';').map(|e| e.to_lowercase()).collect()
+    } else {
+        vec![String::new()]
+    };
+    for dir in std::env::split_paths(&path) {
+        for ext in &exts {
+            let candidate = dir.join(format!("{name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}

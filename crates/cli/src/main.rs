@@ -44,6 +44,8 @@ enum Command {
     Rules(forward::Forwarded),
     /// Sends a test or custom notice through the configured channels
     Notify(forward::Forwarded),
+    /// Pushes the feature branch and opens the PR at the end of the flow
+    Deliver(forward::Forwarded),
 }
 
 fn main() {
@@ -61,6 +63,7 @@ fn main() {
         Command::Inventory(a) => forward::inventory(a),
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
+        Command::Deliver(a) => forward::deliver(a),
     };
     std::process::exit(code);
 }
