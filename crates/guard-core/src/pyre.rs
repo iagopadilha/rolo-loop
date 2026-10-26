@@ -41,22 +41,30 @@ impl Re {
         Re::build(pattern, true)
     }
     fn compile(pattern: &str, ci: bool) -> Result<FRegex, fancy_regex::Error> {
-        let source = if ci { format!("(?i){pattern}") } else { pattern.to_string() };
+        let source = if ci {
+            format!("(?i){pattern}")
+        } else {
+            pattern.to_string()
+        };
         let mut builder = RegexBuilder::new(&source);
         builder.backtrack_limit(2_000_000);
         builder.build()
     }
     fn build(pattern: &str, ci: bool) -> Re {
-        match Re::compile(pattern, ci) {
-            Ok(re) => Re {
-                re,
-                src: pattern.to_string(),
-                ci,
-                start: std::sync::OnceLock::new(),
-                full: std::sync::OnceLock::new(),
-            },
-            Err(e) => panic!("invalid pattern {pattern:?}: {e}"),
+        match Re::try_build(pattern, ci) {
+            Some(re) => re,
+            None => panic!("invalid pattern {pattern:?}"),
         }
+    }
+    /// Fallible compile: a pattern that only looks like a regex (user data) must never crash the guard.
+    pub fn try_build(pattern: &str, ci: bool) -> Option<Re> {
+        Re::compile(pattern, ci).ok().map(|re| Re {
+            re,
+            src: pattern.to_string(),
+            ci,
+            start: std::sync::OnceLock::new(),
+            full: std::sync::OnceLock::new(),
+        })
     }
     pub fn is_match(&self, text: &str) -> bool {
         self.re.is_match(text).unwrap_or(false)
@@ -310,7 +318,7 @@ pub fn nt_join(a: &str, b: &str) -> String {
         return b.to_string();
     }
     let (ad, ar) = split_drive_nt(a);
-    if br.starts_with('\\') {
+    if br.starts_with(['\\', '/']) {
         return format!("{}{}", if bd.is_empty() { ad } else { bd }, br);
     }
     if a.is_empty() {

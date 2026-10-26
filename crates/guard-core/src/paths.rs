@@ -17,11 +17,17 @@ pub struct G {
 
 impl G {
     pub fn from_process() -> G {
-        G { env: Env::process(), case_insensitive: cfg!(windows) }
+        G {
+            env: Env::process(),
+            case_insensitive: cfg!(windows),
+        }
     }
 
     pub fn new(env: Env) -> G {
-        G { env, case_insensitive: cfg!(windows) }
+        G {
+            env,
+            case_insensitive: cfg!(windows),
+        }
     }
 
     pub fn fold(&self, text: &str) -> String {
@@ -34,7 +40,11 @@ impl G {
 
     /// `norm`: `normpath` with forward slashes, no trailing slash, folded.
     pub fn norm(&self, path: &str) -> String {
-        let normalized = if cfg!(windows) { nt_normpath(path) } else { posix_normpath(path) };
+        let normalized = if cfg!(windows) {
+            nt_normpath(path)
+        } else {
+            posix_normpath(path)
+        };
         self.fold(normalized.replace('\\', "/").trim_end_matches('/'))
     }
 
@@ -166,9 +176,21 @@ impl G {
     pub fn expand_user_path(&self, token: &str) -> String {
         static PS_ENV: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\$env:(\w+)"));
         static PCT: LazyLock<Re> = LazyLock::new(|| Re::new(r"%(\w+)%"));
-        let text = token.trim().trim_matches(|c| c == '"' || c == '\'').trim().to_string();
-        let text = PS_ENV.replace_all(&text, |m| self.env.get(m.group(1).unwrap_or("")).unwrap_or_else(|| m.text().to_string()));
-        let text = PCT.replace_all(&text, |m| self.env.get(m.group(1).unwrap_or("")).unwrap_or_else(|| m.text().to_string()));
+        let text = token
+            .trim()
+            .trim_matches(|c| c == '"' || c == '\'')
+            .trim()
+            .to_string();
+        let text = PS_ENV.replace_all(&text, |m| {
+            self.env
+                .get(m.group(1).unwrap_or(""))
+                .unwrap_or_else(|| m.text().to_string())
+        });
+        let text = PCT.replace_all(&text, |m| {
+            self.env
+                .get(m.group(1).unwrap_or(""))
+                .unwrap_or_else(|| m.text().to_string())
+        });
         self.expanduser(&self.expandvars(&text))
     }
 }
@@ -177,8 +199,10 @@ impl G {
 
 static PREFIX_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^//[?.]/"));
 static DRIVE_COMPONENT: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[a-zA-Z]:\z"));
-static SHORT_NAME: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[^/.~ ]{1,6}~\d{1,6}(?:\.[^/.]{0,3})?\n?\z"));
-static GIT_BASH_DRIVE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^/(?:mnt/|cygdrive/)?([a-zA-Z])(?=/|\n?\z)"));
+static SHORT_NAME: LazyLock<Re> =
+    LazyLock::new(|| Re::new(r"^[^/.~ ]{1,6}~\d{1,6}(?:\.[^/.]{0,3})?\n?\z"));
+static GIT_BASH_DRIVE: LazyLock<Re> =
+    LazyLock::new(|| Re::new(r"^/(?:mnt/|cygdrive/)?([a-zA-Z])(?=/|\n?\z)"));
 static DRIVE_PREFIX: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[a-zA-Z]:/"));
 static MULTI_SLASH: LazyLock<Re> = LazyLock::new(|| Re::new(r"/{2,}"));
 
@@ -188,12 +212,23 @@ pub fn strip_windows_prefixes(g: &G, text: &str) -> String {
     let mut text = text.to_string();
     if PREFIX_RE.is_match(&text) {
         text = text[4..].to_string();
-        if text.get(..4).is_some_and(|h| h.eq_ignore_ascii_case("UNC/")) {
+        if text
+            .get(..4)
+            .is_some_and(|h| h.eq_ignore_ascii_case("UNC/"))
+        {
             text = format!("//{}", &text[4..]);
         }
     }
-    let computer = g.env.get("COMPUTERNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "\0".to_string()).to_lowercase();
-    let pattern = format!(r"^//(?:localhost|127\.0\.0\.1|\[?::1\]?|{})/([a-zA-Z])\$(?=/|\n?\z)", crate::pyre::escape(&computer));
+    let computer = g
+        .env
+        .get("COMPUTERNAME")
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "\0".to_string())
+        .to_lowercase();
+    let pattern = format!(
+        r"^//(?:localhost|127\.0\.0\.1|\[?::1\]?|{})/([a-zA-Z])\$(?=/|\n?\z)",
+        crate::pyre::escape(&computer)
+    );
     Re::ci(&pattern).replace_all(&text, |m| format!("{}:", m.group(1).unwrap_or("")))
 }
 
@@ -279,7 +314,10 @@ pub fn expand_short_names(text: &str) -> String {
 /// Canonical, forward-slash absolute form of a path as a tool or a shell may spell it. `fold_case` overrides the
 /// platform default (`None` = the platform default).
 pub fn normalize_path(g: &G, path: &str, base: Option<&str>, fold_case: Option<bool>) -> String {
-    let mut text = path.trim().trim_matches(|c| c == '"' || c == '\'').replace('\\', "/");
+    let mut text = path
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .replace('\\', "/");
     text = strip_windows_prefixes(g, &text);
     text = MULTI_SLASH.replace_lit(&text, "/");
     text = git_bash_drive(&text);
@@ -307,12 +345,18 @@ pub fn unresolved_short_name(g: &G, absolute: &str, specs_dir: Option<&str>) -> 
         return false;
     }
     let parts: Vec<&str> = absolute.split('/').collect();
-    let first = parts.iter().position(|p| SHORT_NAME.is_match(p)).unwrap_or(0);
+    let first = parts
+        .iter()
+        .position(|p| SHORT_NAME.is_match(p))
+        .unwrap_or(0);
     let before = parts[..first].join("/");
     let home = normalize_path(g, &g.home(), None, Some(false));
     let claude = format!("{home}/.claude");
     let fold_before = before.to_lowercase();
-    if fold_before == home.to_lowercase() || fold_before == claude.to_lowercase() || fold_before.starts_with(&format!("{}/", claude.to_lowercase())) {
+    if fold_before == home.to_lowercase()
+        || fold_before == claude.to_lowercase()
+        || fold_before.starts_with(&format!("{}/", claude.to_lowercase()))
+    {
         return true;
     }
     if let Some(specs) = specs_dir.filter(|s| !s.is_empty()) {
@@ -325,7 +369,10 @@ pub fn unresolved_short_name(g: &G, absolute: &str, specs_dir: Option<&str>) -> 
 /// The spellings of a tool or shell target the protected-file regexes are matched against: as written, canonical, and
 /// (for an existing symlink/junction) the real target.
 pub fn path_forms(g: &G, target: &str, cwd: Option<&str>) -> Vec<String> {
-    let text = target.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+    let text = target
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .to_string();
     let mut forms = vec![text.clone()];
     forms.push(normalize_path(g, &text, cwd, None));
     if !text.is_empty() && !text.contains('\0') {
@@ -336,7 +383,11 @@ pub fn path_forms(g: &G, target: &str, cwd: Option<&str>) -> Vec<String> {
         };
         if std::fs::symlink_metadata(&candidate).is_ok() {
             let real = long_path_name(&nt_abspath(&candidate));
-            let real = if real.is_empty() { nt_abspath(&candidate) } else { real };
+            let real = if real.is_empty() {
+                nt_abspath(&candidate)
+            } else {
+                real
+            };
             let real = normalize_path(g, &real, None, None);
             if !forms.contains(&real) {
                 forms.push(real);
@@ -348,7 +399,9 @@ pub fn path_forms(g: &G, target: &str, cwd: Option<&str>) -> Vec<String> {
 
 /// A protected-file pattern tested against every spelling of `target`.
 pub fn path_matches(g: &G, pattern: &Re, target: &str, cwd: Option<&str>) -> bool {
-    path_forms(g, target, cwd).iter().any(|form| pattern.is_match(form))
+    path_forms(g, target, cwd)
+        .iter()
+        .any(|form| pattern.is_match(form))
 }
 
 /// True when a folder above `absolute` holds a `.git` entry (the path is inside a git working tree).
@@ -398,7 +451,12 @@ pub fn temp_roots(g: &G) -> Vec<String> {
                 continue;
             }
             let root = normalize_path(g, &form, None, None);
-            if !root.is_empty() && root != "/" && root != "c:" && !roots.contains(&root) && !Re::ci(r"^[a-z]:\z").is_match(&root) {
+            if !root.is_empty()
+                && root != "/"
+                && root != "c:"
+                && !roots.contains(&root)
+                && !Re::ci(r"^[a-z]:\z").is_match(&root)
+            {
                 roots.push(root);
             }
         }
@@ -407,7 +465,9 @@ pub fn temp_roots(g: &G) -> Vec<String> {
 }
 
 pub fn inside_any(absolute: &str, roots: &[String]) -> bool {
-    roots.iter().any(|root| absolute == root || absolute.starts_with(&format!("{root}/")))
+    roots
+        .iter()
+        .any(|root| absolute == root || absolute.starts_with(&format!("{root}/")))
 }
 
 /// Genuine temp files only: inside the OS temp folder AND not inside any git working tree.
@@ -433,7 +493,11 @@ mod tests {
     use super::*;
 
     fn g() -> G {
-        G::new(Env::from_pairs([("USERPROFILE", r"C:\Users\tester"), ("COMPUTERNAME", "BOX1"), ("USERNAME", "tester")]))
+        G::new(Env::from_pairs([
+            ("USERPROFILE", r"C:\Users\tester"),
+            ("COMPUTERNAME", "BOX1"),
+            ("USERNAME", "tester"),
+        ]))
     }
 
     #[test]
@@ -452,29 +516,48 @@ mod tests {
             r"\\localhost\C$\Users\tester\.claude\.credentials.json",
             r"\\BOX1\C$\Users\tester\.claude\.credentials.json",
         ] {
-            assert_eq!(normalize_path(&g, spelling, None, None), canon, "{spelling}");
+            assert_eq!(
+                normalize_path(&g, spelling, None, None),
+                canon,
+                "{spelling}"
+            );
         }
     }
 
     #[test]
     fn local_share_prefix() {
         let g = g();
-        assert_eq!(strip_windows_prefixes(&g, "//BOX1/C$/Users/x"), "C:/Users/x");
-        assert_eq!(strip_windows_prefixes(&g, "//localhost/C$/Users/x"), "C:/Users/x");
-        assert_eq!(strip_windows_prefixes(&g, "//other/C$/Users/x"), "//other/C$/Users/x");
+        assert_eq!(
+            strip_windows_prefixes(&g, "//BOX1/C$/Users/x"),
+            "C:/Users/x"
+        );
+        assert_eq!(
+            strip_windows_prefixes(&g, "//localhost/C$/Users/x"),
+            "C:/Users/x"
+        );
+        assert_eq!(
+            strip_windows_prefixes(&g, "//other/C$/Users/x"),
+            "//other/C$/Users/x"
+        );
     }
 
     #[test]
     fn relative_paths_use_the_base() {
         let g = g();
-        assert_eq!(normalize_path(&g, "../x/./y", Some(r"C:\work\proj"), None), "c:/work/x/y");
+        assert_eq!(
+            normalize_path(&g, "../x/./y", Some(r"C:\work\proj"), None),
+            "c:/work/x/y"
+        );
     }
 
     #[test]
     fn expansion_rules() {
         let g = g();
         assert_eq!(g.expand_user_path("~/.ssh/id"), r"C:\Users\tester/.ssh/id");
-        assert_eq!(g.expand_user_path("$env:USERPROFILE\\x"), r"C:\Users\tester\x");
+        assert_eq!(
+            g.expand_user_path("$env:USERPROFILE\\x"),
+            r"C:\Users\tester\x"
+        );
         assert_eq!(g.expand_user_path("%USERPROFILE%/x"), r"C:\Users\tester/x");
         assert_eq!(g.expand_user_path("${USERPROFILE}/x"), r"C:\Users\tester/x");
         assert_eq!(g.expand_user_path("$NOPE/x"), "$NOPE/x");

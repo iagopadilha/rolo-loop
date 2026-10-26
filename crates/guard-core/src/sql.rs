@@ -7,17 +7,60 @@ use crate::pyre::Re;
 use std::sync::LazyLock;
 
 const WRITE_KEYWORDS: &[&str] = &[
-    "insert", "update", "delete", "replace", "merge", "create", "alter", "drop", "truncate", "rename", "load", "copy", "grant", "revoke", "call", "do", "prepare",
-    "execute", "exec", "deallocate", "kill", "handler", "flush", "lock", "unlock", "reset", "purge", "optimize", "repair", "analyze", "install", "uninstall",
-    "shutdown", "restart", "clone", "import", "change", "stop", "xa", "binlog", "cache", "vacuum", "reindex",
+    "insert",
+    "update",
+    "delete",
+    "replace",
+    "merge",
+    "create",
+    "alter",
+    "drop",
+    "truncate",
+    "rename",
+    "load",
+    "copy",
+    "grant",
+    "revoke",
+    "call",
+    "do",
+    "prepare",
+    "execute",
+    "exec",
+    "deallocate",
+    "kill",
+    "handler",
+    "flush",
+    "lock",
+    "unlock",
+    "reset",
+    "purge",
+    "optimize",
+    "repair",
+    "analyze",
+    "install",
+    "uninstall",
+    "shutdown",
+    "restart",
+    "clone",
+    "import",
+    "change",
+    "stop",
+    "xa",
+    "binlog",
+    "cache",
+    "vacuum",
+    "reindex",
 ];
 pub const SQL_UNPARSEABLE: &str = "\u{0}unparseable";
 const COMMENT_MARK: char = '\u{1}';
 
 static SET_WRITE: LazyLock<Re> = LazyLock::new(|| {
-    Re::new(r"^set\s+(?:global|persist|persist_only|@@global\.|@@persist\.|@@persist_only\.|password|role|default\s+role|resource\s+group|binary_log)")
+    Re::new(
+        r"^set\s+(?:global|persist|persist_only|@@global\.|@@persist\.|@@persist_only\.|password|role|default\s+role|resource\s+group|binary_log)",
+    )
 });
-static START_WRITE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^start\s+(?:replica|slave|group_replication)"));
+static START_WRITE: LazyLock<Re> =
+    LazyLock::new(|| Re::new(r"^start\s+(?:replica|slave|group_replication)"));
 static STRONG_WRITE: LazyLock<Re> = LazyLock::new(|| {
     Re::new(
         r#"^\s*(?:delete\s+from|insert\s+(?:ignore\s+)?into|update\s+[\w.`'"]+\s+set|replace\s+into|drop\s+\w|truncate\s+\w|alter\s+\w|create\s+\w|grant\s+\w|revoke\s+\w|rename\s+table|load\s+data|call\s+\w|prepare\s+\w|execute\s+\w|deallocate\s+\w|kill\s+\w|flush\s+\w|lock\s+tables|handler\s+\w|do\s+\w)"#,
@@ -75,7 +118,8 @@ fn scan(text: &[char], backslash_escapes: bool, strict_dashes: bool) -> (Vec<Str
             }
         } else if c == '/' && next == Some('*') {
             let third = text.get(index + 2).copied();
-            let is_exec = third == Some('!') || (third == Some('M') && text.get(index + 3) == Some(&'!'));
+            let is_exec =
+                third == Some('!') || (third == Some('M') && text.get(index + 3) == Some(&'!'));
             if is_exec {
                 index += if third == Some('!') { 3 } else { 4 };
                 while index < size && text[index].is_ascii_digit() {
@@ -84,7 +128,8 @@ fn scan(text: &[char], backslash_escapes: bool, strict_dashes: bool) -> (Vec<Str
                 executable_depth += 1;
                 current.push(' ');
             } else {
-                let end = (index + 2..size.saturating_sub(1)).find(|&i| text[i] == '*' && text[i + 1] == '/');
+                let end = (index + 2..size.saturating_sub(1))
+                    .find(|&i| text[i] == '*' && text[i + 1] == '/');
                 match end {
                     None => {
                         complete = false;
@@ -105,7 +150,10 @@ fn scan(text: &[char], backslash_escapes: bool, strict_dashes: bool) -> (Vec<Str
                 && next == Some('-')
                 && (!strict_dashes
                     || index + 2 >= size
-                    || matches!(text[index + 2], ' ' | '\t' | '\r' | '\n' | '\u{c}' | '\u{b}')
+                    || matches!(
+                        text[index + 2],
+                        ' ' | '\t' | '\r' | '\n' | '\u{c}' | '\u{b}'
+                    )
                     || (text[index + 2] as u32) < 32))
         {
             let end = (index..size).find(|&i| text[i] == '\n');
@@ -133,7 +181,10 @@ fn scan(text: &[char], backslash_escapes: bool, strict_dashes: bool) -> (Vec<Str
         }
         for piece in pieces.iter().skip(1) {
             let stripped = piece.trim();
-            if STRONG_WRITE.match_start(stripped.trim_start_matches(is_lstrip_char)).is_some() {
+            if STRONG_WRITE
+                .match_start(stripped.trim_start_matches(is_lstrip_char))
+                .is_some()
+            {
                 result.push(stripped.to_string());
             }
         }
@@ -175,7 +226,11 @@ pub fn sql_statement_writes(statement: &str) -> String {
     if statement == SQL_UNPARSEABLE {
         return "UNPARSEABLE SQL".to_string();
     }
-    let words: Vec<String> = WORDS.find_all(statement).into_iter().map(|m| m.text().to_string()).collect();
+    let words: Vec<String> = WORDS
+        .find_all(statement)
+        .into_iter()
+        .map(|m| m.text().to_string())
+        .collect();
     let first = words.first().map(String::as_str).unwrap_or("");
     if WRITE_KEYWORDS.contains(&first) {
         return first.to_uppercase();
@@ -199,7 +254,9 @@ pub fn sql_statement_writes(statement: &str) -> String {
             }
             if word == "insert" || word == "replace" {
                 let call = Re::new(&format!(r"\b{word}\s*\("));
-                let stmt = Re::new(&format!(r"\b{word}\s+(?:into|ignore|low_priority|delayed|high_priority)\b"));
+                let stmt = Re::new(&format!(
+                    r"\b{word}\s+(?:into|ignore|low_priority|delayed|high_priority)\b"
+                ));
                 if call.is_match(statement) && !stmt.is_match(statement) {
                     continue;
                 }
@@ -218,7 +275,11 @@ mod tests {
     use super::*;
 
     fn writes(sql: &str) -> String {
-        sql_statements(sql).iter().map(|s| sql_statement_writes(s)).find(|k| !k.is_empty()).unwrap_or_default()
+        sql_statements(sql)
+            .iter()
+            .map(|s| sql_statement_writes(s))
+            .find(|k| !k.is_empty())
+            .unwrap_or_default()
     }
 
     #[test]
