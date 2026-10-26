@@ -15,81 +15,7 @@ const LOOP_FOLDER: [&str; 2] = ["project", "loop"];
 const LEGACY_LOOP_FOLDER: [&str; 1] = ["project"];
 const ATTEMPT_LIMIT: usize = 200;
 
-// ---- Python-style JSON ---------------------------------------------------------------------------------------------------------
-
-fn json_string(text: &str, ensure_ascii: bool, out: &mut String) {
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c if ensure_ascii && (c as u32) > 0x7e => {
-                let mut buf = [0u16; 2];
-                for unit in c.encode_utf16(&mut buf) {
-                    out.push_str(&format!("\\u{:04x}", unit));
-                }
-            }
-            c if c as u32 == 0x7f && ensure_ascii => out.push('\u{7f}'),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-}
-
-/// `json.dumps(value, ensure_ascii=...)` with Python's default separators (`, ` and `: `).
-pub fn py_json_dumps(value: &Value, ensure_ascii: bool) -> String {
-    let mut out = String::new();
-    write_value(value, ensure_ascii, &mut out);
-    out
-}
-
-fn write_value(value: &Value, ensure_ascii: bool, out: &mut String) {
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Number(n) => {
-            if let Some(f) = n.as_f64().filter(|_| n.is_f64()) {
-                if f.fract() == 0.0 && f.abs() < 1e16 {
-                    out.push_str(&format!("{f:.1}"));
-                } else {
-                    out.push_str(&format!("{f}"));
-                }
-            } else {
-                out.push_str(&n.to_string());
-            }
-        }
-        Value::String(s) => json_string(s, ensure_ascii, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                write_value(item, ensure_ascii, out);
-            }
-            out.push(']');
-        }
-        Value::Object(map) => {
-            out.push('{');
-            for (i, (k, v)) in map.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                json_string(k, ensure_ascii, out);
-                out.push_str(": ");
-                write_value(v, ensure_ascii, out);
-            }
-            out.push('}');
-        }
-    }
-}
+pub use pycompat::json::py_json_dumps;
 
 // ---- loop files ------------------------------------------------------------------------------------------------------------------
 
@@ -580,24 +506,6 @@ pub fn split_commands(command: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn json_dumps_matches_python_defaults() {
-        assert_eq!(
-            py_json_dumps(
-                &json!({"a": 1, "b": [true, null, "x"], "c": {"d": 1.5}}),
-                false
-            ),
-            r#"{"a": 1, "b": [true, null, "x"], "c": {"d": 1.5}}"#
-        );
-        assert_eq!(py_json_dumps(&json!("\u{e9}\n"), true), r#""\u00e9\n""#);
-        assert_eq!(py_json_dumps(&json!("\u{e9}"), false), "\"\u{e9}\"");
-        assert_eq!(
-            py_json_dumps(&json!("\u{1F600}"), true),
-            r#""\ud83d\ude00""#
-        );
-        assert_eq!(py_json_dumps(&json!("C:\\x"), true), r#""C:\\x""#);
-    }
 
     #[test]
     fn split_commands_matches_python() {

@@ -3,6 +3,8 @@
 //! `re` (through fancy-regex, so lookaround works), `ntpath`/`posixpath` normalisation, `shlex.split(posix=False)`,
 //! `fnmatch`, `urllib.parse.unquote` and `urlsplit`.
 
+pub mod json;
+
 use fancy_regex::{Regex as FRegex, RegexBuilder};
 
 /// A compiled pattern with Python-like helpers. Matching errors (backtrack limit) count as "no match".
@@ -159,6 +161,54 @@ fn next_boundary(text: &str, index: usize) -> usize {
     i
 }
 
+/// Python `repr` of a `str`.
+pub fn py_repr_str(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
+    let mut out = String::new();
+    out.push(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// Python `repr` of a decoded JSON value.
+pub fn py_repr_json(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => "None".into(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        Value::Number(n) => {
+            if n.is_f64() {
+                let f = n.as_f64().unwrap_or(0.0);
+                if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e16 {
+                    format!("{f:.1}")
+                } else {
+                    format!("{f}")
+                }
+            } else {
+                n.to_string()
+            }
+        }
+        Value::String(s) => py_repr_str(s),
+        Value::Array(items) => format!("[{}]", items.iter().map(py_repr_json).collect::<Vec<_>>().join(", ")),
+        Value::Object(map) => format!("{{{}}}", map.iter().map(|(k, v)| format!("{}: {}", py_repr_str(k), py_repr_json(v))).collect::<Vec<_>>().join(", ")),
+    }
+}
+
 /// `re.escape`.
 pub fn escape(text: &str) -> String {
     fancy_regex::escape(text).into_owned()
@@ -190,6 +240,31 @@ pub fn rpartition<'a>(text: &'a str, sep: &str) -> (&'a str, bool, &'a str) {
         Some(i) => (&text[..i], true, &text[i + sep.len()..]),
         None => ("", false, text),
     }
+}
+
+/// `str.splitlines()`: splits at `\n`, `\r`, `\r\n`, `\v`, `\f`, `\x1c`-`\x1e`, `\x85`, ` `, ` `.
+pub fn splitlines(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let bytes: Vec<(usize, char)> = text.char_indices().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        let (pos, c) = bytes[i];
+        if matches!(c, '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{1c}' | '\u{1d}' | '\u{1e}' | '\u{85}' | '\u{2028}' | '\u{2029}') {
+            out.push(&text[start..pos]);
+            let mut next = pos + c.len_utf8();
+            if c == '\r' && bytes.get(i + 1).is_some_and(|(_, n)| *n == '\n') {
+                next += 1;
+                i += 1;
+            }
+            start = next;
+        }
+        i += 1;
+    }
+    if start < text.len() {
+        out.push(&text[start..]);
+    }
+    out
 }
 
 /// `text[:n]` by characters.

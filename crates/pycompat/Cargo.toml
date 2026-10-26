@@ -1,0 +1,18 @@
+[package]
+name = "pycompat"
+description = "Emulations of the Python standard library behaviours the reference implementation's contracts depend on"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+fancy-regex = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

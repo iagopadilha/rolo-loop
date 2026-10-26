@@ -1,0 +1,30 @@
+Typed state of the orchestrator graph: grammar, legal transitions, invariants, snapshots and rewind. Stdlib only, no AI.
+
+ROADMAP.md is the "graph state": each feature is a node with a status; each status change is an edge. This module guards
+the edges (the orchestrator is the supervisor that decides; here we deterministically check what it wrote).
+
+Usage (CLI):
+  python loop_state.py validate <folder>                 # checks the current ROADMAP.md grammar and LOOP.json
+  python loop_state.py migrate <folder>                  # old layouts -> .specs/project/loop/ (idempotent; run_loop.py already calls it)
+  python loop_state.py disjoint <folder> slug1 slug2 ... # are the PATHS of these features disjoint? (exit 0 yes, 1 conflict)
+  python loop_state.py graph <folder>                    # state graph in Mermaid, with the features in each node
+  python loop_state.py loop <folder> --status S --turn N [--feature a,b] [--reason T] [--next T] [--options "a|b"] [--to-check "x|y"]
+                                                    # WRITES a validated .specs/project/loop/json/LOOP.json (enum, turn, real time). Use this instead of hand-writing the JSON
+  python loop_state.py next <folder> [--wave N] [--headless]  # JSON: next phase and the features it must dispatch (deterministic scheduler)
+
+Feature line grammar (ROADMAP.md):
+  - [slug] status=<pending|speccing|specced|approved|building|verified|blocked> title="<what the user gets>" scope=<Small|Medium|Large|Complex>
+    kind=<back|front|both|generic> paths=<p1,p2> [repo-order=<repo,repo>] [deps=<slug|dir:folder,...>] [isolation=same-tree|worktree]
+    [tries=<n>] [origin=adopted] [e2e=ok|failed|not-covered] [regression=yes|baseline|ok|failed] [note=...]
+`title="..."` = the readable name of the feature (a short sentence of what the user gets, in double quotes, no inner quotes). It is the only
+field whose value may hold spaces; the panel shows it as the feature name (`features[].name`). The slug stays the stable id (kebab case, 3-6 words).
+`regression` only exists on refactoring features (slug `refactor-*`) and only when the user asked for it in the ROADMAP: `yes` = requested,
+`baseline` = old code captured, `ok`/`failed` = comparison result. A feature with `regression` runs ALONE in the wave.
+`deps` = the feature's dependencies, comma-separated. `slug` = another feature that must be `verified` before the
+feature runs. `dir:<folder>` = shared folder the feature IMPORTS without editing (editing goes in `paths`): it collides
+with whoever EDITS that folder, not with whoever only imports it. A dep slug must exist and cannot form a cycle.
+`tries` = accumulated failures of the feature (gate, execution, verification or E2E). With 2 failures it MUST be `blocked`.
+Multi-repo projects (REPOS.json): a path may carry its repo, `paths=<repo>:<path>,<repo>:<path>`, where <repo> is the short name from
+REPOS.json; a path without prefix belongs to the primary repo (old roadmaps stay valid). `repo-order=api,web` = the order in which the
+feature's repos are built (the contract producer before its consumer). Two features collide only when the same repo has overlapping paths.
+Stages: a heading `## Stage N` above the feature lines (or an explicit `stage=` field on the line).

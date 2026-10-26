@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "guard-core"
 description = "Policy engine of the claude-maestro PreToolUse guard"
 version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 cfg = { path = "../cfg" }
+pycompat = { path = "../pycompat" }
 mcp-policy = { path = "../mcp-policy" }
 egress-policy = { path = "../egress-policy" }
 fancy-regex = { workspace = true }
