@@ -12,6 +12,7 @@ pub mod graph_view;
 pub mod loop_io;
 pub mod loop_state;
 pub mod loop_summary;
+pub mod network_policy;
 pub mod notify;
 pub mod prod_database_script;
 pub mod repos;

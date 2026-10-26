@@ -356,6 +356,30 @@ pub fn parse_deny(text: &Value) -> Result<String, String> {
     Ok(host)
 }
 
+/// The text of an entry, or the Python type name of a non-string (`int`, `list`, `NoneType`...).
+fn entry_label(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "NoneType".into(),
+        Value::Bool(_) => "bool".into(),
+        Value::Number(n) if n.is_f64() => "float".into(),
+        Value::Number(_) => "int".into(),
+        Value::Array(_) => "list".into(),
+        Value::Object(_) => "dict".into(),
+    }
+}
+
+/// Python `repr` of a scalar JSON value (enough for the `version` note).
+fn scalar_repr(v: &Value) -> String {
+    match v {
+        Value::String(s) => format!("'{s}'"),
+        Value::Null => "None".into(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        other => other.to_string(),
+    }
+}
+
 fn entries_from(texts: &Value, origin: &str, label: &str, notes: &mut Vec<String>) -> Vec<Entry> {
     let Value::Array(list) = texts else {
         notes.push(format!("{label}: expected a list of entries, ignored"));
@@ -365,7 +389,7 @@ fn entries_from(texts: &Value, origin: &str, label: &str, notes: &mut Vec<String
     for (index, text) in list.iter().enumerate() {
         match parse_entry(text, origin) {
             Ok(e) => entries.push(e),
-            Err(error) => notes.push(format!("{label} entry {index} ignored: {error}")),
+            Err(error) => notes.push(format!("{label} entry {index} ignored ({}): {error}", entry_label(text))),
         }
     }
     entries
@@ -449,6 +473,7 @@ fn read_json(path: &Path) -> (Option<Value>, String) {
             Err(_) => (None, "UnicodeDecodeError".into()),
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (None, String::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => (None, "PermissionError".into()),
         Err(_) => (None, "OSError".into()),
     }
 }
@@ -463,63 +488,84 @@ fn as_bool(value: Option<&Value>, default: bool) -> bool {
     }
 }
 
+/// Python truthiness of a JSON value.
+fn truthy(v: Option<&Value>) -> bool {
+    match v {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0),
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(a)) => !a.is_empty(),
+        Some(Value::Object(o)) => !o.is_empty(),
+    }
+}
+
+/// The raw `allow` list of NETWORK.json and why it is unusable (`""` when missing or fine).
+pub fn read_project_entries(project_root: &Path) -> (Vec<Value>, String) {
+    let (content, error) = read_json(&project_root.join(".specs").join("project").join("NETWORK.json"));
+    if !error.is_empty() {
+        return (vec![], format!("unreadable JSON ({error})"));
+    }
+    match content {
+        None => (vec![], String::new()),
+        Some(Value::Object(m)) => match m.get("allow") {
+            None => (vec![], String::new()),
+            Some(Value::Array(a)) => (a.clone(), String::new()),
+            Some(_) => (vec![], "unexpected shape (need an object with an `allow` list)".into()),
+        },
+        Some(_) => (vec![], "unexpected shape (need an object with an `allow` list)".into()),
+    }
+}
+
 /// Effective list of a project from `<data dir>/config.json` and `<project>/.specs/project/NETWORK.json`. A list file that
 /// exists but cannot be used sets `broken`: every non-local request then fails closed.
 pub fn load_effective(project_root: &Path, data_dir: &Path, env_names: &[String]) -> Effective {
-    let mut broken = String::new();
+    let (mut notes, mut broken) = (Vec::<String>::new(), String::new());
     let (config, error) = read_json(&data_dir.join("config.json"));
     let config = match (config, error.is_empty()) {
         (Some(Value::Object(m)), true) => Value::Object(m),
         (None, true) => Value::Object(Default::default()),
-        _ => {
+        (other, ok) => {
             broken = "config.json".to_string();
+            let why = if !ok { error } else if other.is_some() { "not a JSON object".to_string() } else { "not a JSON object".to_string() };
+            notes.push(format!("config.json is unusable ({why}): every non-local request fails closed"));
             Value::Object(Default::default())
         }
     };
-    let (content, error) = read_json(
-        &project_root
-            .join(".specs")
-            .join("project")
-            .join("NETWORK.json"),
-    );
-    let mut texts = Value::Array(vec![]);
-    let bad = !error.is_empty()
-        || content.as_ref().is_some_and(|c| match c {
-            Value::Object(m) => !matches!(m.get("allow"), None | Some(Value::Array(_))),
-            _ => true,
-        });
-    if bad {
+    let (texts, error) = read_project_entries(project_root);
+    if !error.is_empty() {
         if broken.is_empty() {
             broken = NETWORK_LABEL.to_string();
         }
-    } else if let Some(Value::Object(m)) = &content {
-        texts = m.get("allow").cloned().unwrap_or(Value::Array(vec![]));
+        notes.push(format!("{NETWORK_LABEL} is unusable ({error}): every non-local request fails closed"));
+    }
+    let (content, _) = read_json(&project_root.join(".specs").join("project").join("NETWORK.json"));
+    if let Some(Value::Object(m)) = &content {
+        if let Some(version) = m.get("version") {
+            if version.as_i64() != Some(1) {
+                notes.push(format!("{NETWORK_LABEL} has version {} (expected 1), read anyway", scalar_repr(version)));
+            }
+        }
     }
     let denies: Vec<Value> = match config.get("egress_never") {
-        None | Some(Value::Null) => vec![],
         Some(Value::Array(a)) => a.clone(),
-        Some(Value::Bool(false)) => vec![],
+        other if !truthy(other) => vec![],
         Some(_) => {
             // losing the denies would fail open
             if broken.is_empty() {
                 broken = "config.json".to_string();
             }
+            notes.push("config.json egress_never must be a list: every non-local request fails closed".into());
             vec![]
         }
+        None => vec![],
     };
     let global = match config.get("egress_hosts") {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => Value::Array(vec![]),
+        v if !truthy(v) => Value::Array(vec![]),
         Some(v) => v.clone(),
+        None => Value::Array(vec![]),
     };
-    effective_from(
-        &texts,
-        &global,
-        &denies,
-        as_bool(config.get("egress_builtin_read"), true),
-        env_names,
-        vec![],
-        &broken,
-    )
+    effective_from(&Value::Array(texts), &global, &denies, as_bool(config.get("egress_builtin_read"), true), env_names, notes, &broken)
 }
 
 /// Exact or `*.domain` (needs at least one extra label, never the bare domain).
