@@ -4,10 +4,12 @@
 pub mod audit_deps;
 pub mod classify_structure;
 pub mod code_inventory;
+pub mod email;
 pub mod graph_view;
 pub mod loop_io;
 pub mod loop_state;
 pub mod loop_summary;
+pub mod notify;
 pub mod repos;
 pub mod roadmap_settings;
 pub mod rules;

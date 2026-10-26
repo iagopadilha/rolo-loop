@@ -13,6 +13,8 @@ cfg = { path = "../cfg" }
 guard-core = { path = "../guard-core" }
 serde_json = { workspace = true }
 sha2 = "0.10"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls", "hostname"] }
 tempfile = { workspace = true }
 time = { version = "0.3", features = ["local-offset", "formatting", "macros"] }
 

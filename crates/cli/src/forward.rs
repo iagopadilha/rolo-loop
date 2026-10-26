@@ -62,3 +62,9 @@ pub fn rules(f: Forwarded) -> i32 {
     let (code, out, err) = engine_state::rules::run_cli(&f.args);
     emit(code, &out, &err)
 }
+
+pub fn notify(f: Forwarded) -> i32 {
+    let mut env = cfg::Env::process();
+    let (code, out, err) = engine_state::notify::run_cli(&f.args, &mut env);
+    emit(code, &out, &err)
+}
