@@ -52,3 +52,8 @@ pub fn summary(f: Forwarded) -> i32 {
     let (code, out) = engine_state::loop_summary::run_cli(&f.args, &cfg::Env::process());
     emit(code, &out, "")
 }
+
+pub fn inventory(f: Forwarded) -> i32 {
+    let (code, out, err) = engine_state::code_inventory::run_cli(&f.args);
+    emit(code, &out, &err)
+}

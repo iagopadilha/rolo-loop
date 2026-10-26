@@ -3,6 +3,7 @@
 
 pub mod audit_deps;
 pub mod classify_structure;
+pub mod code_inventory;
 pub mod graph_view;
 pub mod loop_io;
 pub mod loop_state;

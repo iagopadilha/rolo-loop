@@ -38,6 +38,8 @@ enum Command {
     Standards(forward::Forwarded),
     /// Writes the loop's final summary in Markdown
     Summary(forward::Forwarded),
+    /// Free inventory of the code of a folder
+    Inventory(forward::Forwarded),
 }
 
 fn main() {
@@ -52,6 +54,7 @@ fn main() {
         Command::Audit(a) => forward::audit(a),
         Command::Standards(a) => forward::standards(a),
         Command::Summary(a) => forward::summary(a),
+        Command::Inventory(a) => forward::inventory(a),
     };
     std::process::exit(code);
 }
