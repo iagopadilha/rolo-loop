@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! `harness`: command line of claude-maestro.
 
+mod forward;
 mod paths;
 mod state_cmd;
 
@@ -23,6 +24,14 @@ enum Command {
     Paths(paths::Args),
     /// Typed graph state of the loop (validate, next, graph, migrate, disjoint, loop)
     State(state_cmd::Args),
+    /// Task waves of one feature (waves, set, mirror)
+    Tasks(forward::Forwarded),
+    /// Draws the loop progress from the ROADMAP
+    Graph(forward::Forwarded),
+    /// Classifies a project's structure as STANDARD or LEGACY
+    Classify(forward::Forwarded),
+    /// Sizes the brownfield mapping
+    Scale(forward::Forwarded),
 }
 
 fn main() {
@@ -30,6 +39,10 @@ fn main() {
     let code = match cli.command {
         Command::Paths(args) => paths::run(args),
         Command::State(args) => state_cmd::run(args),
+        Command::Tasks(a) => forward::tasks(a),
+        Command::Graph(a) => forward::graph(a),
+        Command::Classify(a) => forward::classify(a),
+        Command::Scale(a) => forward::scale(a),
     };
     std::process::exit(code);
 }

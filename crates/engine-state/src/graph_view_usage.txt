@@ -1,0 +1,11 @@
+Draws the loop progress in 3 formats, from the ROADMAP (skill orchestrator-show-progress-graph). Stdlib only, no AI.
+
+Usage:
+  python graph_view.py <root> [--ascii | --short | --mermaid | --write]
+
+  --ascii    (default) plain text, one line per feature, with dependencies. For chat, email (<pre>) and checkpoints.
+  --short    one line per stage, no drawing (size-limited channels).
+  --mermaid  feature graph (stages as groups, deps= arrows) for GitHub (PR) and the .md summary.
+  --write    writes .specs/project/loop/GRAPH.md (date + ASCII + Mermaid) and prints the path.
+
+Legend: [x] verified  [>] building/speccing  [.] pending/specced/approved  [!] blocked.

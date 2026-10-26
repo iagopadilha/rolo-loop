@@ -1,0 +1,12 @@
+Classifies a project's structure as STANDARD or LEGACY and (once confirmed) writes it to CLAUDE.md.
+
+Usage:
+  python classify_structure.py <root>                      # shows evidence and the SUGGESTION (writes nothing)
+  python classify_structure.py <root> --write STANDARD|LEGACY [--note "text"]   # writes the Conformance section
+
+The suggestion is only a suggestion: the user decides. Without a "Conformance" section in the project's CLAUDE.md, the skill
+must explain why, show this evidence and ASK the user before writing.
+
+STANDARD = the skill's structure: back end with Api/Data/Domain (.NET projects or NestJS folders under src/);
+           front end with src/pages + src/components (+ services/hooks).
+LEGACY   = anything else. New code imitates the project; old files only get minimal edits.

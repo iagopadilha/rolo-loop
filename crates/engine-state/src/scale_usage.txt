@@ -1,0 +1,10 @@
+Sizes Phase 1 (brownfield): how many `brownfield-mapper` agents to dispatch and which documents each writes.
+
+Usage:  python scale.py <repo-root> [--json]
+
+Measures the repo (versioned and code files, size, top-level areas) and returns a tier:
+  small   (up to ~150 code files)   -> 1 agent writes the 7 documents
+  medium  (up to ~1200)             -> 3 agents (related groups)
+  large   (above)                   -> 7 agents, 1 document each (cap of 3 at a time)
+The user outranks the tier: if they ask for more or fewer agents, that is what applies.
+No Claude, it only reads the repo. Writes nothing.

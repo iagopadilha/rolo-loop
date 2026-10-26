@@ -82,6 +82,66 @@ scenario("state", "usage/unknown", {}, ["state", "bogus", "{work}"])
 scenario("state", "usage/one-arg", {}, ["state", "validate"])
 
 
+for key, text in ROADMAPS.items():
+    files = {".specs/project/ROADMAP.md": text}
+    for flag in ([], ["--ascii"], ["--short"], ["--mermaid"]):
+        scenario("graph", "view/%s/%s" % (key, "".join(flag) or "default"), files, ["graph", "{work}"] + flag)
+    scenario("graph", "write/" + key, files, ["graph", "{work}", "--write"], mutates=True)
+scenario("graph", "usage", {}, ["graph"])
+
+TASKS_MD = ("# Tasks\n### T1: Models [P]\n**Type**: impl\n**Files**: src/a.rs, src/b.rs <!-- note -->\n**Deps**: none\n**Reqs**: R1, R2\n**Done when**: it builds\n**Status**: pending\n\n"
+            "### T2: Wire it\n**Type**: wiring\n**Files**: src/a.rs\n**Deps**: T1\n**Done when**: wired\n**Status**: pending\n\n### T3: Docs\n**Files**: docs\n**Done when**: documented\n")
+TASKS_BAD = "### T1: a\n**Type**: weird\n### T1: b\n**Deps**: T9, T1\n### T2: c\n**Deps**: T3\n**Done when**: x\n### T3: d\n**Deps**: T2\n**Done when**: x\n"
+SETTINGS = "**Max parallel tasks:** 2\n" + ROADMAPS["basic"]
+for name, files in (("normal", {".specs/features/a-api/tasks.md": TASKS_MD, ".specs/project/ROADMAP.md": ROADMAPS["basic"]}),
+                    ("crlf", {".specs/features/a-api/tasks.md": TASKS_MD.replace("\n", "\r\n"), ".specs/project/ROADMAP.md": SETTINGS}),
+                    ("bad", {".specs/features/a-api/tasks.md": TASKS_BAD, ".specs/project/ROADMAP.md": ROADMAPS["basic"]}),
+                    ("synthetic", {".specs/project/ROADMAP.md": ROADMAPS["basic"]}),
+                    ("with-status", {".specs/features/a-api/tasks.md": TASKS_MD, ".specs/project/ROADMAP.md": SETTINGS,
+                                     ".specs/project/loop/internal/tasks/a-api.json": json.dumps({"slug": "a-api", "updated_at": "x", "tasks": {"T1": {"status": "done", "wave": 1, "note": ""}}})})):
+    scenario("tasks", "waves/" + name, files, ["tasks", "waves", "a-api", "--root", "{work}"])
+    scenario("tasks", "waves-max1/" + name, files, ["tasks", "waves", "a-api", "--max", "1", "--root", "{work}"])
+    scenario("tasks", "waves-max9/" + name, files, ["tasks", "waves", "a-api", "--max", "9", "--root", "{work}"])
+    scenario("tasks", "set-done/" + name, files, ["tasks", "set", "a-api", "t1", "done", "--root", "{work}"], mutates=True)
+    scenario("tasks", "set-failed-note/" + name, files, ["tasks", "set", "a-api", "T2", "failed", "--note", "café broke", "--root", "{work}"], mutates=True)
+    scenario("tasks", "mirror/" + name, dict(files, **{".specs/project/loop/internal/tasks/a-api.json": json.dumps({"slug": "a-api", "updated_at": "x", "tasks": {"T1": {"status": "done"}, "T2": {"status": "running"}}})}),
+             ["tasks", "mirror", "a-api", "--root", "{work}"], mutates=True)
+scenario("tasks", "usage/none", {}, ["tasks"])
+# argparse wording of a usage error depends on the Python version: only the exit code is part of the contract
+scenario("tasks", "waves-colon-slug", {".specs/features/backend-version-endpoint/tasks.md": TASKS_MD, ".specs/project/ROADMAP.md": ROADMAPS["basic"]}, ["tasks", "waves", "backend:version-endpoint", "--root", "{work}"])
+
+CLASSIFY = {
+    "dotnet-standard": {"App.sln": "", "App.Api/x.cs": "", "App.Data/x.cs": "", "App.Domain/x.cs": ""},
+    "dotnet-flat": {"App.csproj": "", "Controllers/a.cs": "", "Services/b.cs": "", "Models/c.cs": ""},
+    "dotnet-partial": {"App.sln": "", "Api/x.cs": "", "Data/x.cs": ""},
+    "nest-standard": {"package.json": "{\"dependencies\": {\"@nestjs/core\": 1}}", "src/api/a.ts": "", "src/data/a.ts": "", "src/domain/a.ts": ""},
+    "nest-partial": {"package.json": "{\"dependencies\": {\"@nestjs/core\": 1}}", "src/api/a.ts": ""},
+    "react-vite-standard": {"package.json": "{\"dependencies\": {\"react\": 1}}", "src/pages/a.tsx": "", "src/components/b.tsx": "", "src/hooks/h.ts": ""},
+    "react-next-app": {"package.json": "{\"dependencies\": {\"react\": 1, \"next\": 1}}", "app/page.tsx": "", "src/components/b.tsx": ""},
+    "node-plain": {"package.json": "{}", "src/index.js": ""},
+    "empty": {"README.md": "x"},
+}
+for name, files in CLASSIFY.items():
+    scenario("classify", "show/" + name, files, ["classify", "{work}"])
+    scenario("classify", "write-standard/" + name, files, ["classify", "{work}", "--write", "standard", "--note", "checked by me"], mutates=True)
+    scenario("classify", "write-legacy/" + name, dict(files, **{"CLAUDE.md": "# Mine\n\nText\n"}), ["classify", "{work}", "--write", "LEGACY"], mutates=True)
+scenario("classify", "write-twice", {"package.json": "{}", "CLAUDE.md": "<!-- CONFORMANCE:BEGIN -->\nold\n<!-- CONFORMANCE:END -->\nrest\n"}, ["classify", "{work}", "--write", "STANDARD"], mutates=True)
+scenario("classify", "bad-class", {"package.json": "{}"}, ["classify", "{work}", "--write", "weird"])
+scenario("classify", "usage", {}, ["classify"])
+
+SCALE = {
+    "small": {"a.py": "x", "src/b.ts": "y", "docs/readme.md": "z"},
+    "ignored": {"node_modules/x/y.js": "1", "bin/z.dll": "2", "obj/a.cs": "3", "packages/p/q.cs": "4", "src/ok.cs": "5"},
+    "tops": {"src/a.cs": "x", "src/b.cs": "x", "web/c.ts": "x", "web/d.ts": "x", "web/e.ts": "x", "root.py": "x"},
+    "many-areas": {"d%d/f.py" % i: "x" for i in range(12)},
+    "html-css": {"a.html": "x", "b.css": "x", "c.scss": "x", "d.txt": "x", "e.vue": "x"},
+}
+for name, files in SCALE.items():
+    scenario("scale", "text/" + name, files, ["scale", "{work}"])
+    scenario("scale", "json/" + name, files, ["scale", "{work}", "--json"])
+scenario("scale", "usage", {}, ["scale"])
+
+
 def make_project(root, name, files, work):
     base = os.path.join(root, name)
     shutil.rmtree(base, ignore_errors=True)
@@ -122,7 +182,7 @@ def run(command, argv, work, data):
     env.update({"LOOP_DATA_DIR": data, "PYTHONIOENCODING": "utf-8", "USERPROFILE": data, "HOME": data})
     args = [a.replace("{work}", work) for a in argv]
     done = subprocess.run(command + args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
-    return done.returncode, done.stdout.replace(work, "<work>"), done.stderr.replace(work, "<work>")
+    stamp = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")\n    return done.returncode, stamp.sub("<ts>", done.stdout.replace(work, "<work>")), stamp.sub("<ts>", done.stderr.replace(work, "<work>"))
 
 
 def main():
