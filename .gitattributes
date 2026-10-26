@@ -1,0 +1,36 @@
+* text=auto eol=lf
+
+*.md text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.rs text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# Files an agent or hook reads as instructions: LF is required
+SKILL.md text eol=lf
+plugin/agents/*.md text eol=lf
+plugin/hooks/* text eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.zip binary
+*.exe binary
+
+Cargo.lock -diff
+fixtures/** linguist-generated
+cases/** linguist-generated
+docs/media/** linguist-documentation

@@ -1,0 +1,69 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.*
+*.secrets.*
+**/credentials*
+.secrets/
+*.test.env
+
+# Runtime state and local data
+.specs/
+.loop-harness/
+*.lock
+!Cargo.lock
+*.pid
+last-run.*
+logs/
+*.log
+
+# Build output
+target/
+dist/
+build/
+out/
+node_modules/
+coverage/
+
+# Browser automation and test artifacts
+.playwright-cli/
+playwright-report/
+test-results/
+traces/
+
+# Python caches (oracle runs only)
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local and personal extensions
+local-ext/
+*.local.*
+personal/
+scratch/
+tmp/
+
+# Claude Code local state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/projects/
+
+# Raw media
+docs/media/raw/
+*.mp4
+*.mov
