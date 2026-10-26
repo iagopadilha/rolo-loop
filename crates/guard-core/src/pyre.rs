@@ -41,8 +41,9 @@ impl Re {
         Re::build(pattern, true)
     }
     fn compile(pattern: &str, ci: bool) -> Result<FRegex, fancy_regex::Error> {
-        let mut builder = RegexBuilder::new(pattern);
-        builder.case_insensitive(ci).backtrack_limit(2_000_000);
+        let source = if ci { format!("(?i){pattern}") } else { pattern.to_string() };
+        let mut builder = RegexBuilder::new(&source);
+        builder.backtrack_limit(2_000_000);
         builder.build()
     }
     fn build(pattern: &str, ci: bool) -> Re {
@@ -205,19 +206,21 @@ fn split_drive_nt(path: &str) -> (String, String) {
             let after = &rest[i + 1..];
             let j = after.find('\\').unwrap_or(after.len());
             let end = 2 + i + 1 + j;
-            return (p[..end].to_string(), p[end..].to_string());
+            return (path[..end].to_string(), path[end..].to_string());
         }
-        return (p.clone(), String::new());
+        return (path.to_string(), String::new());
     }
     if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
-        return (p[..2].to_string(), p[2..].to_string());
+        return (path[..2].to_string(), path[2..].to_string());
     }
-    (String::new(), p)
+    (String::new(), path.to_string())
 }
 
 /// `os.path.normpath` on Windows (separators become backslashes).
 pub fn nt_normpath(path: &str) -> String {
     let (drive, rest) = split_drive_nt(path);
+    let rest = rest.replace('/', "\\");
+    let drive = drive.replace('/', "\\");
     let rooted = rest.starts_with('\\');
     let mut parts: Vec<&str> = Vec::new();
     for c in rest.split('\\') {
@@ -324,15 +327,10 @@ pub fn nt_join(a: &str, b: &str) -> String {
 /// `os.path.dirname` on Windows.
 pub fn nt_dirname(path: &str) -> String {
     let (drive, rest) = split_drive_nt(path);
-    let cut = rest.rfind('\\').map(|i| i + 1).unwrap_or(0);
-    let mut head = rest[..cut].to_string();
-    if head.len() > 1 {
-        head = head.trim_end_matches('\\').to_string();
-        if head.is_empty() {
-            head = "\\".to_string();
-        }
-    }
-    format!("{drive}{head}")
+    let cut = rest.rfind(['\\', '/']).map(|i| i + 1).unwrap_or(0);
+    let head = &rest[..cut];
+    let trimmed = head.trim_end_matches(['\\', '/']);
+    format!("{drive}{}", if trimmed.is_empty() { head } else { trimmed })
 }
 
 /// `os.path.abspath` (Windows): join with the cwd when relative, normalise.

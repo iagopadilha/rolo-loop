@@ -249,6 +249,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "egress-policy"
+version = "0.3.1"
+dependencies = [
+ "regex",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

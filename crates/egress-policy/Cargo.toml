@@ -1,0 +1,18 @@
+[package]
+name = "egress-policy"
+description = "Network list grammar and judgement shared by the claude-maestro guard, engine and the claude-craft-kit testenv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+regex = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
