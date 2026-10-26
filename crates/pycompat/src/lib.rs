@@ -839,3 +839,21 @@ pub fn nt_realpath(path: &str) -> String {
 pub fn fnmatch_nt(name: &str, pattern: &str) -> bool {
     fnmatchcase(&name.to_lowercase(), &pattern.to_lowercase())
 }
+
+/// Python `%g` of a float (6 significant digits, trailing zeros removed).
+pub fn format_g(value: f64) -> String {
+    if value == 0.0 {
+        return "0".into();
+    }
+    let exponent = value.abs().log10().floor() as i32;
+    if !(-4..6).contains(&exponent) {
+        let text = format!("{value:.5e}");
+        let (mantissa, exp) = text.split_once('e').unwrap_or((&text, "0"));
+        let mantissa = if mantissa.contains('.') { mantissa.trim_end_matches('0').trim_end_matches('.') } else { mantissa };
+        let exp: i32 = exp.parse().unwrap_or(0);
+        return format!("{mantissa}e{}{:02}", if exp < 0 { '-' } else { '+' }, exp.abs());
+    }
+    let decimals = (5 - exponent).max(0) as usize;
+    let text = format!("{value:.decimals$}");
+    if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.').to_string() } else { text }
+}

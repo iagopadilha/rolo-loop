@@ -37,6 +37,7 @@ pub mod mcp_access;
 pub mod mcp_discovery;
 pub mod monitor_proc;
 pub mod network_policy;
+pub mod planning_env_validation;
 pub mod notify;
 pub mod preflight_checks;
 pub mod prod_database_script;

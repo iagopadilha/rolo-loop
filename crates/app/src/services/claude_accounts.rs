@@ -182,23 +182,7 @@ pub fn split_usage_key(key: &str) -> (String, String) {
     }
 }
 
-/// Python `%g` of a float (6 significant digits, trailing zeros removed).
-pub fn format_g(value: f64) -> String {
-    if value == 0.0 {
-        return "0".into();
-    }
-    let exponent = value.abs().log10().floor() as i32;
-    if !(-4..6).contains(&exponent) {
-        let text = format!("{value:.5e}");
-        let (mantissa, exp) = text.split_once('e').unwrap_or((&text, "0"));
-        let mantissa = if mantissa.contains('.') { mantissa.trim_end_matches('0').trim_end_matches('.') } else { mantissa };
-        let exp: i32 = exp.parse().unwrap_or(0);
-        return format!("{mantissa}e{}{:02}", if exp < 0 { '-' } else { '+' }, exp.abs());
-    }
-    let decimals = (5 - exponent).max(0) as usize;
-    let text = format!("{value:.decimals$}");
-    if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.').to_string() } else { text }
-}
+pub use pycompat::format_g;
 
 /// "5-hour 60 % (reset 14:30)" / "weekly 33 % (reset Mon 27/10 09:00)": the local reset text is shown as the loop wrote it.
 pub fn format_window_line(window: &Value) -> String {
