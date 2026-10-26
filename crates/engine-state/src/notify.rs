@@ -19,6 +19,19 @@ use std::time::Duration;
 
 const MAX_BODY: usize = 6000;
 const MAX_SHORT: usize = 950;
+const NOTIFY_USAGE: &str = "usage: notify.py [-h] [--test] [--subject SUBJECT] [--body BODY]
+                 [--body-file BODY_FILE] [--channels CHANNELS]
+
+Loop notices (console, toast, file, email, webhook)
+
+options:
+  -h, --help            show this help message and exit
+  --test                sends a test notice through the configured channels
+  --subject SUBJECT
+  --body BODY
+  --body-file BODY_FILE
+  --channels CHANNELS   overrides LOOP_NOTIFY_CHANNELS (e.g. email,console)
+";
 const CHAT_NOTE: &str = "Se você está numa CONVERSA NORMAL (chat do Claude com /orchestrator): NÃO rode o script. Responda direto no chat; o orquestrador segue normalmente.";
 const CRITICAL_DECISION: &str = "critical decision: ";
 
@@ -561,7 +574,7 @@ pub fn run_cli(args: &[String], env: &mut Env) -> (i32, String, String) {
         }
         ctx = json!({"event": "custom", "subject": opt("--subject"), "project": "", "extra_body": clip(&text, 3000)});
     } else {
-        return (2, "usage: harness.py notify [-h] [--test] [--subject SUBJECT] [--body BODY] [--body-file BODY_FILE] [--channels CHANNELS]\n".into(), String::new());
+        return (2, NOTIFY_USAGE.into(), String::new());
     }
     let results = dispatch(env, &ctx, "", only);
     let mut out = String::new();

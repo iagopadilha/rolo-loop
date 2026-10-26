@@ -256,7 +256,16 @@ for name, files in RULES.items():
 scenario("rules", "duplicate-id", RULES["stored"], ["rules", "propose", "{work}", "--id", "R-01", "--bash", "force", "--block", "bash:force x", "--pass", "bash:ls"])
 scenario("rules", "breaks-older", RULES["stored"], ["rules", "propose", "{work}", "--id", "R-02", "--bash", "ls", "--block", "bash:ls -la", "--pass", "bash:git status"])
 
-STAMP = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")
+NOTIFY_OFF = {"x": ""}
+scenario("notify", "test-console", NOTIFY_OFF, ["notify", "--test", "--channels", "console"])
+scenario("notify", "test-file-nowork", NOTIFY_OFF, ["notify", "--test", "--channels", "file"])
+scenario("notify", "test-email-skipped", NOTIFY_OFF, ["notify", "--test", "--channels", "email"])
+scenario("notify", "test-webhook-skipped", NOTIFY_OFF, ["notify", "--test", "--channels", "webhook"])
+scenario("notify", "test-unknown", NOTIFY_OFF, ["notify", "--test", "--channels", "pigeon"])
+scenario("notify", "custom-console", NOTIFY_OFF, ["notify", "--subject", "Hello", "--body", "line <1>", "--channels", "console"])
+scenario("notify", "usage", NOTIFY_OFF, ["notify"])
+
+STAMP = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?|\d\d/\d\d/\d{4} \d\d:\d\d")
 
 SUMMARY_FILES = {
     ".specs/project/ROADMAP.md": "## Stage 1\n- [a-api] status=verified scope=Medium kind=back paths=src/api note=ok origin=adopted\n- [b-ui] status=blocked paths=web tries=2\n## Stage 2\n- [c] status=pending\n",
@@ -305,7 +314,7 @@ def run(command, argv, work, data):
     env.update({"LOOP_DATA_DIR": data, "PYTHONIOENCODING": "utf-8", "USERPROFILE": data, "HOME": data})
     args = [a.replace("{work}", work) for a in argv]
     done = subprocess.run(command + args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
-    stamp = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")
+    stamp = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?|\d\d/\d\d/\d{4} \d\d:\d\d")
     return done.returncode, stamp.sub("<ts>", done.stdout.replace(work, "<work>")), stamp.sub("<ts>", done.stderr.replace(work, "<work>"))
 
 
