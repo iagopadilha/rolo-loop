@@ -26,8 +26,13 @@ pub mod claude_jobs;
 pub mod code_inventory;
 pub mod context_block;
 pub mod engine_script;
+pub mod folder_picker;
+pub mod guard_events;
 pub mod loop_control;
+pub mod loop_parsers;
 pub mod map_job;
+pub mod mcp_servers;
+pub mod network;
 pub mod loop_status;
 pub mod planning_repos;
 pub mod project_capabilities;
@@ -41,6 +46,7 @@ pub mod subproject_map;
 pub mod subprojects;
 pub mod system_map;
 pub mod test_environment;
+pub mod whiteboard;
 pub mod planning;
 pub mod planning_gates;
 pub mod planning_import;
@@ -96,6 +102,8 @@ pub struct App {
     pub relaunched_pids: Mutex<BTreeMap<String, i64>>,
     /// Planning chat: serializes the thread edits. Test environment: serializes the writes of `.env.test`.
     pub planning_lock: Mutex<()>,
+    pub whiteboard_lock: Mutex<()>,
+    pub network_lock: Mutex<()>,
     pub test_environment_lock: Mutex<()>,
     /// Subproject maps: the queue lock and the folders whose queue has a watcher thread alive in this process.
     pub map_queue_lock: Mutex<()>,
@@ -158,6 +166,8 @@ impl App {
             relaunched_pids: Mutex::new(BTreeMap::new()),
             readiness: readiness::ReadinessState::default(),
             planning_lock: Mutex::new(()),
+            whiteboard_lock: Mutex::new(()),
+            network_lock: Mutex::new(()),
             test_environment_lock: Mutex::new(()),
             map_queue_lock: Mutex::new(()),
             map_active_folders: Mutex::new(BTreeSet::new()),
