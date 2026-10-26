@@ -731,7 +731,7 @@ const LEGACY_NAMES: [(&str, &str); 16] = [
     ("REGRAS.md", "RULES.md"),
 ];
 const LEGACY_NAMES_MORE: [(&str, &str); 2] = [("TESTE-AMBIENTE.md", "TEST-ENVIRONMENT.md"), ("etapa-NN.md", "stage-NN.md")];
-const RULES_IMPORT: &str = "@.specs/project/RULES.md";
+pub const RULES_IMPORT: &str = "@.specs/project/RULES.md";
 const LEGACY_RULES_IMPORT: &str = "@.specs/project/REGRAS.md";
 const PROJECT_FILES_RENAMED: [&str; 2] = ["RULES.md", "TEST-ENVIRONMENT.md"];
 const LEGACY_LOOP_FOLDER_NAME: &str = "loop_script";

@@ -26,6 +26,8 @@ pub mod claude_jobs;
 pub mod code_inventory;
 pub mod context_block;
 pub mod planning_requirement;
+pub mod project;
+pub mod specs_structure;
 
 use claude_accounts::ClaudeAccountService;
 use claude_call_log::ClaudeCallLogService;
