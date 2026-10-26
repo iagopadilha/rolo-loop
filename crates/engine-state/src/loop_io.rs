@@ -429,3 +429,74 @@ pub fn local_from_epoch(epoch: i64) -> Option<time::PrimitiveDateTime> {
 pub fn iso_seconds(moment: time::PrimitiveDateTime) -> String {
     moment.format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]")).unwrap_or_default()
 }
+
+/// Result of [`run_process`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcessResult {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+}
+
+/// Runs a command to the end like `subprocess.Popen(..., text=True).communicate(input, timeout)`: stdin from `stdin_text` (or closed),
+/// stdout and stderr captured as UTF-8 text with universal newlines, the child in its own process group, and on timeout the whole tree is
+/// killed and what was read so far returned. `env` replaces the child's whole environment.
+pub fn run_process(argv: &[String], cwd: &str, env: &[(String, String)], stdin_text: &str, timeout_seconds: u64) -> ProcessResult {
+    use std::io::Read;
+    let mut cmd = Command::new(&argv[0]);
+    cmd.args(&argv[1..]).current_dir(cwd).env_clear().envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    cmd.stdin(if stdin_text.is_empty() { Stdio::null() } else { Stdio::piped() }).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0000_0200); // CREATE_NEW_PROCESS_GROUP
+    }
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(error) => return ProcessResult { code: 1, stdout: String::new(), stderr: error.to_string(), timed_out: false },
+    };
+    let pid = i64::from(child.id());
+    let writer = child.stdin.take().map(|mut stdin| {
+        let text = stdin_text.to_string();
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(text.as_bytes());
+        })
+    });
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let out_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(p) = out_pipe.as_mut() {
+            let _ = p.read_to_end(&mut bytes);
+        }
+        bytes
+    });
+    let err_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(p) = err_pipe.as_mut() {
+            let _ = p.read_to_end(&mut bytes);
+        }
+        bytes
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_seconds);
+    let (status, timed_out) = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break (Some(s), false),
+            Ok(None) if std::time::Instant::now() >= deadline => {
+                kill_tree(pid);
+                let _ = child.kill();
+                break (child.wait().ok(), true);
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(_) => break (None, false),
+        }
+    };
+    if let Some(w) = writer {
+        let _ = w.join();
+    }
+    let decode = |bytes: Vec<u8>| String::from_utf8_lossy(&bytes).replace("\r\n", "\n").replace('\r', "\n");
+    let stdout = decode(out_reader.join().unwrap_or_default());
+    let stderr = decode(err_reader.join().unwrap_or_default());
+    ProcessResult { code: status.and_then(|s| s.code()).unwrap_or(-1), stdout, stderr, timed_out }
+}
