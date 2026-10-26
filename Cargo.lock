@@ -76,6 +76,7 @@ dependencies = [
  "tempfile",
  "time",
  "ureq",
+ "winproc",
 ]
 
 [[package]]

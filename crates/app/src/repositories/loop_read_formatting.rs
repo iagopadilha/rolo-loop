@@ -7,7 +7,7 @@ use engine_state::secret_redaction;
 use pycompat::Re;
 use serde_json::Value;
 use std::sync::LazyLock;
-use time::{OffsetDateTime, PrimitiveDateTime};
+use time::PrimitiveDateTime;
 
 pub const REDACTED_MARK: &str = secret_redaction::REDACTION_MARK;
 const SECONDS_PER_MINUTE: i64 = 60;
@@ -49,51 +49,66 @@ pub fn format_minutes_clock(seconds: i64) -> String {
     format!("{:02}:{:02}", seconds / SECONDS_PER_MINUTE, seconds % SECONDS_PER_MINUTE)
 }
 
-/// HH:MM:SS between two instants; either side missing = ''.
-pub fn format_elapsed_clock(start: Option<&OffsetDateTime>, moment: Option<&OffsetDateTime>) -> String {
-    let (Some(start), Some(moment)) = (start, moment) else { return String::new() };
-    let seconds = (*moment - *start).whole_seconds().max(0);
-    format!("{:02}:{:02}:{:02}", seconds / SECONDS_PER_HOUR, seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE, seconds % SECONDS_PER_MINUTE)
+/// An ISO date read the way `datetime.fromisoformat` does: `naive` when it carries no zone; `seconds` since the epoch (a naive one is taken as UTC,
+/// only differences between two moments of the same kind are meaningful).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Moment {
+    pub naive: bool,
+    pub seconds: f64,
 }
 
-/// `(naive?, instant)`: an ISO date with or without offset (`Z` accepted). A naive one is read as local time.
-fn parse_iso(value: &str) -> Option<(bool, PrimitiveDateTime, Option<time::UtcOffset>)> {
-    let text = value.trim();
-    let text = text.strip_suffix('Z').map(|t| format!("{t}+00:00")).unwrap_or_else(|| text.to_string());
-    let (body, offset) = match text.rfind(['+', '-']).filter(|i| *i > 10) {
+/// `datetime.fromisoformat(str(value).replace("Z", "+00:00"))`; `None` when it does not parse.
+pub fn parse_iso_date(value: &str) -> Option<Moment> {
+    let text = value.trim().replace('Z', "+00:00");
+    let (body, offset_seconds) = match text.rfind(['+', '-']).filter(|i| *i > 10) {
         Some(index) => {
             let (b, o) = text.split_at(index);
-            let sign = if o.starts_with('-') { -1 } else { 1 };
+            let sign = if o.starts_with('-') { -1i64 } else { 1 };
             let digits: Vec<&str> = o[1..].split(':').collect();
-            let hours: i8 = digits.first()?.parse().ok()?;
-            let minutes: i8 = digits.get(1).and_then(|m| m.parse().ok()).unwrap_or(0);
-            (b.to_string(), Some(time::UtcOffset::from_hms(sign * hours, sign * minutes, 0).ok()?))
+            let hours: i64 = digits.first()?.parse().ok()?;
+            let minutes: i64 = digits.get(1).map(|m| m.parse().ok()).unwrap_or(Some(0))?;
+            (b.to_string(), Some(sign * (hours * 3600 + minutes * 60)))
         }
         None => (text.clone(), None),
     };
     let body = body.replace(' ', "T");
-    let (date, clock) = body.split_once('T').map(|(d, c)| (d.to_string(), c.to_string())).unwrap_or((body.clone(), "00:00:00".into()));
+    let (date, clock) = match body.split_once('T') {
+        Some((d, c)) => (d.to_string(), c.to_string()),
+        None => (body.clone(), "00:00:00".into()),
+    };
     let date = time::Date::parse(&date, time::macros::format_description!("[year]-[month]-[day]")).ok()?;
     let mut parts = clock.split(':');
     let hour: u8 = parts.next()?.parse().ok()?;
     let minute: u8 = parts.next().map(|m| m.parse().ok()).unwrap_or(Some(0))?;
     let second_text = parts.next().unwrap_or("0");
-    let second: u8 = second_text.split('.').next()?.parse().ok()?;
-    let moment = PrimitiveDateTime::new(date, time::Time::from_hms(hour, minute, second).ok()?);
-    Some((offset.is_none(), moment, offset))
+    let (whole, fraction) = second_text.split_once('.').unwrap_or((second_text, ""));
+    let second: u8 = whole.parse().ok()?;
+    let fraction: f64 = if fraction.is_empty() { 0.0 } else { format!("0.{fraction}").parse().ok()? };
+    let clock_time = time::Time::from_hms(hour, minute, second).ok()?;
+    let epoch = PrimitiveDateTime::new(date, clock_time).assume_utc().unix_timestamp() as f64 + fraction;
+    Some(Moment { naive: offset_seconds.is_none(), seconds: epoch - offset_seconds.unwrap_or(0) as f64 })
 }
 
-/// Seconds between two ISO dates; a side missing/unparseable, or one with a zone and the other without, = `None`.
+/// HH:MM:SS between two moments; either side missing or with an incompatible time zone = ''.
+pub fn format_elapsed_clock(start: Option<&Moment>, moment: Option<&Moment>) -> String {
+    let (Some(start), Some(moment)) = (start, moment) else { return String::new() };
+    if start.naive != moment.naive {
+        return String::new();
+    }
+    let seconds = ((moment.seconds - start.seconds) as i64).max(0);
+    format!("{:02}:{:02}:{:02}", seconds / SECONDS_PER_HOUR, seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE, seconds % SECONDS_PER_MINUTE)
+}
+
+/// Seconds between two ISO dates (Python `round`); a side missing/unparseable, or one with a zone and the other without, = `None`.
 pub fn compute_seconds_between(start: &str, end: &str) -> Option<i64> {
     if start.is_empty() || end.is_empty() {
         return None;
     }
-    let (first, last) = (parse_iso(start)?, parse_iso(end)?);
-    if first.0 != last.0 {
+    let (first, last) = (parse_iso_date(start)?, parse_iso_date(end)?);
+    if first.naive != last.naive {
         return None;
     }
-    let as_utc = |p: &(bool, PrimitiveDateTime, Option<time::UtcOffset>)| p.1.assume_offset(p.2.unwrap_or(time::UtcOffset::UTC));
-    Some((as_utc(&last) - as_utc(&first)).whole_seconds().max(0))
+    Some(((last.seconds - first.seconds).round_ties_even() as i64).max(0))
 }
 
 /// Sum of the `*_tokens` fields of a `usage`; none of them = `None` (never invents a zero).

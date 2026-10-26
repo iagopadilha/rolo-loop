@@ -35,6 +35,14 @@ impl M {
     }
 }
 
+impl std::ops::Index<usize> for M {
+    type Output = str;
+    /// Group `index` as text; a group that did not take part in the match reads as ''.
+    fn index(&self, index: usize) -> &str {
+        self.group(index).unwrap_or("")
+    }
+}
+
 impl Re {
     /// Case-sensitive pattern.
     pub fn new(pattern: &str) -> Re {
@@ -103,6 +111,10 @@ impl Re {
     }
     pub fn search(&self, text: &str) -> Option<M> {
         self.find_at(text, 0)
+    }
+    /// Same as [`Re::search`]: the first match with its groups.
+    pub fn captures(&self, text: &str) -> Option<M> {
+        self.search(text)
     }
     fn find_at(&self, text: &str, from: usize) -> Option<M> {
         let caps = self.re.captures_from_pos(text, from).ok().flatten()?;
@@ -789,19 +801,37 @@ pub fn nt_normcase(path: &str) -> String {
     path.replace('/', "\\").to_lowercase()
 }
 
-/// `os.path.realpath` on Windows: symlinks and 8.3 names resolved when the path exists (without the `\?\` prefix), else the absolute path.
+/// `os.path.realpath` on Windows: symlinks and 8.3 names resolved for the part of the path that exists (without the verbatim prefix); the part
+/// that does not exist is appended as it is.
 pub fn nt_realpath(path: &str) -> String {
+    const VERBATIM_UNC: &str = r"\\?\UNC\";
+    const VERBATIM: &str = r"\\?\";
     let abs = nt_abspath(path);
-    match std::fs::canonicalize(&abs) {
-        Ok(real) => {
+    let mut existing = std::path::PathBuf::from(&abs);
+    let mut rest: Vec<std::ffi::OsString> = Vec::new();
+    loop {
+        if let Ok(real) = std::fs::canonicalize(&existing) {
             let text = real.display().to_string();
-            if let Some(rest) = text.strip_prefix(r"\?\UNC\") {
-                format!(r"\{rest}")
+            let mut resolved = if let Some(tail) = text.strip_prefix(VERBATIM_UNC) {
+                format!(r"\\{tail}")
             } else {
-                text.strip_prefix(r"\?\").unwrap_or(&text).to_string()
+                text.strip_prefix(VERBATIM).unwrap_or(&text).to_string()
+            };
+            for part in rest.iter().rev() {
+                if !resolved.ends_with('\\') {
+                    resolved.push('\\');
+                }
+                resolved.push_str(&part.to_string_lossy());
             }
+            return resolved;
         }
-        Err(_) => abs,
+        match (existing.file_name().map(|n| n.to_os_string()), existing.parent().map(|p| p.to_path_buf())) {
+            (Some(name), Some(parent)) if parent != existing => {
+                rest.push(name);
+                existing = parent;
+            }
+            _ => return abs,
+        }
     }
 }
 

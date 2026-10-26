@@ -4,6 +4,7 @@
 pub mod activity_monitor;
 pub mod claude_client;
 pub mod git_client;
+pub mod ids;
 pub mod process_runner;
 pub mod structured_log;
 pub mod workspace_file_guard;

@@ -71,6 +71,29 @@ pub fn install_ctrl_c_handler() {
 #[cfg(not(windows))]
 pub fn install_ctrl_c_handler() {}
 
+/// `count` bytes from the operating system's random generator (`BCryptGenRandom` with the system-preferred RNG).
+#[cfg(windows)]
+pub fn random_bytes(count: usize) -> Vec<u8> {
+    use windows_sys::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+    let mut buffer = vec![0u8; count];
+    if count == 0 {
+        return buffer;
+    }
+    // SAFETY: the buffer is valid for `count` bytes for the whole call; a null algorithm handle is allowed with the system RNG flag.
+    let status = unsafe { BCryptGenRandom(std::ptr::null_mut(), buffer.as_mut_ptr(), count as u32, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    assert!(status >= 0, "the system random generator failed (status {status:#x})");
+    buffer
+}
+
+#[cfg(not(windows))]
+pub fn random_bytes(count: usize) -> Vec<u8> {
+    let mut buffer = vec![0u8; count];
+    if let Ok(mut file) = std::fs::File::open("/dev/urandom") {
+        let _ = std::io::Read::read_exact(&mut file, &mut buffer);
+    }
+    buffer
+}
+
 /// True once Ctrl+C was pressed after [`install_ctrl_c_handler`].
 pub fn interrupted() -> bool {
     INTERRUPTED.load(std::sync::atomic::Ordering::SeqCst)
