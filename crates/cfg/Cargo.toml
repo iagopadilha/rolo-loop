@@ -1,0 +1,19 @@
+[package]
+name = "cfg"
+description = "Configuration, environment layers and plugin/toolkit locator for claude-maestro"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+regex = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+
+[lints]
+workspace = true
