@@ -1,0 +1,643 @@
+// SPDX-License-Identifier: MIT
+//! Small emulations of the Python standard-library pieces the guard's behaviour depends on:
+//! `re` (through fancy-regex, so lookaround works), `ntpath`/`posixpath` normalisation, `shlex.split(posix=False)`,
+//! `fnmatch`, `urllib.parse.unquote` and `urlsplit`.
+
+use fancy_regex::{Regex as FRegex, RegexBuilder};
+
+/// A compiled pattern with Python-like helpers. Matching errors (backtrack limit) count as "no match".
+pub struct Re {
+    re: FRegex,
+    src: String,
+    ci: bool,
+    start: std::sync::OnceLock<FRegex>,
+    full: std::sync::OnceLock<FRegex>,
+}
+
+/// One match: byte offsets and the captured groups as owned text.
+#[derive(Clone, Debug)]
+pub struct M {
+    pub start: usize,
+    pub end: usize,
+    pub groups: Vec<Option<String>>,
+}
+
+impl M {
+    pub fn text(&self) -> &str {
+        self.groups[0].as_deref().unwrap_or("")
+    }
+    pub fn group(&self, index: usize) -> Option<&str> {
+        self.groups.get(index).and_then(|g| g.as_deref())
+    }
+}
+
+impl Re {
+    /// Case-sensitive pattern.
+    pub fn new(pattern: &str) -> Re {
+        Re::build(pattern, false)
+    }
+    /// `re.I`.
+    pub fn ci(pattern: &str) -> Re {
+        Re::build(pattern, true)
+    }
+    fn compile(pattern: &str, ci: bool) -> Result<FRegex, fancy_regex::Error> {
+        let mut builder = RegexBuilder::new(pattern);
+        builder.case_insensitive(ci).backtrack_limit(2_000_000);
+        builder.build()
+    }
+    fn build(pattern: &str, ci: bool) -> Re {
+        match Re::compile(pattern, ci) {
+            Ok(re) => Re {
+                re,
+                src: pattern.to_string(),
+                ci,
+                start: std::sync::OnceLock::new(),
+                full: std::sync::OnceLock::new(),
+            },
+            Err(e) => panic!("invalid pattern {pattern:?}: {e}"),
+        }
+    }
+    pub fn is_match(&self, text: &str) -> bool {
+        self.re.is_match(text).unwrap_or(false)
+    }
+    fn twin<'a>(&self, cell: &'a std::sync::OnceLock<FRegex>, tail: &str) -> &'a FRegex {
+        cell.get_or_init(|| {
+            Re::compile(&format!(r"\A(?:{}){}", self.src, tail), self.ci)
+                .expect("anchored twin compiles")
+        })
+    }
+    /// Python `re.match`: anchored at the start.
+    pub fn match_start(&self, text: &str) -> Option<M> {
+        let caps = self.twin(&self.start, "").captures(text).ok().flatten()?;
+        Some(to_m(&caps))
+    }
+    pub fn search(&self, text: &str) -> Option<M> {
+        self.find_at(text, 0)
+    }
+    fn find_at(&self, text: &str, from: usize) -> Option<M> {
+        let caps = self.re.captures_from_pos(text, from).ok().flatten()?;
+        Some(to_m(&caps))
+    }
+    /// `finditer`.
+    pub fn find_all(&self, text: &str) -> Vec<M> {
+        let mut out = Vec::new();
+        let mut pos = 0;
+        while pos <= text.len() {
+            let Some(m) = self.find_at(text, pos) else {
+                break;
+            };
+            pos = if m.end == m.start {
+                next_boundary(text, m.end)
+            } else {
+                m.end
+            };
+            out.push(m);
+        }
+        out
+    }
+    /// `re.sub` with a closure.
+    pub fn replace_all(&self, text: &str, f: impl Fn(&M) -> String) -> String {
+        let mut out = String::new();
+        let mut last = 0;
+        for m in self.find_all(text) {
+            out.push_str(&text[last..m.start]);
+            out.push_str(&f(&m));
+            last = m.end;
+        }
+        out.push_str(&text[last..]);
+        out
+    }
+    /// `re.sub` with a literal replacement.
+    pub fn replace_lit(&self, text: &str, with: &str) -> String {
+        self.replace_all(text, |_| with.to_string())
+    }
+    /// `re.split` (without capture groups).
+    pub fn split(&self, text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut last = 0;
+        for m in self.find_all(text) {
+            if m.end == m.start {
+                continue;
+            }
+            out.push(text[last..m.start].to_string());
+            last = m.end;
+        }
+        out.push(text[last..].to_string());
+        out
+    }
+    /// `re.fullmatch`.
+    pub fn full_match(&self, text: &str) -> bool {
+        self.twin(&self.full, r"\z").is_match(text).unwrap_or(false)
+    }
+}
+
+fn to_m(caps: &fancy_regex::Captures<'_>) -> M {
+    let whole = caps.get(0).expect("group 0 always exists");
+    M {
+        start: whole.start(),
+        end: whole.end(),
+        groups: (0..caps.len())
+            .map(|i| caps.get(i).map(|g| g.as_str().to_string()))
+            .collect(),
+    }
+}
+
+fn next_boundary(text: &str, index: usize) -> usize {
+    let mut i = index + 1;
+    while i < text.len() && !text.is_char_boundary(i) {
+        i += 1;
+    }
+    i
+}
+
+/// `re.escape`.
+pub fn escape(text: &str) -> String {
+    fancy_regex::escape(text).into_owned()
+}
+
+// ---- Python str helpers ------------------------------------------------------------------------------------------------------
+
+/// `str.split()` with no arguments (any whitespace run).
+pub fn split_ws(text: &str) -> Vec<&str> {
+    text.split_whitespace().collect()
+}
+
+/// `str.strip(chars)`.
+pub fn strip_chars<'a>(text: &'a str, chars: &str) -> &'a str {
+    text.trim_matches(|c| chars.contains(c))
+}
+
+/// `str.partition(sep)` -> (head, sep found, tail).
+pub fn partition<'a>(text: &'a str, sep: &str) -> (&'a str, bool, &'a str) {
+    match text.find(sep) {
+        Some(i) => (&text[..i], true, &text[i + sep.len()..]),
+        None => (text, false, ""),
+    }
+}
+
+/// `str.rpartition(sep)` -> (head, sep found, tail); when absent head is "" and tail the whole text, as Python does.
+pub fn rpartition<'a>(text: &'a str, sep: &str) -> (&'a str, bool, &'a str) {
+    match text.rfind(sep) {
+        Some(i) => (&text[..i], true, &text[i + sep.len()..]),
+        None => ("", false, text),
+    }
+}
+
+/// `text[:n]` by characters.
+pub fn head(text: &str, n: usize) -> String {
+    text.chars().take(n).collect()
+}
+
+/// `os.path.basename`-like split of a Windows/posix path on both separators.
+pub fn last_segment(text: &str) -> &str {
+    text.rsplit(['\\', '/']).next().unwrap_or("")
+}
+
+// ---- ntpath / posixpath --------------------------------------------------------------------------------------------------------
+
+fn split_drive_nt(path: &str) -> (String, String) {
+    let p = path.replace('/', "\\");
+    let b = p.as_bytes();
+    if p.starts_with("\\\\") && !p.starts_with("\\\\\\") {
+        // UNC: \\server\share
+        let rest = &p[2..];
+        if let Some(i) = rest.find('\\') {
+            let after = &rest[i + 1..];
+            let j = after.find('\\').unwrap_or(after.len());
+            let end = 2 + i + 1 + j;
+            return (p[..end].to_string(), p[end..].to_string());
+        }
+        return (p.clone(), String::new());
+    }
+    if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+        return (p[..2].to_string(), p[2..].to_string());
+    }
+    (String::new(), p)
+}
+
+/// `os.path.normpath` on Windows (separators become backslashes).
+pub fn nt_normpath(path: &str) -> String {
+    let (drive, rest) = split_drive_nt(path);
+    let rooted = rest.starts_with('\\');
+    let mut parts: Vec<&str> = Vec::new();
+    for c in rest.split('\\') {
+        match c {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|l| *l != "..") {
+                    parts.pop();
+                } else if !rooted && !drive.starts_with("\\\\") {
+                    parts.push("..");
+                }
+            }
+            c => parts.push(c),
+        }
+    }
+    let mut out = drive;
+    if rooted {
+        out.push('\\');
+    }
+    out.push_str(&parts.join("\\"));
+    if out.is_empty() {
+        ".".to_string()
+    } else {
+        out
+    }
+}
+
+/// `posixpath.normpath`.
+pub fn posix_normpath(path: &str) -> String {
+    if path.is_empty() {
+        return ".".to_string();
+    }
+    let initial = if path.starts_with('/') {
+        if path.starts_with("//") && !path.starts_with("///") {
+            2
+        } else {
+            1
+        }
+    } else {
+        0
+    };
+    let mut comps: Vec<&str> = Vec::new();
+    for c in path.split('/') {
+        if c.is_empty() || c == "." {
+            continue;
+        }
+        if c != ".."
+            || (initial == 0 && comps.is_empty())
+            || comps.last().is_some_and(|l| *l == "..")
+        {
+            comps.push(c);
+        } else if !comps.is_empty() {
+            comps.pop();
+        }
+    }
+    let joined = comps.join("/");
+    let mut out = "/".repeat(initial);
+    out.push_str(&joined);
+    if out.is_empty() {
+        ".".to_string()
+    } else {
+        out
+    }
+}
+
+/// `os.path.isabs` on Windows (Python 3.13+: a lone leading slash is not absolute).
+pub fn nt_isabs(path: &str) -> bool {
+    let p = path.replace('/', "\\");
+    let b = p.as_bytes();
+    (b.len() >= 3 && b[1] == b':' && b[0].is_ascii_alphabetic() && b[2] == b'\\')
+        || (p.starts_with("\\\\") && p.len() > 2)
+}
+
+/// `os.path.join(a, b)` on Windows.
+pub fn nt_join(a: &str, b: &str) -> String {
+    if b.is_empty() {
+        return if a.is_empty() {
+            String::new()
+        } else if a.ends_with(['\\', '/']) {
+            a.to_string()
+        } else {
+            format!("{a}\\")
+        };
+    }
+    let (bd, br) = split_drive_nt(b);
+    if nt_isabs(b) || (!bd.is_empty() && !bd.eq_ignore_ascii_case(&split_drive_nt(a).0)) {
+        return b.to_string();
+    }
+    let (ad, ar) = split_drive_nt(a);
+    if br.starts_with('\\') {
+        return format!("{}{}", if bd.is_empty() { ad } else { bd }, br);
+    }
+    if a.is_empty() {
+        return b.to_string();
+    }
+    let base = if ar.is_empty() || ar.ends_with('\\') || a.ends_with(['\\', '/']) {
+        a.to_string()
+    } else {
+        format!("{a}\\")
+    };
+    format!("{base}{}", if bd.is_empty() { b.to_string() } else { br })
+}
+
+/// `os.path.dirname` on Windows.
+pub fn nt_dirname(path: &str) -> String {
+    let (drive, rest) = split_drive_nt(path);
+    let cut = rest.rfind('\\').map(|i| i + 1).unwrap_or(0);
+    let mut head = rest[..cut].to_string();
+    if head.len() > 1 {
+        head = head.trim_end_matches('\\').to_string();
+        if head.is_empty() {
+            head = "\\".to_string();
+        }
+    }
+    format!("{drive}{head}")
+}
+
+/// `os.path.abspath` (Windows): join with the cwd when relative, normalise.
+pub fn nt_abspath(path: &str) -> String {
+    let full = if nt_isabs(path) {
+        path.to_string()
+    } else {
+        let cwd = std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        nt_join(&cwd, path)
+    };
+    nt_normpath(&full)
+}
+
+// ---- shlex --------------------------------------------------------------------------------------------------------------------
+
+/// `shlex.split(text, posix=False)`; `Err` where Python raises ValueError (no closing quotation).
+pub fn shlex_split_nonposix(text: &str) -> Result<Vec<String>, ()> {
+    let ws = |c: char| c == ' ' || c == '\t' || c == '\r' || c == '\n';
+    let quote = |c: char| c == '"' || c == '\'';
+    let mut tokens = Vec::new();
+    let mut token = String::new();
+    // state: None = whitespace, Some(' ') word, Some(q) in quote
+    let mut state: Option<char> = None;
+    let mut word = false;
+    for c in text.chars() {
+        match state {
+            None => {
+                if ws(c) {
+                    continue;
+                } else if quote(c) {
+                    token.push(c);
+                    state = Some(c);
+                } else {
+                    token.push(c);
+                    state = Some('a');
+                    word = true;
+                }
+            }
+            Some('a') => {
+                if ws(c) {
+                    tokens.push(std::mem::take(&mut token));
+                    state = None;
+                    word = false;
+                } else {
+                    token.push(c);
+                }
+            }
+            Some(q) => {
+                token.push(c);
+                if c == q {
+                    tokens.push(std::mem::take(&mut token));
+                    state = None;
+                }
+            }
+        }
+    }
+    let _ = word;
+    match state {
+        Some('a') => tokens.push(token),
+        Some(_) => return Err(()),
+        None => {}
+    }
+    Ok(tokens)
+}
+
+// ---- fnmatch ------------------------------------------------------------------------------------------------------------------
+
+/// `fnmatch.fnmatchcase(name, pattern)`.
+pub fn fnmatchcase(name: &str, pattern: &str) -> bool {
+    let mut re = String::from("^(?s:");
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        i += 1;
+        match c {
+            '*' => re.push_str(".*"),
+            '?' => re.push('.'),
+            '[' => {
+                let mut j = i;
+                if j < chars.len() && chars[j] == '!' {
+                    j += 1;
+                }
+                if j < chars.len() && chars[j] == ']' {
+                    j += 1;
+                }
+                while j < chars.len() && chars[j] != ']' {
+                    j += 1;
+                }
+                if j >= chars.len() {
+                    re.push_str("\\[");
+                } else {
+                    let mut stuff: String = chars[i..j].iter().collect();
+                    stuff = stuff.replace('\\', "\\\\");
+                    i = j + 1;
+                    if let Some(rest) = stuff.strip_prefix('!') {
+                        re.push_str(&format!("[^{rest}]"));
+                    } else if stuff.starts_with('^') {
+                        re.push_str(&format!("[\\{stuff}]"));
+                    } else {
+                        re.push_str(&format!("[{stuff}]"));
+                    }
+                }
+            }
+            c => re.push_str(&fancy_regex::escape(&c.to_string())),
+        }
+    }
+    re.push_str(")$");
+    match FRegex::new(&re) {
+        Ok(r) => r.is_match(name).unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+// ---- urllib -------------------------------------------------------------------------------------------------------------------
+
+/// `urllib.parse.unquote` (UTF-8, errors replaced).
+pub fn unquote(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// The parts of `urlsplit(url)` the guard reads.
+pub struct UrlParts {
+    pub scheme: String,
+    pub hostname: Option<String>,
+    pub port: Option<u32>,
+    pub path: String,
+}
+
+/// `urlsplit` + `.hostname` + `.port`; `Err(message)` where Python raises ValueError.
+pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
+    let mut rest = url.to_string();
+    let mut scheme = String::new();
+    if let Some(i) = rest.find(':') {
+        let cand = &rest[..i];
+        let valid = !cand.is_empty()
+            && cand.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && cand
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+        if valid {
+            scheme = cand.to_ascii_lowercase();
+            rest = rest[i + 1..].to_string();
+        }
+    }
+    let mut netloc = String::new();
+    if rest.starts_with("//") {
+        let body = &rest[2..];
+        let end = body.find(['/', '?', '#']).unwrap_or(body.len());
+        netloc = body[..end].to_string();
+        rest = body[end..].to_string();
+        if (netloc.contains('[') && !netloc.contains(']'))
+            || (netloc.contains(']') && !netloc.contains('['))
+        {
+            return Err("Invalid IPv6 URL".into());
+        }
+    }
+    if let Some(i) = rest.find('#') {
+        rest.truncate(i);
+    }
+    if let Some(i) = rest.find('?') {
+        rest.truncate(i);
+    }
+    let path = rest;
+    // hostname and port, as SplitResult does
+    let hostinfo = rpartition(&netloc, "@").2.to_string();
+    let (mut hostname, mut port_text): (Option<String>, Option<String>) = (None, None);
+    if netloc.is_empty() {
+        // no authority
+    } else if hostinfo.starts_with('[') && hostinfo.contains(']') {
+        let close = hostinfo.find(']').unwrap_or(0);
+        hostname = Some(hostinfo[1..close].to_ascii_lowercase());
+        let after = &hostinfo[close + 1..];
+        if let Some(p) = after.strip_prefix(':') {
+            port_text = Some(p.to_string());
+        }
+    } else {
+        let (h, has, p) = partition(&hostinfo, ":");
+        hostname = Some(h.to_ascii_lowercase());
+        if has {
+            port_text = Some(p.to_string());
+        }
+    }
+    if hostname.as_deref() == Some("") {
+        hostname = None;
+    }
+    let mut port = None;
+    if let Some(p) = port_text {
+        if !p.is_empty() {
+            if p.chars().all(|c| c.is_ascii_digit()) {
+                let n: u32 = p
+                    .parse()
+                    .map_err(|_| "Port out of range 0-65535".to_string())?;
+                if n > 65535 {
+                    return Err("Port out of range 0-65535".into());
+                }
+                port = Some(n);
+            } else {
+                return Err("Port could not be cast to integer value".into());
+            }
+        }
+    }
+    Ok(UrlParts {
+        scheme,
+        hostname,
+        port,
+        path,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nt_normpath_basics() {
+        assert_eq!(nt_normpath("C:/a/./b/../c"), "C:\\a\\c");
+        assert_eq!(nt_normpath("a/../../b"), "..\\b");
+        assert_eq!(nt_normpath(""), ".");
+        assert_eq!(nt_normpath("C:\\"), "C:\\");
+        assert_eq!(nt_normpath("C:\\..\\x"), "C:\\x");
+    }
+
+    #[test]
+    fn posix_normpath_basics() {
+        assert_eq!(posix_normpath("c:/a/../b"), "c:/b");
+        assert_eq!(posix_normpath("/a//b/./c/.."), "/a/b");
+        assert_eq!(posix_normpath("a/.."), ".");
+    }
+
+    #[test]
+    fn shlex_nonposix_keeps_quotes() {
+        assert_eq!(
+            shlex_split_nonposix("rm -rf \"a b\" c").unwrap(),
+            vec!["rm", "-rf", "\"a b\"", "c"]
+        );
+        assert_eq!(
+            shlex_split_nonposix("\"abc\"def").unwrap(),
+            vec!["\"abc\"", "def"]
+        );
+        assert_eq!(
+            shlex_split_nonposix("abc\"def ghi\"").unwrap(),
+            vec!["abc\"def", "ghi\""]
+        );
+        assert!(shlex_split_nonposix("echo \"unclosed").is_err());
+    }
+
+    #[test]
+    fn fnmatch_cases() {
+        assert!(fnmatchcase(".env.local", ".env*"));
+        assert!(fnmatchcase("a.txt", "*.txt"));
+        assert!(!fnmatchcase("a.txt", "*.md"));
+        assert!(fnmatchcase("a1", "a[0-9]"));
+    }
+
+    #[test]
+    fn regex_wrapper() {
+        let r = Re::ci(r"(?<![\w.-])main(?![\w.-])");
+        assert!(r.is_match("push origin main"));
+        assert!(!r.is_match("push origin domain"));
+        assert_eq!(Re::new(r"\d+").find_all("a1b22").len(), 2);
+        assert_eq!(Re::new(r"[,;]").split("a,b;c"), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn urlsplit_basics() {
+        let u = urlsplit("https://User@Example.com:8443/a/b?x#y").unwrap();
+        assert_eq!(u.scheme, "https");
+        assert_eq!(u.hostname.as_deref(), Some("example.com"));
+        assert_eq!(u.port, Some(8443));
+        assert_eq!(u.path, "/a/b");
+        assert!(urlsplit("http://h:abc/").is_err());
+        assert_eq!(
+            urlsplit("http://[::1]:80/").unwrap().hostname.as_deref(),
+            Some("::1")
+        );
+    }
+
+    #[test]
+    fn unquote_works() {
+        assert_eq!(unquote("a%20b%2Fc%zz"), "a b/c%zz");
+    }
+}

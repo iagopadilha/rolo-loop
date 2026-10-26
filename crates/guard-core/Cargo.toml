@@ -1,0 +1,23 @@
+[package]
+name = "guard-core"
+description = "Policy engine of the claude-maestro PreToolUse guard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+cfg = { path = "../cfg" }
+mcp-policy = { path = "../mcp-policy" }
+fancy-regex = { workspace = true }
+regex = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+
+[lints]
+workspace = true

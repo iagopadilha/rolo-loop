@@ -1,0 +1,19 @@
+[package]
+name = "mcp-policy"
+description = "Which MCP servers a loop session may use (config.json mcp_servers), shared by the guard, the engine and the API"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+cfg = { path = "../cfg" }
+regex = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
