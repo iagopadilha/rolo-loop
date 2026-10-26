@@ -20,6 +20,9 @@ pub mod rules;
 pub mod scale;
 pub mod standards;
 pub mod subprojects;
+pub mod system_map;
 pub mod task_waves;
+pub mod turn_gates;
+pub mod worktree_state;
 
 pub(crate) use notify::truthy as notify_truthy;

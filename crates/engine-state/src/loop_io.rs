@@ -278,3 +278,72 @@ pub fn now_iso() -> String {
         .format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]"))
         .unwrap_or_default()
 }
+
+// ---------------------------------------------------------------- processes and the loop lock
+
+pub fn pid_alive(pid: i64) -> bool {
+    pid > 0 && u32::try_from(pid).is_ok_and(winproc::pid_alive)
+}
+
+/// When the process started (see [`winproc::process_start_time`]); only comparable with the same function's value for the same pid.
+pub fn process_start_time(pid: i64) -> Option<u64> {
+    if pid <= 0 {
+        return None;
+    }
+    u32::try_from(pid).ok().and_then(winproc::process_start_time)
+}
+
+/// `taskkill /T /F`: the process and its children.
+pub fn kill_tree(pid: i64) {
+    let _ = run("taskkill", &["/PID", &pid.to_string(), "/T", "/F"], None);
+}
+
+/// `LOOP.lock.start`: `{"pid", "started"}` next to the lock; LOOP.lock itself stays a plain PID (the panel reads it with int()).
+pub const LOCK_START_SUFFIX: &str = ".start";
+/// An empty lock younger than this is being written by the process that just created it.
+pub const LOCK_FRESH_SECONDS: u64 = 5;
+
+/// `(pid, started, empty)` of a lock file. pid 0 = no lock or unreadable; `started` comes from the sidecar and only when it is about
+/// that same pid; `empty` = the file exists with no content yet.
+pub fn read_lock_holder(path: &Path) -> (i64, Option<u64>, bool) {
+    let Ok(bytes) = std::fs::read(path) else { return (0, None, false) };
+    let text = String::from_utf8_lossy(&bytes).trim().to_string();
+    if text.is_empty() {
+        return (0, None, true);
+    }
+    let Ok(pid) = text.parse::<i64>() else { return (0, None, false) };
+    let sidecar = std::path::PathBuf::from(format!("{}{LOCK_START_SUFFIX}", path.display()));
+    let info = std::fs::read(sidecar).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+    let started = info.filter(|i| i.get("pid").and_then(Value::as_i64) == Some(pid)).and_then(|i| i.get("started").and_then(Value::as_u64));
+    (pid, started, false)
+}
+
+/// PID of the lock file, or 0 when there is none or the pid now belongs to another process.
+pub fn lock_owner_pid(path: &Path) -> i64 {
+    let (pid, started, _) = read_lock_holder(path);
+    if pid != 0 {
+        if let (Some(then), Some(now)) = (started, process_start_time(pid)) {
+            if now != then {
+                return 0;
+            }
+        }
+    }
+    pid
+}
+
+/// True when the lock file names a running process that really is its owner.
+pub fn lock_holder_alive(path: &Path) -> bool {
+    let (pid, started, empty) = read_lock_holder(path);
+    if empty {
+        return std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs_f64() < LOCK_FRESH_SECONDS as f64);
+    }
+    if !pid_alive(pid) {
+        return false;
+    }
+    if let (Some(then), Some(now)) = (started, process_start_time(pid)) {
+        if now != then {
+            return false;
+        }
+    }
+    true
+}
