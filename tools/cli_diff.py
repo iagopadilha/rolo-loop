@@ -19,7 +19,7 @@ ORACLE = os.environ.get("ORACLE_MAESTRO", r"C:\Users\someone\work\reference\clau
 PY_HARNESS = os.path.join(ORACLE, "app", "harness.py")
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RUST = os.path.join(os.path.dirname(HERE), "target", "debug", "harness.exe")
-VOLATILE_KEYS = {"at", "t", "started", "finished", "updated"}
+VOLATILE_KEYS = {"at", "t", "started", "finished", "updated", "updated_at"}
 
 SCENARIOS = []  # (module, name, files {relative: text}, [argv...], mutates)
 
@@ -182,7 +182,8 @@ def run(command, argv, work, data):
     env.update({"LOOP_DATA_DIR": data, "PYTHONIOENCODING": "utf-8", "USERPROFILE": data, "HOME": data})
     args = [a.replace("{work}", work) for a in argv]
     done = subprocess.run(command + args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
-    stamp = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")\n    return done.returncode, stamp.sub("<ts>", done.stdout.replace(work, "<work>")), stamp.sub("<ts>", done.stderr.replace(work, "<work>"))
+    stamp = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")
+    return done.returncode, stamp.sub("<ts>", done.stdout.replace(work, "<work>")), stamp.sub("<ts>", done.stderr.replace(work, "<work>"))
 
 
 def main():
