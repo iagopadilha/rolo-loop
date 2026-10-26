@@ -8,4 +8,6 @@ pub mod loop_state;
 pub mod repos;
 pub mod roadmap_settings;
 pub mod scale;
+pub mod standards;
+pub mod subprojects;
 pub mod task_waves;

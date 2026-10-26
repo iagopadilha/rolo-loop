@@ -42,3 +42,8 @@ pub fn audit(f: Forwarded) -> i32 {
     let (code, out) = engine_state::audit_deps::run_cli(&f.args);
     emit(code, &out, "")
 }
+
+pub fn standards(f: Forwarded) -> i32 {
+    let (code, out, err) = engine_state::standards::run_cli(&f.args);
+    emit(code, &out, &err)
+}

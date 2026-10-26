@@ -172,6 +172,37 @@ for name, files in AUDIT.items():
 scenario("audit", "usage", {}, ["audit"])
 
 
+STD_MD = "# Proj\r\n\r\n## Standards\r\ngit: acme-git\r\nbackend: acme:acme-backend\r\nbogus: x\r\nfrontend:\r\nobservability: bad name!\r\nrandom text\r\n\r\n## Other\r\nstuff\r\n"
+STANDARDS = {
+    "none": {"README.md": "x"},
+    "claude-no-section": {"CLAUDE.md": "# Proj\n\ntext\n"},
+    "with-section-crlf": {"CLAUDE.md": STD_MD},
+    "with-section-lf": {"CLAUDE.md": STD_MD.replace("\r\n", "\n")},
+    "bom": {"CLAUDE.md": "﻿## Standards\ngit: g\n"},
+    "fenced": {"CLAUDE.md": "```\n## Standards\ngit: a\n```\n"},
+    "section-at-end": {"CLAUDE.md": "# P\n\n## Standards\ngit: g"},
+}
+for name, files in STANDARDS.items():
+    scenario("standards", "show/" + name, files, ["standards", "{work}"])
+    scenario("standards", "json/" + name, files, ["standards", "{work}", "--json"])
+    scenario("standards", "set/" + name, files, ["standards", "{work}", "--set", "git=my-git", "backend=pl:be"], mutates=True)
+    scenario("standards", "set-json/" + name, files, ["standards", "{work}", "--set", "frontend=fe", "--json"], mutates=True)
+    scenario("standards", "clear/" + name, files, ["standards", "{work}", "--clear", "git", "backend", "frontend"], mutates=True)
+    scenario("standards", "clear-unknown/" + name, files, ["standards", "{work}", "--clear", "nope"])
+    scenario("standards", "set-bad/" + name, files, ["standards", "{work}", "--set", "git=bad name"])
+    scenario("standards", "set-unknown/" + name, files, ["standards", "{work}", "--set", "zzz=x"])
+    scenario("standards", "set-malformed/" + name, files, ["standards", "{work}", "--set", "git"])
+mono = {".specs/project/SUBPROJECTS.json": json.dumps({"repos": {"{name}": {"monorepo": True, "confirmed": True, "projects": [{"path": "apps/web"}, {"path": "apps/api", "skip": True}, {"path": "libs/core"}]}}}),
+        "apps/web/CLAUDE.md": "## Standards\nfrontend: fe\n", "libs/core/CLAUDE.md": "# core\n"}
+scenario("standards", "mono/show", mono, ["standards", "{work}"])
+scenario("standards", "mono/json", mono, ["standards", "{work}", "--json"])
+scenario("standards", "mono/set-root-refused", mono, ["standards", "{work}", "--set", "git=g"])
+scenario("standards", "mono/set-sub", mono, ["standards", "{work}", "--subproject", "libs/core", "--set", "git=g"], mutates=True)
+scenario("standards", "mono/missing-sub", mono, ["standards", "{work}", "--subproject", "nope"])
+scenario("standards", "missing-repo", {}, ["standards", "{work}\\does-not-exist"])
+# the wrapped argparse usage text of a missing argument is not part of the contract (exit code 2 is)
+
+
 def make_project(root, name, files, work):
     base = os.path.join(root, name)
     shutil.rmtree(base, ignore_errors=True)
@@ -180,7 +211,7 @@ def make_project(root, name, files, work):
         path = os.path.join(base, *relative.split("/"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="") as handle:
-            handle.write(text.replace("{work}", base.replace("\\", "\\\\") if relative.endswith("REPOS.json") else base))
+            handle.write(text.replace("{work}", base.replace("\\", "\\\\") if relative.endswith("REPOS.json") else base).replace("{name}", name[3:] if name.startswith("py-") else name))
     return base
 
 

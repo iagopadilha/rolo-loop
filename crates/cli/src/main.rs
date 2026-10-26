@@ -34,6 +34,8 @@ enum Command {
     Scale(forward::Forwarded),
     /// Audits forgotten dependencies between ROADMAP features
     Audit(forward::Forwarded),
+    /// Shows or edits the Standards slots of a project's CLAUDE.md
+    Standards(forward::Forwarded),
 }
 
 fn main() {
@@ -46,6 +48,7 @@ fn main() {
         Command::Classify(a) => forward::classify(a),
         Command::Scale(a) => forward::scale(a),
         Command::Audit(a) => forward::audit(a),
+        Command::Standards(a) => forward::standards(a),
     };
     std::process::exit(code);
 }

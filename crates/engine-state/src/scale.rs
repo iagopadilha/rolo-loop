@@ -22,7 +22,7 @@ fn is_skip(name: &str) -> bool {
     is_skipped(name) || name == "packages"
 }
 
-fn is_code(name: &str) -> bool {
+pub fn is_code(name: &str) -> bool {
     let lower = name.to_lowercase();
     let ext = match lower.rfind('.') {
         Some(i) if i > 0 && !lower[i..].contains(['\\', '/']) => &lower[i..],
