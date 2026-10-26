@@ -6,6 +6,7 @@ pub mod classify_structure;
 pub mod claude_binaries;
 pub mod usage_windows;
 pub mod turn_environment;
+pub mod runtime_isolation;
 pub mod secret_redaction;
 pub mod permission_denials;
 pub mod limit_waits;
