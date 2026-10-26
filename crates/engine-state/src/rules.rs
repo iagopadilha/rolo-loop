@@ -116,9 +116,12 @@ fn regex_problems(bash: &[String], path: &[String]) -> Vec<String> {
     let mut problems = Vec::new();
     for (label, patterns) in [("--bash", bash), ("--path", path)] {
         for pattern in patterns {
-            let Some(compiled) = Re::try_build(pattern, true) else {
-                problems.push(format!("{label} {} is not a valid regex: invalid pattern", pycompat::py_repr_str(pattern)));
-                continue;
+            let compiled = match Re::try_build_msg(pattern, true) {
+                Ok(compiled) => compiled,
+                Err(message) => {
+                    problems.push(format!("{label} {} is not a valid regex: {message}", pycompat::py_repr_str(pattern)));
+                    continue;
+                }
             };
             if compiled.is_match("") {
                 problems.push(format!("{label} {} matches empty text: it would block everything", pycompat::py_repr_str(pattern)));

@@ -367,10 +367,11 @@ impl<'a> Check<'a> {
         let Value::String(p) = pattern else {
             return false;
         };
-        match Re::try_build(p, true) {
-            Some(re) => re.is_match(text),
-            None => {
-                warnings.push_str(&format!("guard: invalid project regex in PERMISSIONS.json skipped ({}: invalid pattern)\n", crate::state::py_json_dumps(pattern, false)));
+        match Re::try_build_msg(p, true) {
+            Ok(re) => re.is_match(text),
+            Err(message) => {
+                warnings.push_str(&format!("guard: invalid project regex in PERMISSIONS.json skipped ({}: {message})
+", pycompat::py_repr_str(p)));
                 false
             }
         }
@@ -706,11 +707,7 @@ impl<'a> Check<'a> {
         if agent_profile(&agent).is_none() {
             let mut names: Vec<&str> = AGENT_PROFILES.iter().map(|(a, _)| *a).collect();
             names.sort();
-            let shown = if agent.is_empty() {
-                "(none)".to_string()
-            } else {
-                crate::state::py_json_dumps(&Value::String(agent.clone()), false).replace('"', "'")
-            };
+            let shown = pycompat::py_repr_str(if agent.is_empty() { "(none)" } else { &agent });
             hits.push(hit(
                 "agent-allowlist",
                 format!(
@@ -784,8 +781,8 @@ impl<'a> Check<'a> {
             return String::new();
         }
         format!(
-            "skill '{}' is not on the {profile} profile's skill allowlist",
-            if skill.is_empty() { "(none)" } else { &skill }
+            "skill {} is not on the {profile} profile's skill allowlist",
+            pycompat::py_repr_str(if skill.is_empty() { "(none)" } else { &skill })
         )
     }
 

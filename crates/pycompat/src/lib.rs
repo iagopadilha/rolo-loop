@@ -4,6 +4,8 @@
 //! `fnmatch`, `urllib.parse.unquote` and `urlsplit`.
 
 pub mod json;
+pub mod pyregex;
+pub use pyregex::py_regex_error;
 
 use fancy_regex::{Regex as FRegex, RegexBuilder};
 
@@ -60,13 +62,23 @@ impl Re {
     }
     /// Fallible compile: a pattern that only looks like a regex (user data) must never crash the guard.
     pub fn try_build(pattern: &str, ci: bool) -> Option<Re> {
-        Re::compile(pattern, ci).ok().map(|re| Re {
-            re,
-            src: pattern.to_string(),
-            ci,
-            start: std::sync::OnceLock::new(),
-            full: std::sync::OnceLock::new(),
-        })
+        Re::try_build_msg(pattern, ci).ok()
+    }
+    /// Like [`Re::try_build`] with the message Python's `re.compile` would raise. The pattern is first judged by Python's grammar
+    /// (`(?<n>x)` compiles in Rust and is an error in Python), then compiled.
+    pub fn try_build_msg(pattern: &str, ci: bool) -> Result<Re, String> {
+        if let Some(message) = pyregex::py_regex_error(pattern) {
+            return Err(message);
+        }
+        Re::compile(pattern, ci)
+            .map(|re| Re {
+                re,
+                src: pattern.to_string(),
+                ci,
+                start: std::sync::OnceLock::new(),
+                full: std::sync::OnceLock::new(),
+            })
+            .map_err(|_| "invalid pattern".to_string())
     }
     pub fn is_match(&self, text: &str) -> bool {
         self.re.is_match(text).unwrap_or(false)
