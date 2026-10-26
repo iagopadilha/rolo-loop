@@ -7,6 +7,7 @@ pub mod claude_binaries;
 pub mod code_inventory;
 pub mod auto_answers;
 pub mod context_files;
+pub mod credential_check;
 pub mod decisions;
 pub mod delivery;
 pub mod detect_setup;
