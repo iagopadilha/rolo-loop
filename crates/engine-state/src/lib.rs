@@ -29,6 +29,7 @@ pub mod loop_opts;
 pub mod loop_summary;
 pub mod mcp_access;
 pub mod mcp_discovery;
+pub mod monitor_proc;
 pub mod network_policy;
 pub mod notify;
 pub mod prod_database_script;
