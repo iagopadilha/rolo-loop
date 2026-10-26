@@ -14,6 +14,7 @@ pub mod permission_denials;
 pub mod limit_waits;
 pub mod cli_output;
 pub mod claude_accounts;
+pub mod close_loop;
 pub mod code_inventory;
 pub mod auto_answers;
 pub mod context_files;
