@@ -21,6 +21,7 @@ pub mod credential_check;
 pub mod decisions;
 pub mod delivery;
 pub mod detect_setup;
+pub mod egress_proxy;
 pub mod email;
 pub mod graph_view;
 pub mod loop_io;

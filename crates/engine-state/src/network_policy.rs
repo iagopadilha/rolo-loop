@@ -225,6 +225,42 @@ pub fn dismiss_suggestions(project_root: &str) -> bool {
     std::fs::remove_file(suggested_path(project_root)).is_ok()
 }
 
+/// The effective list rebuilt from its plain-JSON form (`network-allow.json`): what the proxy and the preloads read. Entries that are not
+/// objects with a host are skipped.
+pub fn effective_from_json(content: &Value) -> Effective {
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let allow = content
+        .get("allow")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter(|e| e.is_object() && e.get("host").and_then(Value::as_str).is_some())
+                .map(|e| Entry {
+                    host: text(e, "host"),
+                    port: e.get("port").and_then(Value::as_u64).map(|p| p as u32),
+                    path: text(e, "path"),
+                    methods: e.get("methods").and_then(Value::as_array).map(|m| m.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default(),
+                    cred: e.get("cred") == Some(&Value::Bool(true)),
+                    if_missing: text(e, "if_missing"),
+                    origin: text(e, "origin"),
+                    text: text(e, "text"),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let strings = |k: &str| -> Vec<String> { content.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() };
+    Effective { allow, deny: strings("deny"), notes: strings("notes"), broken: content.get("broken").and_then(Value::as_str).unwrap_or("").to_string(), env_names: strings("env_names") }
+}
+
+/// Judges one request against an effective list with the engine's wording: `(allowed, reason)`.
+pub fn allows(effective: &Effective, method: &str, url: &str, cred: bool) -> (bool, String) {
+    let (allowed, kind, reason) = egress_policy::judge(effective, method, url, cred, None);
+    if kind == egress_policy::Kind::NotListed {
+        return (allowed, format!("{reason} is not in the network list"));
+    }
+    (allowed, reason)
+}
+
 /// Text of `network_policy --check`: the effective list, names only, never credential values.
 pub fn describe(effective: &Effective, project_root: &str, data_dir: &Path) -> String {
     let mut lines = vec![format!("project: {project_root}"), format!("data dir: {}", data_dir.display()), "allow (origin, entry):".to_string()];

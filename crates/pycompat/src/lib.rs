@@ -610,6 +610,9 @@ pub struct UrlParts {
     pub hostname: Option<String>,
     pub port: Option<u32>,
     pub path: String,
+    pub query: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 /// `urlsplit` + `.hostname` + `.port`; `Err(message)` where Python raises ValueError.
@@ -643,10 +646,19 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
     if let Some(i) = rest.find('#') {
         rest.truncate(i);
     }
+    let mut query = String::new();
     if let Some(i) = rest.find('?') {
+        query = rest[i + 1..].to_string();
         rest.truncate(i);
     }
     let path = rest;
+    let (userinfo, have_info, _) = rpartition(&netloc, "@");
+    let (username, password) = if have_info {
+        let (u, has, p) = partition(userinfo, ":");
+        (Some(u.to_string()), has.then(|| p.to_string()))
+    } else {
+        (None, None)
+    };
     // hostname and port, as SplitResult does
     let hostinfo = rpartition(&netloc, "@").2.to_string();
     let (mut hostname, mut port_text): (Option<String>, Option<String>) = (None, None);
@@ -690,6 +702,9 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
         hostname,
         port,
         path,
+        query,
+        username,
+        password,
     })
 }
 
