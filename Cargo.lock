@@ -353,6 +353,7 @@ dependencies = [
  "egress-policy",
  "guard-core",
  "lettre",
+ "mcp-policy",
  "pycompat",
  "serde_json",
  "sha1",

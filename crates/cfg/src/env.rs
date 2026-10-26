@@ -16,12 +16,14 @@ pub const DEFAULT_DATA_DIR_NAME: &str = ".loop-harness";
 #[derive(Clone, Debug, Default)]
 pub struct Env {
     map: Option<HashMap<String, String>>,
+    /// Values [`load_all`] copied in from an app `.env` (a name the environment already had is never recorded).
+    loaded: Vec<(String, String)>,
 }
 
 impl Env {
     /// The live process environment.
     pub fn process() -> Self {
-        Env { map: None }
+        Env { map: None, loaded: Vec::new() }
     }
 
     /// An isolated environment made of the given pairs only.
@@ -38,6 +40,7 @@ impl Env {
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
             ),
+            loaded: Vec::new(),
         }
     }
 
@@ -63,6 +66,19 @@ impl Env {
             }
             None => std::env::set_var(name, value),
         }
+    }
+
+    /// Every variable of the environment (name, value).
+    pub fn vars(&self) -> Vec<(String, String)> {
+        match &self.map {
+            None => std::env::vars().collect(),
+            Some(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }
+    }
+
+    /// True when `name == value` is the copy [`load_all`] made from an app `.env` file (the user did not set it).
+    pub fn is_loaded_value(&self, name: &str, value: &str) -> bool {
+        self.loaded.iter().any(|(k, v)| k == name && v == value)
     }
 
     /// Home folder as Python's `expanduser("~")` sees it on Windows: `USERPROFILE`, then
@@ -158,6 +174,7 @@ pub fn load_all(env: &mut Env) -> Vec<PathBuf> {
                 for (key, value) in parse_env(&text) {
                     if env.get(&key).is_none() {
                         env.set(&key, &value);
+                        env.loaded.push((key, value));
                     }
                 }
                 used.push(path);

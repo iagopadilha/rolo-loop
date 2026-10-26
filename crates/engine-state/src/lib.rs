@@ -3,6 +3,7 @@
 
 pub mod audit_deps;
 pub mod classify_structure;
+pub mod claude_binaries;
 pub mod code_inventory;
 pub mod auto_answers;
 pub mod context_files;
@@ -14,6 +15,8 @@ pub mod graph_view;
 pub mod loop_io;
 pub mod loop_state;
 pub mod loop_summary;
+pub mod mcp_access;
+pub mod mcp_discovery;
 pub mod network_policy;
 pub mod notify;
 pub mod prod_database_script;

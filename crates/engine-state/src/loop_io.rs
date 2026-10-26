@@ -257,16 +257,24 @@ pub fn run_timeout(program: &str, args: &[&str], cwd: Option<&str>, seconds: u64
     (code, out.trim().to_string(), err)
 }
 
-/// `shutil.which`: the first `name` (with a PATHEXT extension on Windows) found on PATH.
+/// `shutil.which`: the first `name` (with a PATHEXT extension on Windows) found on PATH. Unlike Python's, the current directory is
+/// never searched first (a repository's own `claude.cmd` must not run in place of the real one).
 pub fn which(name: &str) -> Option<std::path::PathBuf> {
-    let path = std::env::var_os("PATH")?;
+    which_in(name, &std::env::var_os("PATH")?)
+}
+
+/// [`which`] over an explicit PATH value (entries separated like the OS does).
+pub fn which_in(name: &str, path: &std::ffi::OsStr) -> Option<std::path::PathBuf> {
     let exts: Vec<String> = if cfg!(windows) {
-        std::env::var("PATHEXT").unwrap_or(".COM;.EXE;.BAT;.CMD".into()).split(';').map(|e| e.to_lowercase()).collect()
+        std::env::var("PATHEXT").unwrap_or(".COM;.EXE;.BAT;.CMD".into()).split(';').filter(|e| !e.is_empty()).map(|e| e.to_lowercase()).collect()
     } else {
         vec![String::new()]
     };
-    for dir in std::env::split_paths(&path) {
-        for ext in &exts {
+    let lower = name.to_lowercase();
+    let has_ext = cfg!(windows) && exts.iter().any(|e| lower.ends_with(e.as_str()));
+    let suffixes: Vec<String> = if has_ext { std::iter::once(String::new()).chain(exts.iter().cloned()).collect() } else { exts };
+    for dir in std::env::split_paths(path) {
+        for ext in &suffixes {
             let candidate = dir.join(format!("{name}{ext}"));
             if candidate.is_file() {
                 return Some(candidate);
