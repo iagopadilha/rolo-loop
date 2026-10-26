@@ -18,6 +18,7 @@ pub mod network_policy;
 pub mod notify;
 pub mod prod_database_script;
 pub mod project_repos;
+pub mod readiness_checks;
 pub mod repos;
 pub mod roadmap_settings;
 pub mod rules;

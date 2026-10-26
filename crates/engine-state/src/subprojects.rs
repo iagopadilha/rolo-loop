@@ -411,7 +411,7 @@ pub fn owner_of(root: &str, path: &str, repo_name: Option<&str>) -> Option<Map<S
     entry.and_then(|e| owner_in(Some(&e), &relative))
 }
 
-fn read_conformance(root: &str, project_path: &str) -> String {
+pub fn read_conformance(root: &str, project_path: &str) -> String {
     let mut p = std::path::PathBuf::from(root);
     for part in normalize(project_path).split('/') {
         p.push(part);
