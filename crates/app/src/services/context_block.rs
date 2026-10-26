@@ -101,6 +101,12 @@ impl ContextBlockService<'_> {
         })
     }
 
+    /// `STANDARD`, `LEGACY` or '' (the Conformance of the folder as the project context shows it).
+    pub fn read_conformance_text(work_folder: &str, relative_path: &str) -> String {
+        let found = subprojects::read_conformance(work_folder, relative_path);
+        if matches!(found.as_str(), "STANDARD" | "LEGACY") { found } else { String::new() }
+    }
+
     fn read_conformance(work_folder: &str, relative_path: &str) -> Value {
         let found = subprojects::read_conformance(work_folder, relative_path);
         if matches!(found.as_str(), "STANDARD" | "LEGACY") { json!(found) } else { Value::Null }

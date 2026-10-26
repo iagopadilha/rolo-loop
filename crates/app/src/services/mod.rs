@@ -16,7 +16,7 @@ use crate::repositories::small_stores::ErrorEventRepository;
 use crate::repositories::specs_file::SpecsFileRepository;
 use cfg::Env;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 
@@ -27,12 +27,23 @@ pub mod code_inventory;
 pub mod context_block;
 pub mod engine_script;
 pub mod loop_control;
+pub mod map_job;
 pub mod loop_status;
 pub mod planning_repos;
 pub mod project_capabilities;
+pub mod project_progress;
 pub mod readiness;
+pub mod repo_readiness;
 pub mod repo_registry;
+pub mod roadmap;
+pub mod standards;
+pub mod subproject_map;
+pub mod subprojects;
+pub mod system_map;
+pub mod test_environment;
+pub mod planning;
 pub mod planning_gates;
+pub mod planning_import;
 pub mod planning_requirement;
 pub mod project;
 pub mod specs_structure;
@@ -83,6 +94,12 @@ pub struct App {
     /// Loop control: one relaunch lock per project and the pid of the loop this app launched.
     pub relaunch_locks: Mutex<BTreeMap<String, Arc<Mutex<()>>>>,
     pub relaunched_pids: Mutex<BTreeMap<String, i64>>,
+    /// Planning chat: serializes the thread edits. Test environment: serializes the writes of `.env.test`.
+    pub planning_lock: Mutex<()>,
+    pub test_environment_lock: Mutex<()>,
+    /// Subproject maps: the queue lock and the folders whose queue has a watcher thread alive in this process.
+    pub map_queue_lock: Mutex<()>,
+    pub map_active_folders: Mutex<BTreeSet<String>>,
     /// Readiness: checks scheduled or running per work dir, and one run lock per work dir.
     pub readiness: readiness::ReadinessState,
     /// `MONITOR.json` path -> project id, and project id -> work dir where it was written.
@@ -140,6 +157,10 @@ impl App {
             relaunch_locks: Mutex::new(BTreeMap::new()),
             relaunched_pids: Mutex::new(BTreeMap::new()),
             readiness: readiness::ReadinessState::default(),
+            planning_lock: Mutex::new(()),
+            test_environment_lock: Mutex::new(()),
+            map_queue_lock: Mutex::new(()),
+            map_active_folders: Mutex::new(BTreeSet::new()),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
             config,
             me: me.clone(),

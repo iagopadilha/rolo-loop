@@ -217,7 +217,7 @@ pub fn stack_values(layers: &[Layer], environment: &BTreeMap<String, String>) ->
 /// (source `project`, else `missing`).
 pub struct Resolution {
     pub layers: Vec<Layer>,
-    values: BTreeMap<String, String>,
+    pub values: BTreeMap<String, String>,
     origins: BTreeMap<String, Option<Origin>>,
 }
 

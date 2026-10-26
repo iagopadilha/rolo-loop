@@ -38,6 +38,13 @@ pub struct WorkspaceSnapshot {
     copies: BTreeMap<String, Vec<u8>>,
 }
 
+impl WorkspaceSnapshot {
+    /// The in-memory copy taken for a relative path (`/` separator); `None` when the file was too big or did not exist.
+    pub fn copy_of(&self, relative: &str) -> Option<&Vec<u8>> {
+        self.copies.get(relative)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct WorkspaceFileGuard {
     pub backup_file_limit_bytes: u64,
