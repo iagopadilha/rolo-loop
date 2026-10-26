@@ -10,6 +10,7 @@ pub mod loop_state;
 pub mod loop_summary;
 pub mod repos;
 pub mod roadmap_settings;
+pub mod rules;
 pub mod scale;
 pub mod standards;
 pub mod subprojects;

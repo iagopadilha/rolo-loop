@@ -40,6 +40,8 @@ enum Command {
     Summary(forward::Forwarded),
     /// Free inventory of the code of a folder
     Inventory(forward::Forwarded),
+    /// Creates a project block rule and proves it in the real guard
+    Rules(forward::Forwarded),
 }
 
 fn main() {
@@ -55,6 +57,7 @@ fn main() {
         Command::Standards(a) => forward::standards(a),
         Command::Summary(a) => forward::summary(a),
         Command::Inventory(a) => forward::inventory(a),
+        Command::Rules(a) => forward::rules(a),
     };
     std::process::exit(code);
 }

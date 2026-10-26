@@ -307,6 +307,7 @@ name = "engine-state"
 version = "0.3.1"
 dependencies = [
  "cfg",
+ "guard-core",
  "pycompat",
  "serde_json",
  "sha2",

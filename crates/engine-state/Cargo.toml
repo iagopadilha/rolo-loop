@@ -10,8 +10,10 @@ repository.workspace = true
 [dependencies]
 pycompat = { path = "../pycompat" }
 cfg = { path = "../cfg" }
+guard-core = { path = "../guard-core" }
 serde_json = { workspace = true }
 sha2 = "0.10"
+tempfile = { workspace = true }
 time = { version = "0.3", features = ["local-offset", "formatting", "macros"] }
 
 [dev-dependencies]

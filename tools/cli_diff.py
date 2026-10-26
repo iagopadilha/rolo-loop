@@ -234,6 +234,28 @@ for name, files in INVENTORY.items():
     scenario("inventory", "name-out/" + name, files, ["inventory", "{work}", "--name", "custom", "--out", "{work}\\out.json"], mutates=True)
 scenario("inventory", "not-a-folder", {}, ["inventory", "{work}\\nope"])
 
+RULE_ARGS = ["--id", "R-04", "--phrase", "never edit Taxes", "--path", "Taxes", "--block", "path:src/Taxes/x.cs", "--pass", "path:src/Freight/x.cs"]
+RULES = {"empty": {}, "with-md": {".specs/project/RULES.md": "# Rules\n\n| ID | Rule | Why | How | Origin |\n|----|------|-----|-----|--------|\n| R-01 | a | b | c | d |\n\nnotes\n"},
+         "stored": {".specs/project/loop/json/rules.tests.json": json.dumps({"R-01": {"phrase": "no drop", "bash": ["drop"], "path": [], "block": ["bash:drop table x"], "pass": ["bash:ls"], "created": "2026-01-01"}}),
+                    ".specs/project/loop/json/PERMISSIONS.json": json.dumps({"allow": [], "deny_bash_regex": ["drop"], "deny_path_regex": []})}}
+for name, files in RULES.items():
+    scenario("rules", "propose/" + name, files, ["rules", "propose", "{work}"] + RULE_ARGS)
+    scenario("rules", "write/" + name, files, ["rules", "write", "{work}"] + RULE_ARGS + ["--rule", "Never edit Taxes", "--reason", "tax law", "--how", "hook"], mutates=True)
+    scenario("rules", "write-bash/" + name, files, ["rules", "write", "{work}", "--id", "R-09", "--phrase", "no force", "--bash", "git\\s+reset", "--block", "bash:git reset --hard", "--pass", "bash:git status"], mutates=True)
+    scenario("rules", "write-nophrase/" + name, files, ["rules", "write", "{work}", "--id", "R-05", "--path", "Taxes", "--block", "path:Taxes/x", "--pass", "path:Other/x"])
+    scenario("rules", "wide/" + name, files, ["rules", "propose", "{work}", "--id", "R-06", "--bash", "git", "--block", "bash:git push", "--pass", "bash:ls"])
+    scenario("rules", "empty-regex/" + name, files, ["rules", "propose", "{work}", "--id", "R-07", "--bash", "", "--block", "bash:x", "--pass", "bash:ls"])
+    scenario("rules", "bad-id/" + name, files, ["rules", "propose", "{work}", "--id", "X1", "--path", "Taxes", "--block", "path:Taxes/x", "--pass", "path:Other/x"])
+    scenario("rules", "not-blocked/" + name, files, ["rules", "propose", "{work}", "--id", "R-08", "--path", "Nothing", "--block", "path:src/other.cs", "--pass", "path:README.md"])
+    scenario("rules", "no-examples/" + name, files, ["rules", "propose", "{work}", "--id", "R-08", "--path", "Taxes"])
+    scenario("rules", "no-regex/" + name, files, ["rules", "propose", "{work}", "--id", "R-08", "--block", "path:a", "--pass", "path:b"])
+    scenario("rules", "bad-example/" + name, files, ["rules", "propose", "{work}", "--id", "R-08", "--path", "Taxes", "--block", "sql:x", "--pass", "path:b"])
+    scenario("rules", "test/" + name, files, ["rules", "test", "{work}"])
+    scenario("rules", "test-quiet/" + name, files, ["rules", "test", "{work}", "--quiet"])
+    scenario("rules", "list/" + name, files, ["rules", "list", "{work}"])
+scenario("rules", "duplicate-id", RULES["stored"], ["rules", "propose", "{work}", "--id", "R-01", "--bash", "force", "--block", "bash:force x", "--pass", "bash:ls"])
+scenario("rules", "breaks-older", RULES["stored"], ["rules", "propose", "{work}", "--id", "R-02", "--bash", "ls", "--block", "bash:ls -la", "--pass", "bash:git status"])
+
 STAMP = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")
 
 SUMMARY_FILES = {

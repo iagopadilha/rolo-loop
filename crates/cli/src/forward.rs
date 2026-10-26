@@ -57,3 +57,8 @@ pub fn inventory(f: Forwarded) -> i32 {
     let (code, out, err) = engine_state::code_inventory::run_cli(&f.args);
     emit(code, &out, &err)
 }
+
+pub fn rules(f: Forwarded) -> i32 {
+    let (code, out, err) = engine_state::rules::run_cli(&f.args);
+    emit(code, &out, &err)
+}
