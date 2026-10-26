@@ -54,4 +54,4 @@ pub mod turn_gates;
 pub mod worktree_state;
 pub mod worktrees;
 
-pub(crate) use notify::truthy as notify_truthy;
+pub use notify::truthy as notify_truthy;

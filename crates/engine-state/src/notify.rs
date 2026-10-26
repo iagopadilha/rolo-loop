@@ -66,7 +66,8 @@ fn s<'a>(ctx: &'a Value, key: &str) -> &'a str {
     ctx.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-pub(crate) fn truthy(v: Option<&Value>) -> bool {
+/// Python truthiness of an optional JSON value.
+pub fn truthy(v: Option<&Value>) -> bool {
     match v {
         None | Some(Value::Null) => false,
         Some(Value::Bool(b)) => *b,

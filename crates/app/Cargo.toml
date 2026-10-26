@@ -1,0 +1,24 @@
+[package]
+name = "app"
+description = "The Maestro application layer: domain, repositories, services, the HTTP API and the panel server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+cfg = { path = "../cfg" }
+pycompat = { path = "../pycompat" }
+engine-state = { path = "../engine-state" }
+mcp-policy = { path = "../mcp-policy" }
+egress-policy = { path = "../egress-policy" }
+serde_json = { workspace = true }
+sha1 = "0.10"
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting", "macros", "local-offset", "parsing"] }
+tempfile = { workspace = true }
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[lints]
+workspace = true
