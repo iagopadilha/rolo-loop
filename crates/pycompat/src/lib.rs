@@ -54,10 +54,17 @@ impl Re {
         builder.backtrack_limit(2_000_000);
         builder.build()
     }
+    /// A pattern written in this codebase (static): compiled by the Rust engine's own grammar, no Python-grammar check.
     fn build(pattern: &str, ci: bool) -> Re {
-        match Re::try_build(pattern, ci) {
-            Some(re) => re,
-            None => panic!("invalid pattern {pattern:?}"),
+        match Re::compile(pattern, ci) {
+            Ok(re) => Re {
+                re,
+                src: pattern.to_string(),
+                ci,
+                start: std::sync::OnceLock::new(),
+                full: std::sync::OnceLock::new(),
+            },
+            Err(error) => panic!("invalid pattern {pattern:?}: {error}"),
         }
     }
     /// Fallible compile: a pattern that only looks like a regex (user data) must never crash the guard.

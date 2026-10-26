@@ -199,6 +199,26 @@ pub fn app_env_value(env: &Env, name: &str) -> String {
     String::new()
 }
 
+/// Like [`app_env_value`] but tells a variable that is not there (`None`) from one set to an empty value.
+pub fn app_env_option(env: &Env, name: &str) -> Option<String> {
+    if let Some(v) = env.get(name) {
+        return Some(v);
+    }
+    for path in env.env_file_candidates() {
+        if let Some(text) = read_text_sig(&path) {
+            if let Some((_, v)) = parse_env(&text).into_iter().find(|(k, _)| k == name) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+/// `envload.get_list`: the comma separated, trimmed, non-empty items of a variable (environment, then the app `.env`).
+pub fn app_env_list(env: &Env, name: &str) -> Vec<String> {
+    app_env_value(env, name).split(',').map(|i| i.trim().to_string()).filter(|i| !i.is_empty()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

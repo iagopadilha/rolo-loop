@@ -411,3 +411,21 @@ pub fn merge_pending_delivery(repo: &str, meta: &mut Value) {
     }
     let _ = std::fs::remove_file(path);
 }
+
+/// `datetime.datetime.now()`: local, naive.
+pub fn local_now() -> time::PrimitiveDateTime {
+    let now = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+    time::PrimitiveDateTime::new(now.date(), now.time())
+}
+
+/// `datetime.datetime.fromtimestamp(epoch)`: local, naive.
+pub fn local_from_epoch(epoch: i64) -> Option<time::PrimitiveDateTime> {
+    let moment = time::OffsetDateTime::from_unix_timestamp(epoch).ok()?;
+    let local = time::UtcOffset::current_local_offset().map(|o| moment.to_offset(o)).unwrap_or(moment);
+    Some(time::PrimitiveDateTime::new(local.date(), local.time()))
+}
+
+/// `moment.isoformat(timespec="seconds")`.
+pub fn iso_seconds(moment: time::PrimitiveDateTime) -> String {
+    moment.format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]")).unwrap_or_default()
+}
