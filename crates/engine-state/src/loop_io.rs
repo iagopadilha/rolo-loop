@@ -270,3 +270,11 @@ pub fn which(name: &str) -> Option<std::path::PathBuf> {
     }
     None
 }
+
+/// `datetime.now().isoformat(timespec="seconds")` in local time.
+pub fn now_iso() -> String {
+    time::OffsetDateTime::now_local()
+        .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+        .format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]"))
+        .unwrap_or_default()
+}

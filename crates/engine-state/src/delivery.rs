@@ -16,7 +16,7 @@
 //! PR: `gh pr create` (or reuses the branch's already open PR). Without `gh`, or with LOOP_PR_MODE=link, only the compare link is
 //! returned. LOOP_PR_MODE=off neither creates nor computes a PR. Multi-repo projects: one `finalize` per repo worktree, one PR each.
 
-use crate::loop_io::{git, load_json, read, run_timeout, save_json, which};
+use crate::loop_io::{git, load_json, now_iso, read, run_timeout, save_json, which};
 use crate::loop_state::{loop_path, parse_roadmap, state_file, Features};
 use crate::prod_database_script as prod;
 use crate::{graph_view, notify_truthy};
@@ -34,13 +34,6 @@ pub const DEFAULT_BASE: &str = "developer";
 const USAGE: &str = "usage: delivery.py [-h] [--branch BRANCH] [--base BASE] [--draft] [--dry-run]\n                   root\n";
 
 static GITHUB_SLUG: LazyLock<Re> = LazyLock::new(|| Re::new(r"github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?\z"));
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_local()
-        .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
-        .format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]"))
-        .unwrap_or_default()
-}
 
 /// Integration branch (PR target): `chosen` first, then LOOP_PR_BASE / LOOP_INTEGRATION_BRANCH, default `developer`.
 pub fn integration_branch(env: &mut Env, chosen: &str) -> String {

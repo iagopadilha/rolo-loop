@@ -4,6 +4,8 @@
 pub mod audit_deps;
 pub mod classify_structure;
 pub mod code_inventory;
+pub mod auto_answers;
+pub mod decisions;
 pub mod delivery;
 pub mod email;
 pub mod graph_view;
