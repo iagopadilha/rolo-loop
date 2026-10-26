@@ -16,7 +16,7 @@ use std::sync::LazyLock;
 pub const STATUS_VALUES: [&str; 4] = ["pending", "running", "done", "failed"];
 const TASK_TYPES: [&str; 2] = ["impl", "wiring"];
 const DEFAULT_TYPE: &str = "impl";
-const TASKS_FILE_NAME: &str = "tasks.md";
+pub const TASKS_FILE_NAME: &str = "tasks.md";
 const SYNTHETIC_TASK_ID: &str = "T1";
 
 static TASK_HEADING: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^###\s+(T\d+)\s*:\s*(.*?)\s*\z"));
@@ -272,7 +272,7 @@ pub fn find_root(start: &str) -> String {
     }
 }
 
-fn read_default_max_parallel(root: &str) -> i64 {
+pub fn read_default_max_parallel(root: &str) -> i64 {
     let text = read(&Path::new(root).join(".specs").join("project").join("ROADMAP.md"));
     parse_loop_settings(&text).settings["max_parallel_tasks"].as_i64().unwrap_or(3)
 }
