@@ -36,6 +36,8 @@ enum Command {
     Audit(forward::Forwarded),
     /// Shows or edits the Standards slots of a project's CLAUDE.md
     Standards(forward::Forwarded),
+    /// Writes the loop's final summary in Markdown
+    Summary(forward::Forwarded),
 }
 
 fn main() {
@@ -49,6 +51,7 @@ fn main() {
         Command::Scale(a) => forward::scale(a),
         Command::Audit(a) => forward::audit(a),
         Command::Standards(a) => forward::standards(a),
+        Command::Summary(a) => forward::summary(a),
     };
     std::process::exit(code);
 }

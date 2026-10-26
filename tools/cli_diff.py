@@ -215,6 +215,26 @@ def make_project(root, name, files, work):
     return base
 
 
+STAMP = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?Z?")
+
+SUMMARY_FILES = {
+    ".specs/project/ROADMAP.md": "## Stage 1\n- [a-api] status=verified scope=Medium kind=back paths=src/api note=ok origin=adopted\n- [b-ui] status=blocked paths=web tries=2\n## Stage 2\n- [c] status=pending\n",
+    ".specs/project/loop/json/meta.json": json.dumps({"branch": "feature/x", "base": "developer", "turns": 4, "cost_usd": 1.5, "max_cost_usd": 10, "stopped": "done", "push": "ok", "pr": "http://example.com/pr/1", "pr_status": "open"}),
+    ".specs/project/loop/json/LOOP.json": json.dumps({"status": "done", "next": "ship it", "reason": "all closed"}),
+    ".specs/project/loop/internal/turns/001.json": json.dumps({"total_cost_usd": 0.5, "duration_ms": 120000}),
+    ".specs/project/loop/internal/turns/002.json": json.dumps({"total_cost_usd": "0.25", "duration_ms": 60000}),
+    ".specs/project/phases/stage-01.md": "# S\n## Delivered\nthe api\n## Lessons\nnone\n## Blocked\n\n## Other\nx\n",
+    ".specs/project/STATE.md": "# State\n## STOP\nwait\n## Notes\nx\n## Questions\nwhich db?\n",
+    ".specs/project/loop/VALIDATE.md": "# V\n- [a-api] turn=1 level=important d | chose: c | revert: r\ntext\n",
+    "docs/x.md": "x",
+}
+MULTI = dict(SUMMARY_FILES, **{".specs/project/loop/json/meta.json": json.dumps({"branch": "b", "repos": {"api": {"primary": True, "branch": "b"}, "web": {"branch": "w", "base": "main", "worktree": "{work}\\\\none"}}})})
+for name, files in (("full", SUMMARY_FILES), ("multi-repo", MULTI), ("empty", {}), ("only-roadmap", {".specs/project/ROADMAP.md": "## S\n- [x] status=pending\n"})):
+    scenario("summary", "write/" + name, files, ["summary", "{work}", "--out", "{work}\\out"], mutates=True)
+    scenario("summary", "flags/" + name, files, ["summary", "{work}", "--out", "{work}\\out", "--branch", "feat/y", "--base", "main", "--max-cost", "7"], mutates=True)
+scenario("summary", "usage", {}, ["summary"])
+
+
 def tree(base):
     found = {}
     for folder, _, names in os.walk(base):
@@ -226,6 +246,7 @@ def tree(base):
                     text = handle.read()
             except UnicodeDecodeError:
                 text = "<binary>"
+            text = STAMP.sub("<ts>", text)
             if rel.endswith(".json"):
                 try:
                     data = json.loads(text)

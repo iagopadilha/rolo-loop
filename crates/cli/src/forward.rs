@@ -47,3 +47,8 @@ pub fn standards(f: Forwarded) -> i32 {
     let (code, out, err) = engine_state::standards::run_cli(&f.args);
     emit(code, &out, &err)
 }
+
+pub fn summary(f: Forwarded) -> i32 {
+    let (code, out) = engine_state::loop_summary::run_cli(&f.args, &cfg::Env::process());
+    emit(code, &out, "")
+}

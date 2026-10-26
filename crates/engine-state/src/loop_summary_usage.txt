@@ -1,0 +1,17 @@
+Generates the loop's final summary in Markdown, WITHOUT Claude: it only reads files and the git log.
+
+Usage:
+  python loop_summary.py <project-or-worktree-root> [--out <folder>] [--base <ref>] [--branch <name>]
+
+Reads (everything optional, whatever is missing becomes "not reported"):
+  .specs/project/ROADMAP.md           lines "- [slug] status=... scope=... kind=... paths=..."
+  .specs/project/phases/stage-NN.md   fixed sections: Delivered, User decisions, Lessons, Unverified,
+                                      Blocked, For the next stage
+  .specs/project/STATE.md             STOP block and open questions
+  .specs/project/loop/json/LOOP.json  last orchestrator status
+  .specs/project/loop/json/meta.json  written by run_loop.py (branch, base, turns, stop reason)
+  .specs/project/loop/internal/turns/NNN.json  output of each `claude -p` turn (cost, duration)
+  git log <base>..<branch>            loop commits
+
+Output: <out>/loop-summary-<project>-<YYYY-MM-DD>.md (default: the app's output folder, `output_dir` in config.json,
+~/Downloads when unset; never the repo or the current directory).

@@ -4,7 +4,9 @@
 pub mod audit_deps;
 pub mod classify_structure;
 pub mod graph_view;
+pub mod loop_io;
 pub mod loop_state;
+pub mod loop_summary;
 pub mod repos;
 pub mod roadmap_settings;
 pub mod scale;
