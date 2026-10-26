@@ -747,3 +747,31 @@ mod tests {
         assert_eq!(unquote("a%20b%2Fc%zz"), "a b/c%zz");
     }
 }
+
+// ---- more ntpath / fnmatch ----------------------------------------------------------------------------------------------------
+
+/// `os.path.normcase` on Windows: lower case, backslashes.
+pub fn nt_normcase(path: &str) -> String {
+    path.replace('/', "\\").to_lowercase()
+}
+
+/// `os.path.realpath` on Windows: symlinks and 8.3 names resolved when the path exists (without the `\?\` prefix), else the absolute path.
+pub fn nt_realpath(path: &str) -> String {
+    let abs = nt_abspath(path);
+    match std::fs::canonicalize(&abs) {
+        Ok(real) => {
+            let text = real.display().to_string();
+            if let Some(rest) = text.strip_prefix(r"\?\UNC\") {
+                format!(r"\{rest}")
+            } else {
+                text.strip_prefix(r"\?\").unwrap_or(&text).to_string()
+            }
+        }
+        Err(_) => abs,
+    }
+}
+
+/// `fnmatch.fnmatch` on Windows: both sides are case-folded first.
+pub fn fnmatch_nt(name: &str, pattern: &str) -> bool {
+    fnmatchcase(&name.to_lowercase(), &pattern.to_lowercase())
+}

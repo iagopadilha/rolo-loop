@@ -199,9 +199,14 @@ mod tests {
 
 /// Like [`run`] with a time limit and stdout NOT stripped; a timeout kills the process and reads as `(1, "", message)`.
 pub fn run_timeout_raw(program: &str, args: &[&str], cwd: Option<&str>, seconds: u64) -> (i32, String, String) {
+    run_timeout_env(program, args, cwd, &[], seconds)
+}
+
+/// [`run_timeout_raw`] with extra environment variables for the child.
+pub fn run_timeout_env(program: &str, args: &[&str], cwd: Option<&str>, env: &[(&str, &str)], seconds: u64) -> (i32, String, String) {
     use std::io::Read;
     let mut cmd = Command::new(program);
-    cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.args(args).envs(env.iter().copied()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -346,4 +351,15 @@ pub fn lock_holder_alive(path: &Path) -> bool {
         }
     }
     true
+}
+
+/// `shutil.copy2`: content and modification time (creating nothing above the target's folder).
+pub fn copy2(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::fs::copy(source, target)?;
+    if let Ok(modified) = std::fs::metadata(source).and_then(|m| m.modified()) {
+        if let Ok(file) = std::fs::OpenOptions::new().write(true).open(target) {
+            let _ = file.set_modified(modified);
+        }
+    }
+    Ok(())
 }
