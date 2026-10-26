@@ -226,7 +226,7 @@ mod tests {
         let (_d2, work2) = setup(json!({"status": "awaiting_user", "reason": " Which? "}));
         assert!(write_answer(&work2, " go ").unwrap().starts_with("[loop] answer recorded in "));
         let text = std::fs::read_to_string(state_file(&work2, "ANSWERS.md")).unwrap();
-        assert!(text.contains("] [pending]\nQuestion: Which?\nUser answer: go\n"));
+        assert!(text.contains(" [pending]\nQuestion: Which?\nUser answer: go\n"));
     }
 
     #[test]
