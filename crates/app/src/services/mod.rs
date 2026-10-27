@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 
+pub mod app_diagnostics;
 pub mod chat;
 pub mod chat_scope_context;
 pub mod claude_accounts;
