@@ -19,6 +19,7 @@ pub mod cost_budget;
 pub mod credential_check;
 pub mod decisions;
 pub mod delivery;
+pub mod delivery_truth;
 pub mod detect_setup;
 pub mod egress_proxy;
 pub mod email;

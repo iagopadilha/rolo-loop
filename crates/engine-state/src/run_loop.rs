@@ -521,7 +521,7 @@ impl Runner {
 
     // ---------------------------------------------------------------- end
     fn finish(&self, work: &str, meta: &mut Value, status: &str, reason: &str, opts: &LoopOpts) -> i32 {
-        process_registry::clear(work);
+        process_registry::stop_all(work); // nothing the loop started may outlive it: the registered programs and their children end here
         set(meta, "stopped", json!(status));
         set(meta, "reason", json!(reason));
         if status == "paused" {
@@ -842,6 +842,11 @@ impl Runner {
             });
             if !process_id.is_empty() {
                 process_registry::unregister(work, &process_id);
+            }
+            // what the turn left running (a dev server, an app started for a check) is recorded, so the panel shows it and the end stops it
+            let left = process_registry::sweep(work);
+            if left > 0 {
+                println!("[loop] {left} program(s) started during turn {turn} are still running; they are stopped when the loop ends");
             }
             if winproc::interrupted() {
                 return self.finish(work, meta, "error", "interrupted by the user (Ctrl+C)", opts);

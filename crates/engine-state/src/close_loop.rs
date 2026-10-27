@@ -14,7 +14,7 @@
 use crate::loop_io::{copy2, copy_tree, git, load_json, lock_holder_alive, run_timeout, save_json, status_rows};
 use crate::loop_state::loop_path;
 use crate::project_repos::{load_repos, primary_of};
-use crate::{loop_summary, prod_database_script};
+use crate::{loop_summary, process_registry, prod_database_script};
 use cfg::Env;
 use pycompat::{nt_abspath, nt_normcase, nt_realpath};
 use serde_json::{json, Map, Value};
@@ -607,17 +607,168 @@ fn clear_engine_specs(worktree: &str, saved_plan: &[String], repo: &str) -> Opti
     }
 }
 
-/// `git worktree remove` from the user's repo, no --force unless asked. Returns an error text, or `None` when the folder is gone.
-fn remove_worktree(entry: &Entry, force: bool, saved_plan: &[String]) -> Option<String> {
+/// Prefix that lets Windows open paths longer than 260 characters (deep `node_modules`); other systems need nothing.
+pub fn extended_path(path: &str) -> String {
+    let absolute = nt_abspath(path);
+    if cfg!(windows) && !absolute.starts_with("\\\\?\\") && !absolute.starts_with("\\\\") {
+        format!("\\\\?\\{absolute}")
+    } else {
+        absolute
+    }
+}
+
+/// Folders that are big and rebuilt by an install or a build: moved out of the way first so the worktree removal does not walk them.
+const HEAVY_FOLDERS: [&str; 3] = ["node_modules", "bin", "obj"];
+const TRASH_MARK: &str = ".maestro-trash-";
+
+/// Deletes `folder` in a separate, hidden, detached program, so the caller never waits for a tree of thousands of files (and the deletion
+/// goes on after the caller exits). Returns false when the program could not start.
+pub fn delete_in_background(folder: &str) -> bool {
+    let target = extended_path(folder);
+    #[cfg(windows)]
+    let started = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("cmd");
+        command
+            .arg("/C")
+            .raw_arg(format!("rmdir /S /Q \"{target}\""))
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        command.creation_flags(0x0000_0008 | 0x0000_0200 | crate::loop_io::CREATE_NO_WINDOW); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+        command.spawn().is_ok()
+    };
+    #[cfg(not(windows))]
+    let started = std::process::Command::new("rm").args(["-rf", &target]).stdin(std::process::Stdio::null()).spawn().is_ok();
+    started
+}
+
+/// Renames `folder` to a hidden trash folder beside it (instant, same disk) and starts deleting that in the background. Returns the trash
+/// folder, or `None` when the rename failed (a program holds something inside).
+fn trash_and_delete(folder: &Path) -> Option<String> {
+    let parent = folder.parent()?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let trash = parent.join(format!("{TRASH_MARK}{stamp}-{}", folder.file_name()?.to_string_lossy()));
+    std::fs::rename(folder, &trash).ok()?;
+    delete_in_background(&trash.display().to_string());
+    Some(trash.display().to_string())
+}
+
+/// Moves the git-ignored `node_modules`, `bin` and `obj` of the worktree (top level and one level down, for a monorepo) to the background
+/// deletion. Only ever ignored, untracked folders; returns the trash folders that were started.
+fn trash_heavy_folders(worktree: &str) -> Vec<String> {
+    let root = Path::new(worktree);
+    let mut places: Vec<PathBuf> = vec![root.to_path_buf()];
+    places.extend(
+        std::fs::read_dir(root).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir() && p.file_name().is_some_and(|n| n != ".git" && n != ".specs")),
+    );
+    let mut started = Vec::new();
+    for place in places {
+        for name in HEAVY_FOLDERS {
+            let folder = place.join(name);
+            if !folder.is_dir() || std::fs::symlink_metadata(&folder).map(|m| m.file_type().is_symlink()).unwrap_or(true) {
+                continue;
+            }
+            let relative = folder.strip_prefix(root).map(|p| p.display().to_string().replace('\\', "/")).unwrap_or_default();
+            let ignored = !relative.is_empty() && git(worktree, &["check-ignore", "-q", "--", &relative]).0 == 0;
+            let tracked = !git(worktree, &["ls-files", "--", &relative]).1.trim().is_empty();
+            if ignored && !tracked {
+                started.extend(trash_and_delete(&folder));
+            }
+        }
+    }
+    started
+}
+
+/// How many files are under `folder` (counting stops at `cap`).
+fn count_files_capped(folder: &Path, cap: usize) -> usize {
+    let mut total = 0;
+    let mut pending = vec![folder.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(extended_path(&dir.display().to_string())).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                pending.push(path);
+            } else {
+                total += 1;
+            }
+            if total >= cap {
+                return total;
+            }
+        }
+    }
+    total
+}
+
+/// True when git still lists `worktree` as a worktree of the repo.
+fn git_lists_worktree(repo: &str, worktree: &str) -> bool {
+    git(repo, &["worktree", "list", "--porcelain"]).1.lines().filter_map(|l| l.strip_prefix("worktree ")).any(|p| is_same_path(p, worktree))
+}
+
+/// The trash folders still being deleted beside the worktree: the cleanup in the background has not finished.
+pub fn trash_folders_left(worktree: &str) -> Vec<String> {
+    let Some(parent) = Path::new(worktree).parent() else { return vec![] };
+    std::fs::read_dir(parent)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with(TRASH_MARK))
+        .map(|e| e.path().display().to_string())
+        .collect()
+}
+
+/// A failed removal as a reason: files in use is NOT "unsafe" (the work is saved), and a folder git already forgot is "left over".
+fn removal_failure(entry: &Entry, registry_work: &str, git_said: &str) -> Value {
+    let holders = process_registry::holders(registry_work, &entry.worktree);
+    let listed = git_lists_worktree(&entry.repo_path, &entry.worktree);
+    let in_use =
+        !holders.is_empty() || ["Invalid argument", "Permission denied", "being used by another process", "Access is denied"].iter().any(|m| git_said.contains(m));
+    let mut item = if !listed {
+        let files = count_files_capped(Path::new(&entry.worktree), 200_000);
+        reason(
+            "folder_left",
+            &format!(
+                "Git already forgot this worktree, but {files} file(s) are still in `{}`. Nothing is unsafe: the work is pushed and backed up. Delete the folder (retry).",
+                entry.worktree
+            ),
+        )
+    } else if in_use {
+        let who = if holders.is_empty() {
+            "Some program still has files open there (an editor, a terminal, a dev server). Close it, then retry.".to_string()
+        } else {
+            format!("These programs started by the loop still have it open: {}. Stop them, then retry.", process_registry::holders_text(&holders))
+        };
+        reason(
+            "files_in_use",
+            &format!("The worktree `{}` could not be removed because files are in use. Nothing is unsafe: the work is pushed and backed up. {who}", entry.worktree),
+        )
+    } else {
+        reason(
+            "error",
+            &format!(
+                "git worktree remove failed for {}, the folder is still there: {}",
+                entry.worktree,
+                cut_reason(if git_said.is_empty() { "no detail" } else { git_said }, REASON_LIMIT)
+            ),
+        )
+    };
+    item["holders"] = json!(holders);
+    item
+}
+
+/// `git worktree remove` from the user's repo, no --force unless asked. Returns the reason it failed (`{code, text, holders}`), or `None` when the
+/// folder is gone. Big ignored folders go to a background deletion first; `trashed` collects them.
+fn remove_worktree(entry: &Entry, force: bool, saved_plan: &[String], registry_work: &str, trashed: &mut Vec<String>) -> Option<Value> {
     if is_same_path(&entry.worktree, &entry.repo_path) {
-        return Some("refused: the worktree is the original repo folder".into());
+        return Some(reason("error", "refused: the worktree is the original repo folder"));
         // belt and braces: never the user's own folder
     }
     if !force {
         if let Some(blocker) = clear_engine_specs(&entry.worktree, saved_plan, &entry.repo_path) {
-            return Some(format!("the worktree was kept: {blocker} holds content that is not engine-owned .specs/ state, so it was not deleted (backup done; remove it by hand or use force)"));
+            return Some(reason("error", &format!("the worktree was kept: {blocker} holds content that is not engine-owned .specs/ state, so it was not deleted (backup done; remove it by hand or use force)")));
         }
     }
+    trashed.extend(trash_heavy_folders(&entry.worktree));
     let mut args = vec!["worktree", "remove"];
     if force {
         args.push("--force");
@@ -626,22 +777,43 @@ fn remove_worktree(entry: &Entry, force: bool, saved_plan: &[String]) -> Option<
     let (_, out, err) = git(&entry.repo_path, &args);
     git(&entry.repo_path, &["worktree", "prune"]);
     if Path::new(&entry.worktree).is_dir() {
-        return Some(format!(
-            "git worktree remove failed for {}, the folder is still there: {}",
-            entry.worktree,
-            cut_reason(
-                if !err.is_empty() {
-                    &err
-                } else if !out.is_empty() {
-                    &out
-                } else {
-                    "no detail"
-                },
-                REASON_LIMIT
-            )
-        ));
+        return Some(removal_failure(entry, registry_work, if !err.is_empty() { &err } else { &out }));
     }
     None
+}
+
+/// Deletes the folder git already forgot (`folder_left`) in the background. Only a folder that: exists, is not a worktree git lists, is not
+/// the repo itself and carries the loop worktree name. Returns `{"ok", "started"|"reason"}`.
+pub fn delete_leftover(primary_repo: &str, repo_name: &str) -> Value {
+    let (entries, _) = project_entries(primary_repo);
+    let Some(entry) = entries.iter().find(|e| e.name == repo_name) else {
+        return json!({"ok": false, "reason": reason("error", &format!("the project has no repo named `{repo_name}`"))});
+    };
+    let refuse = |text: &str| json!({"ok": false, "reason": reason("error", text)});
+    if !Path::new(&entry.worktree).is_dir() {
+        return json!({"ok": true, "started": false, "text": "The folder is already gone."});
+    }
+    if is_same_path(&entry.worktree, &entry.repo_path) || !pycompat::last_segment(&entry.worktree).contains(LOOP_WORKTREE_FOLDER_MARK) {
+        return refuse("refused: this is not a loop worktree folder, so it is never deleted from here");
+    }
+    if git_lists_worktree(&entry.repo_path, &entry.worktree) {
+        return refuse("git still lists this worktree: close it from Finish instead of deleting the folder");
+    }
+    let registry_work = project_entries(primary_repo).0.iter().find(|e| e.primary).map(|e| e.worktree.clone()).unwrap_or_default();
+    match trash_and_delete(Path::new(&entry.worktree)) {
+        Some(trash) => json!({"ok": true, "started": true, "trash": trash, "text": "The folder is being deleted in the background."}),
+        None => {
+            let holders = process_registry::holders(&registry_work, &entry.worktree);
+            let who = if holders.is_empty() {
+                "A program still has files open there (an editor or a terminal). Close it, then retry.".to_string()
+            } else {
+                format!("These programs hold it: {}. Stop them, then retry.", process_registry::holders_text(&holders))
+            };
+            let mut item = reason("files_in_use", &format!("The folder could not be moved for deletion because files are in use. {who}"));
+            item["holders"] = json!(holders);
+            json!({"ok": false, "reason": item})
+        }
+    }
 }
 
 /// Worktree-relative paths of the durable plan files that were copied back AND still match the copy in the primary repo (hash), so a
@@ -769,14 +941,17 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
         if closing.is_empty() { None } else { Some(write_prod_database_script(env, &primary_repo, &primary_entry.worktree, &entries, &checks, &output_dir)) };
     let mut order = closing.clone();
     order.sort_by_key(|e| e.primary); // (d) the primary, which holds `.specs/`, goes last
+                                      // nothing the loop started may keep a file open in a folder about to go: the registered programs end first (by pid, with their children)
+    let stopped_processes = if order.is_empty() { vec![] } else { process_registry::stop_all(&primary_entry.worktree) };
+    let mut trashed: Vec<String> = Vec::new();
     for entry in &order {
         let saved = if entry.primary { verified_plan(&primary_entry.worktree, &primary_repo, &durable) } else { vec![] };
-        let error = remove_worktree(entry, o.force_remove, &saved);
+        let error = remove_worktree(entry, o.force_remove, &saved, &primary_entry.worktree, &mut trashed);
         let s = slot(&mut outcome, &entry.name);
         match error {
-            Some(e) => {
+            Some(failure) => {
                 s["status"] = json!("failed");
-                s["reasons"] = json!([reason("error", &e)]);
+                s["reasons"] = json!([failure]);
             }
             None => {
                 s["status"] = json!("closed");
@@ -802,6 +977,8 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
     response.insert("durable_copied".into(), json!(durable));
     response.insert("last_run".into(), last_run.map(Value::from).unwrap_or(Value::Null));
     response.insert("repos".into(), Value::Object(outcome.into_iter().collect()));
+    response.insert("stopped_processes".into(), json!(stopped_processes));
+    response.insert("background_delete".into(), json!(trashed));
     if let Some(prod) = prod_database {
         if crate::notify_truthy(prod.get("path")) || crate::notify_truthy(prod.get("warnings")) {
             response.insert("warnings".into(), prod["warnings"].clone());
@@ -811,11 +988,24 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
     Value::Object(response)
 }
 
+/// Stops every program the loop registered (the Stop button of the Finish step "nothing the loop started is still running"); never while the
+/// loop itself runs. Returns `{"ok", "stopped": [{pid, name, kind, label}]}`.
+pub fn stop_loop_processes(primary_repo: &str) -> Value {
+    let (entries, _) = project_entries(primary_repo);
+    let Some(primary) = entries.iter().find(|e| e.primary) else {
+        return json!({"ok": false, "code": "no_primary", "error": "the project has no primary repo"});
+    };
+    if loop_is_running(&primary.worktree) {
+        return json!({"ok": false, "code": "loop_running", "error": reason_text("loop_running")});
+    }
+    json!({"ok": true, "stopped": process_registry::stop_all(&primary.worktree)})
+}
+
 /// `harness close-loop <primary-repo> [--check] [--confirm-compare-link] [--repos a,b] [--output-dir DIR] [--allow-missing-pr]
 /// [--force-remove] [--finished]`; returns `(exit code, stdout)`.
 pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
     let mut o = CloseOptions::default();
-    let (mut repo, mut check) = (String::new(), false);
+    let (mut repo, mut check, mut stop_processes, mut delete_left) = (String::new(), false, false, false);
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -825,6 +1015,8 @@ pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
             "--allow-missing-pr" => o.allow_missing_pr = true,
             "--force-remove" => o.force_remove = true,
             "--finished" => o.finished = true,
+            "--stop-processes" => stop_processes = true,
+            "--delete-leftover" => delete_left = true,
             "--repos" if i + 1 < args.len() => {
                 i += 1;
                 let names: Vec<String> = args[i].split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
@@ -842,7 +1034,18 @@ pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
     if repo.is_empty() {
         return (2, "usage: close_loop.py [-h] [--check] [--close] [--confirm-compare-link] [--repos REPOS]\n                     [--output-dir OUTPUT_DIR] [--allow-missing-pr]\n                     [--force-remove] [--finished]\n                     primary_repo\n".into());
     }
-    let result = if check { can_close(&repo) } else { close(env, &repo, &o) };
+    let result = if stop_processes {
+        stop_loop_processes(&repo)
+    } else if delete_left {
+        match o.only.as_deref() {
+            Some([name]) => delete_leftover(&repo, name),
+            _ => json!({"ok": false, "reason": reason("error", "--delete-leftover needs exactly one repo: --repos <name>")}),
+        }
+    } else if check {
+        can_close(&repo)
+    } else {
+        close(env, &repo, &o)
+    };
     let ok = result["ok"] == true;
     (if ok { 0 } else { 1 }, format!("{}\n", pycompat::json::py_json_dumps_indent(&result, false, 2)))
 }
@@ -924,6 +1127,109 @@ mod tests {
         let (code, text) = run_cli(&[repo.clone(), "--check".into()], &env(dir.path()));
         assert_eq!(code, 0);
         assert!(text.starts_with("{\n  \"ok\": true"));
+    }
+
+    fn sleeper_in(folder: &str) -> std::process::Child {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "ping -n 90 127.0.0.1 > nul"]).current_dir(folder);
+        crate::loop_io::hidden(&mut command).spawn().unwrap()
+    }
+
+    fn wait_until(what: &str, check: impl Fn() -> bool) {
+        for _ in 0..100 {
+            if check() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("timed out waiting for: {what}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn closing_stops_what_the_loop_started_and_deletes_node_modules_in_the_background() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, work) = project(dir.path());
+        std::fs::write(Path::new(&repo).join(".gitignore"), "node_modules/\n").unwrap();
+        git_in(Path::new(&repo), &["add", ".gitignore"]);
+        git_in(Path::new(&repo), &["commit", "-q", "-m", "ignore"]);
+        git_in(Path::new(&work), &["merge", "-q", "developer"]);
+        let modules = Path::new(&work).join("node_modules").join("pkg").join("deep");
+        std::fs::create_dir_all(&modules).unwrap();
+        for i in 0..30 {
+            std::fs::write(modules.join(format!("f{i}.js")), "x").unwrap();
+        }
+        // a dev server the loop started for the check: it runs inside the worktree and would keep it from being deleted
+        let mut server = sleeper_in(&work);
+        let server_pid = i64::from(server.id());
+        process_registry::register_process(&work, "dev_server", "dev server of the E2E", server_pid, &work);
+        let out = dir.path().join("out").display().to_string();
+        let closed = close(&env(dir.path()), &repo, &CloseOptions { output_dir: out, force_remove: true, finished: true, ..Default::default() });
+        assert_eq!(closed["closed"], json!(["app"]), "{closed}");
+        assert!(closed["stopped_processes"].as_array().unwrap().iter().any(|p| p["pid"] == server_pid && p["kind"] == "dev_server"), "{closed}");
+        assert!(!Path::new(&work).exists());
+        wait_until("the registered program ended", || !crate::loop_io::pid_alive(server_pid));
+        let trashed = closed["background_delete"].as_array().unwrap();
+        assert_eq!(trashed.len(), 1, "{closed}");
+        let trash = trashed[0].as_str().unwrap().to_string();
+        wait_until("the background deletion finished", || !Path::new(&trash).exists());
+        assert!(trash_folders_left(&work).is_empty());
+        let _ = server.wait();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_program_nobody_registered_still_blocks_and_is_named_as_files_in_use_not_unsafe() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, work) = project(dir.path());
+        let mut stranger = sleeper_in(&work); // not registered: the loop did not start it
+        let out = dir.path().join("out").display().to_string();
+        let closed = close(&env(dir.path()), &repo, &CloseOptions { output_dir: out, force_remove: true, ..Default::default() });
+        assert!(crate::loop_io::pid_alive(i64::from(stranger.id())), "a program the loop did not register is never stopped");
+        let item = &closed["repos"]["app"];
+        let code = item["reasons"][0]["code"].as_str().unwrap_or("");
+        assert!(item["status"] == "failed" && (code == "files_in_use" || code == "folder_left"), "{closed}");
+        assert!(item["reasons"][0]["text"].as_str().unwrap().contains("Nothing is unsafe"), "{closed}");
+        stranger.kill().unwrap();
+        let _ = stranger.wait();
+    }
+
+    #[test]
+    fn leftover_folders_are_deleted_only_when_they_are_clearly_a_forgotten_loop_worktree() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, work) = project(dir.path());
+        // git still lists the worktree: never deleted from here
+        let listed = delete_leftover(&repo, "app");
+        assert_eq!(listed["ok"], false, "{listed}");
+        assert!(listed["reason"]["text"].as_str().unwrap().contains("still lists"));
+        assert!(Path::new(&work).is_dir());
+        assert_eq!(delete_leftover(&repo, "nobody")["ok"], false);
+        // a heavy ignored folder is moved out and deleted in the background; a tracked one is left alone
+        let plain = dir.path().join("plain");
+        std::fs::create_dir_all(plain.join("node_modules").join("a")).unwrap();
+        std::fs::write(plain.join("node_modules").join("a").join("x.js"), "x").unwrap();
+        let trash = trash_and_delete(&plain.join("node_modules")).expect("renamed");
+        assert!(!plain.join("node_modules").exists());
+        wait_until("the trash is gone", || !Path::new(&trash).exists());
+        assert!(extended_path("C:\\a\\b").starts_with(if cfg!(windows) { "\\\\?\\C:" } else { "C:" }));
+        assert_eq!(extended_path("\\\\?\\C:\\a"), "\\\\?\\C:\\a");
+    }
+
+    #[test]
+    fn only_ignored_untracked_heavy_folders_are_moved_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, work) = project(dir.path());
+        std::fs::write(Path::new(&work).join(".gitignore"), "node_modules/\n").unwrap();
+        std::fs::create_dir_all(Path::new(&work).join("node_modules")).unwrap();
+        std::fs::write(Path::new(&work).join("node_modules").join("x.js"), "x").unwrap();
+        std::fs::create_dir_all(Path::new(&work).join("bin")).unwrap();
+        std::fs::write(Path::new(&work).join("bin").join("tool.cmd"), "x").unwrap(); // tracked below: must stay
+        git_in(Path::new(&work), &["add", "-f", "bin/tool.cmd"]);
+        let started = trash_heavy_folders(&work);
+        assert_eq!(started.len(), 1, "{started:?}");
+        assert!(!Path::new(&work).join("node_modules").exists());
+        assert!(Path::new(&work).join("bin").join("tool.cmd").is_file());
+        wait_until("trash gone", || !Path::new(&started[0]).exists());
     }
 
     #[test]
