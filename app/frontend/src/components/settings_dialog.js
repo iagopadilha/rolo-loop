@@ -7,12 +7,22 @@ import { appApi } from '../api/api_client.js';
 import { toast } from './toast.js';
 import { openDialog } from './dialog.js';
 import { McpServersSection } from './mcp_servers_section.js';
+import { LogoMark } from './logo.js';
 
 const SAVE_TIMEOUT_MS = 15000;
 const RESTART_TEXT = 'Takes effect after restarting the app.';
 const NEXT_RUN_TEXT = 'Applies to the next claude run.';
 const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const toDraft = (item) => (item.type === 'list' ? (item.value || []).join('\n') : item.type === 'bool' ? !!item.value : String(item.value == null ? '' : item.value));
+/** The screen's sections, in order: which settings each one holds and how it reads in the header. */
+const SECTIONS = [
+  { id: 'runs', label: 'Runs', sub: 'how each claude -p starts', note: 'Applies to the next claude run', keys: ['loop_isolation', 'loop_caveman', 'loop_extra_skills'] },
+  { id: 'model', label: 'Model and command', sub: 'which claude runs the loop', note: 'Takes effect after restarting the app', keys: ['orchestrator_model', 'claude_binary', 'claude_fallback_binaries'] },
+  { id: 'limits', label: 'Limits', sub: 'how much the app may do and wait', note: 'Most limits take effect after restarting the app', keys: ['max_parallel_maps', 'idle_hours', 'inventory_giant_lines', 'inventory_giant_kb', 'loop_max_hours'] },
+  { id: 'network', label: 'Network and files', sub: 'where agents may reach and write', note: 'Applies to every project', keys: ['output_dir', 'egress_hosts', 'egress_never', 'egress_builtin_read', 'env_sources'] },
+  { id: 'mcp', label: 'MCP servers', sub: 'tools the isolated runs may load', note: 'Applies to the next claude run', keys: [] },
+  { id: 'about', label: 'About this installation', sub: 'read only', note: 'Where the app keeps its files', keys: [] },
+];
 const money = (n) => (typeof n === 'number' ? '$' + n.toFixed(2) : '—');
 
 /** The value to send for a draft, or an `{ error }` the user can fix before any call. */
@@ -28,8 +38,8 @@ function fromDraft(item, draft) {
 function SettingControl({ item, draft, disabled, onDraft, onToggle }) {
   const id = 'set-' + item.key;
   if (item.type === 'bool') {
-    return html`<label class="nl-check set-toggle" for=${id}><input type="checkbox" id=${id} checked=${!!draft} disabled=${disabled}
-      onChange=${(e) => onToggle(e.currentTarget.checked)} /><span>${draft ? 'On' : 'Off'}</span></label>`;
+    return html`<div class="set-switch-wrap"><button type="button" role="switch" class=${'set-switch' + (draft ? ' is-on' : '')} id=${id} aria-checked=${draft ? 'true' : 'false'} disabled=${disabled}
+      onClick=${() => onToggle(!draft)}><span class="set-switch-knob" /></button><span class="set-switch-state mono">${draft ? 'ON' : 'OFF'}</span></div>`;
   }
   if (item.type === 'choice') {
     return html`<select id=${id} class="dlg-input set-input" value=${draft} disabled=${disabled} onChange=${(e) => onDraft(e.currentTarget.value)}>
@@ -103,7 +113,7 @@ function SettingRow({ item, caveman, onSaved }) {
 function InfoRows({ info }) {
   if (!info || !info.length) return null;
   return html`<section class="set-info" aria-label="Read-only information">
-    <div class="small-label">About this installation (read only)</div>
+    <div class="small-label">Read-only information</div>
     <dl class="set-info-list">${info.map((row) => [html`<dt key=${'k-' + row.key}>${row.label}</dt>`, html`<dd key=${'v-' + row.key} class="mono" title=${row.value}>${row.value}</dd>`])}</dl>
   </section>`;
 }
@@ -112,20 +122,45 @@ function InfoRows({ info }) {
 export function SettingsBody() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [current, setCurrent] = useState('runs');
   useEffect(() => {
     appApi.get('settings', SAVE_TIMEOUT_MS).then(setData).catch((e) => setError(e.message));
   }, []);
   if (error) return html`<div class="nl-box nl-bad" role="alert">Could not read the settings: ${error}</div>`;
   if (!data) return html`<div class="nl-msg" role="status"><div class="spinner" aria-hidden="true" /><span>loading settings…</span></div>`;
   const replace = (saved) => setData((old) => Object.assign({}, old, { settings: old.settings.map((s) => (s.key === saved.key ? saved : s)) }));
-  return html`<p class="dlg-text">Saved in <span class="mono">config.json</span> of the app data folder. A setting you never change stays out of the file and keeps its default.</p>
-    <div class="set-list">${data.settings.map((item) => html`<${SettingRow} key=${item.key} item=${item} caveman=${data.caveman} onSaved=${replace} />`)}</div>
-    <${McpServersSection} />
-    <${InfoRows} info=${data.info} />`;
+  const known = new Set(SECTIONS.flatMap((x) => x.keys));
+  const itemsOf = (section) => data.settings.filter((item) => section.keys.includes(item.key) || (section.id === 'network' && !known.has(item.key)));
+  const section = SECTIONS.find((x) => x.id === current) || SECTIONS[0];
+  const items = itemsOf(section);
+  const badge = (x) => {
+    if (x.id === 'mcp') return null;
+    if (x.id === 'about') return null;
+    const rows = itemsOf(x);
+    return rows.some((r) => r.restart_required) && x.id === 'model' ? html`<span class="set-nav-restart mono">RESTART</span>` : html`<span class="set-nav-n mono">${rows.length}</span>`;
+  };
+  return html`<div class="set-layout">
+    <nav class="set-nav" aria-label="Settings sections">
+      <span class="set-nav-h mono">SECTIONS</span>
+      ${SECTIONS.map((x) => html`<button type="button" key=${x.id} class=${'set-nav-i' + (x.id === section.id ? ' is-current' : '')} aria-current=${x.id === section.id ? 'page' : undefined}
+        onClick=${() => setCurrent(x.id)}><span>${x.label}</span>${badge(x)}</button>`)}
+      <p class="set-nav-note">Saved in <span class="mono">config.json</span> of the app data folder. A setting you never change stays out of the file and keeps its default.</p>
+    </nav>
+    <div class="set-main">
+      <h2 class="set-h">${section.label} <span class="set-h-sub">${section.sub}</span></h2>
+      <span class="set-kicker mono">${section.note.toUpperCase()}</span>
+      ${items.length ? html`<div class="set-list">${items.map((item) => html`<${SettingRow} key=${item.key} item=${item} caveman=${data.caveman} onSaved=${replace} />`)}</div>` : null}
+      ${section.id === 'mcp' ? html`<${McpServersSection} />` : null}
+      ${section.id === 'about' ? html`<${InfoRows} info=${data.info} />` : null}
+    </div>
+  </div>`;
 }
 
 export function openSettingsDialog() {
-  return openDialog({ title: 'Settings', width: 760, cls: 'dlg-settings', content: html`<${SettingsBody} />`, actions: [{ text: 'Close', cls: 'btn-primary' }] });
+  // a full page: the brand on the left, "settings" under it, Close on the right (the head of every page)
+  const title = html`<span class="page-brand"><span class="logo" aria-hidden="true"><${LogoMark} /></span>
+    <span class="page-brand-text"><span class="page-brand-name">Claude Maestro</span><span class="page-brand-sub mono">settings</span></span></span>`;
+  return openDialog({ title, width: 4000, cls: 'dlg-settings dlg-page', content: html`<${SettingsBody} />`, actions: [] });
 }
 
 /** The header button: gear icon + label. */

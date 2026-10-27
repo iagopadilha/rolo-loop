@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! The front end is the reference's, byte for byte: every file under `app/frontend` hashes to what `app/frontend.sha256` says, and there is no file
+//! The front end is pinned: every file under `app/frontend` hashes to what `app/frontend.sha256` says, and there is no file
 //! the manifest does not list.
 
 use sha2::{Digest, Sha256};

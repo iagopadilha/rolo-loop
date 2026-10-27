@@ -15,7 +15,7 @@ import { featureName } from './pipeline_model.js';
 import { explainFile } from './file_explanations.js';
 
 const STALE_MS = 8000;
-const BADGE_COLOR = '#7fb2ff';
+const BADGE_COLOR = '#8AA4FF';
 const FOOTER_NOTE = 'To change the plan, use Back to planning (no loop may be running).';
 const CHAT = {
   title: 'Ask about the plan', scope: { type: 'plan' }, placeholder: 'Ask about the plan, the specs, the maps or the decisions…',

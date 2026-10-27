@@ -20,10 +20,10 @@ const currentTask = (a) => {
   return WAITING_TASK[a.state] || (a.state === 'done' ? 'finished' : '');
 };
 const SCALE_MAX = 1.2;
-const MARKERS = { gray: '#4A4F57', amber: '#F2B544', red: '#F06A5E', green: '#5BD38A', white: '#E6E6E3' };
+const MARKERS = { gray: '#4A4664', amber: '#B3A8FF', red: '#F07A6E', green: '#4FD1A1', white: '#EDEBF7' };
 const STAGE_COL = { 'spec-writer': 1, 'spec-reviewer': 2, 'executor-back': 3, 'executor-front': 3, 'executor-generic': 3, verifier: 4, 'verifier-flow': 4 };
 const dg = { view: { s: 1, x: 0, y: 0 }, manual: false, wrap: null, stage: null, w: 0, h: 0 };
-export const retColor = (r) => (/^(APPROVED|PASS|DONE)$/i.test(r) ? '#5BD38A' : /^(BLOCKED|FAIL|TOO_BIG)$/i.test(r) ? '#F06A5E' : '#F2B544');
+export const retColor = (r) => (/^(APPROVED|PASS|DONE)$/i.test(r) ? '#4FD1A1' : /^(BLOCKED|FAIL|TOO_BIG)$/i.test(r) ? '#F07A6E' : '#B3A8FF');
 export const isBad = (a) => a.state === 'failed' || a.state === 'blocked' || /^(BLOCKED|FAIL)$/i.test(String(a.return_status || ''));
 export const actText = (a) => (a.last_action && a.last_action.text ? '› ' + a.last_action.text : a.summary ? '› ' + a.summary : '');
 // Visual-only drag offsets by node id, in memory (a refresh resets them); layoutSnapshot = last model geometry for the drag.

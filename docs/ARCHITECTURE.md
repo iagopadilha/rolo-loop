@@ -36,4 +36,4 @@ State lives in files, never in a database: `.specs/project/ROADMAP.md` (the type
 
 ## How the Rust version is checked
 
-The behavior is pinned to a reference implementation by differential tools in `tools/`: the guard on generated tool-call payloads, the CLI on its argument grammar, the loop on simulated `claude` runs, the API on every route, and a headless browser on the panel. The front end is byte-identical to the reference's, enforced by `app/frontend.sha256`.
+The behavior is pinned to a reference implementation by differential tools in `tools/`: the guard on generated tool-call payloads, the CLI on its argument grammar, the loop on simulated `claude` runs, the API on every route, and a headless browser on the panel. The front end follows the "Claude Maestro · redesign" look (violet accent, Inter Tight and JetBrains Mono, square corners) and is pinned by `app/frontend.sha256`.

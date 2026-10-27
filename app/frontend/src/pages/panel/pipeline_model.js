@@ -8,9 +8,9 @@ import { list, isNum } from '../../util/format.js';
 import { renderAll, requestRender } from '../project_panel.js';
 
 // ---------- visual constants (design palette) ----------
-export const STEP_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: '#f85149', BLOCKED: '#f85149', PENDING: '#4b525c' };
-export const FEATURE_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUARANTINE: '#f85149', ATTENTION: '#f5b82e', 'IN PROGRESS': '#7fb2ff', 'NOT DISPATCHED': '#4b525c' };
-const COLOR_AMBER = '#f5b82e', COLOR_GREEN = '#3fb950', COLOR_RED = '#f85149', COLOR_IDLE = '#4b525c';
+export const STEP_COLOR = { DONE: '#4FD1A1', RUNNING: '#B3A8FF', QUEUED: '#8AA4FF', FAIL: '#F07A6E', BLOCKED: '#F07A6E', PENDING: '#4b525c' };
+export const FEATURE_COLOR = { DONE: '#4FD1A1', RUNNING: '#B3A8FF', QUARANTINE: '#F07A6E', ATTENTION: '#B3A8FF', 'IN PROGRESS': '#8AA4FF', 'NOT DISPATCHED': '#4b525c' };
+const COLOR_AMBER = '#B3A8FF', COLOR_GREEN = '#4FD1A1', COLOR_RED = '#F07A6E', COLOR_IDLE = '#4b525c';
 const PENDING = 'PENDING';
 /** The fixed flow shown for every feature when the server sends no steps. */
 const DEFAULT_STEPS = [
@@ -25,7 +25,7 @@ const RUNNING_REFRESH_MS = 10000;
 const REQUEST_TIMEOUT_MS = 30000;
 
 /** Screen state: data (normalized GET pipeline), sel = selected turn n (null = live), node = {f, s} | {orch:true} | null. */
-export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'diagram', tab: 'pipeline' };
+export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'diagram', tab: 'pipeline', focus: true };
 
 // ---------- loading ----------
 const stateKey = (state) => `${state && state.meta ? state.meta.turns : null}|${state && state.loop ? state.loop.status : null}|${state && state.loop ? state.loop.turn : null}`;

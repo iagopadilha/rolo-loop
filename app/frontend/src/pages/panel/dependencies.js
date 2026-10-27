@@ -20,12 +20,12 @@ export function depInfo(f) {
 }
 const RUNNING_STATES = ['speccing', 'specced', 'approved', 'building'];
 export function readiness(f, info) {
-  if (info.blockedBy.length) return ['blocked by ' + info.blockedBy.join(', '), '#F06A5E'];
-  if (f.status === 'blocked') return ['blocked (failed)', '#F06A5E'];
-  if (f.status === 'verified') return ['verified', '#5BD38A'];
-  if (info.waiting.length) return ['waiting on: ' + info.waiting.join(', '), '#F2B544'];
-  if (RUNNING_STATES.includes(f.status)) return ['unblocked · in progress', '#5BD38A'];
-  return ['ready to run', '#5BD38A'];
+  if (info.blockedBy.length) return ['blocked by ' + info.blockedBy.join(', '), '#F07A6E'];
+  if (f.status === 'blocked') return ['blocked (failed)', '#F07A6E'];
+  if (f.status === 'verified') return ['verified', '#4FD1A1'];
+  if (info.waiting.length) return ['waiting on: ' + info.waiting.join(', '), '#B3A8FF'];
+  if (RUNNING_STATES.includes(f.status)) return ['unblocked · in progress', '#4FD1A1'];
+  return ['ready to run', '#4FD1A1'];
 }
 
 // kept across tab switches: view/ctl = pan/zoom of the graph (ctl is reached by the zoom buttons), status = highlighted state

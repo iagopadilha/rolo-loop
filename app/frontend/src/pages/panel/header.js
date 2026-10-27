@@ -17,9 +17,10 @@ import { openReopenPlanning } from './reopen_planning.js';
 import { openFinishDialog } from './wrap_up.js';
 import { openWorkspaceDialog } from './workspace_dialog.js';
 import { SettingsButton } from '../../components/settings_dialog.js';
+import { openWhy } from '../../components/why_panel.js';
 
 const meta = () => (ctx.state && ctx.state.meta) || {};
-const PAUSED_STATUS = { label: 'Paused', c: '#F2B544', bg: '#2A2416', line: '#4A3D1C' }; // context.js STATUS has no `paused` yet; used by the planning pill and the title
+const PAUSED_STATUS = { label: 'Paused', c: '#B3A8FF', bg: '#1C1833', line: '#3A3270' }; // context.js STATUS has no `paused` yet; used by the planning pill and the title
 const statusInfo = () => (ctx.state && ctx.state.planning_required ? STATUS.planning : STATUS[status()] || (status() === 'paused' ? PAUSED_STATUS : STATUS.no_loop));
 const turnNow = () => { const t = loop().turn; return isNum(t) ? t : null; };
 const folderName = (p) => String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
@@ -183,7 +184,33 @@ function ShutdownControl() {
         <button type="button" class="btn btn-danger btn-sm" id="btn-shutdown-yes" disabled=${!!ui.busy.shutdown} onClick=${doShutdown}>Yes, shut down</button>
         <button type="button" class="btn btn-sm" id="btn-shutdown-no" onClick=${cancelShutdown}>Cancel</button>
       </div>`
-    : html`<button type="button" class="btn btn-ghost" id="btn-shutdown" title="shuts down the whole app (every project)" onClick=${askShutdown}>Shut down app</button>`;
+    : html`<button type="button" class="more-item" id="btn-shutdown" role="menuitem" title="shuts down the whole app (every project)" onClick=${askShutdown}>Shut down app</button>`;
+}
+
+/** The "more" menu of the header: what you rarely need while following a loop (shut down the app, help). */
+const more = { open: false, bound: false };
+function closeMore() { if (!more.open) return; more.open = false; renderAll(); }
+function bindMoreMenu() {
+  if (more.bound) return;
+  more.bound = true;
+  document.addEventListener('pointerdown', (e) => { if (more.open && !e.target.closest('.more-wrap')) closeMore(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !more.open) return;
+    if (ui.confirmShutdown) return;
+    closeMore(); const b = $('btn-more'); if (b) b.focus();
+  });
+}
+function MoreMenu() {
+  bindMoreMenu();
+  const open = more.open || ui.confirmShutdown;
+  return html`<div class="more-wrap">
+    <button type="button" class="btn btn-ghost more-btn" id="btn-more" aria-haspopup="menu" aria-expanded=${String(open)} aria-label="More: shut down app, help" title="More"
+      onClick=${() => { more.open = !more.open; renderAll(); }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /><circle cx="19" cy="12" r="1.8" fill="currentColor" /></svg></button>
+    ${open ? html`<div class="more-menu" role="menu" aria-label="More">
+      <button type="button" class="more-item" role="menuitem" id="btn-why" onClick=${() => { more.open = false; renderAll(); openWhy(); }}>Why use this panel</button>
+      <${ShutdownControl} />
+    </div>` : null}
+  </div>`;
 }
 
 function askShutdown() {
@@ -194,8 +221,8 @@ function askShutdown() {
 /** Content of #header-actions. mode 'loop' = the navbar order (NAV-04); 'planning' = as before. */
 export function HeaderActions({ mode = 'loop' }) {
   return mode === 'planning'
-    ? html`<${PrChip} /><${WorkspaceButton} /><${PauseButton} /><${SettingsButton} /><${ShutdownControl} />`
-    : html`<${PrChip} /><${PauseButton} /><${StartLoopButton} /><${BackToPlanningButton} /><${FinishButton} /><${SettingsButton} /><${ShutdownControl} />`;
+    ? html`<${PrChip} /><${WorkspaceButton} /><${PauseButton} /><${SettingsButton} /><${MoreMenu} />`
+    : html`<${PrChip} /><${PauseButton} /><${StartLoopButton} /><${BackToPlanningButton} /><${FinishButton} /><${SettingsButton} /><${MoreMenu} />`;
 }
 
 export function cancelShutdown() {

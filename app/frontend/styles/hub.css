@@ -11,10 +11,10 @@
 .hub-buttons{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .hub-big{padding:9px 16px;font-size:13px;}
 .hub-paste{display:flex;gap:8px;align-items:center;margin-top:10px;max-width:640px;}
-.hub-paste input{flex:1;min-width:0;border:1px solid var(--line3);border-radius:6px;background:var(--panel);color:var(--text);font-size:12px;padding:6px 8px;}
+.hub-paste input{flex:1;min-width:0;border:1px solid var(--line3);border-radius:0;background:var(--panel);color:var(--text);font-size:12px;padding:6px 8px;}
 .hub-opening{margin-top:10px;max-width:760px;}
 .hub-projects{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:10px;}
-.hub-project{border:1px solid var(--line2);border-radius:10px;background:var(--panel);padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0;}
+.hub-project{border:1px solid var(--line2);border-radius:0;background:var(--panel);padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0;}
 .hub-project:hover{border-color:var(--line3);}
 .hub-project-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .hub-project-name{font:600 14px var(--sans);color:var(--text);margin-right:auto;}
@@ -29,8 +29,8 @@
 .confirm-reset .reset-name{width:220px;max-width:100%;}
 .reset-worktree{flex:1 1 100%;font-size:12px;color:var(--amber);}
 .reset-worktree-item{display:block;margin-top:2px;overflow-wrap:anywhere;}
-.hub-chip{display:inline-flex;align-items:center;gap:6px;font:500 10.5px var(--mono);border:1px solid;border-radius:999px;padding:1px 8px;white-space:nowrap;}
-.hub-empty{border:1px dashed var(--line3);border-radius:10px;padding:28px;text-align:center;display:flex;flex-direction:column;gap:6px;}
+.hub-chip{display:inline-flex;align-items:center;gap:6px;font:500 10.5px var(--mono);border:1px solid;border-radius:0;padding:1px 8px;white-space:nowrap;}
+.hub-empty{border:1px dashed var(--line3);border-radius:0;padding:28px;text-align:center;display:flex;flex-direction:column;gap:6px;}
 .hub-empty-t{font-weight:600;font-size:14px;}
 .hub-footer{flex:none;border-top:1px solid var(--line);padding:10px 20px 14px;background:var(--panel);}
 .hub-footer-t{display:flex;align-items:center;gap:10px;max-width:1080px;margin:0 auto 8px;}
@@ -49,12 +49,12 @@
 @media (max-width:600px){.hub-projects{grid-template-columns:1fr;}.hub-paste{flex-wrap:wrap;}}
 
 .hub-project-actions{flex-wrap:wrap;}
-.hub-live{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--amber-line);border-radius:8px;background:var(--amber-bg);}
+.hub-live{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--amber-line);border-radius:0;background:var(--amber-bg);}
 .hub-live-top{display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap;}
 .hub-live-f{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 .hub-live-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text2);}
-.hub-live-r{border:1px solid var(--line3);border-radius:4px;padding:0 6px;color:var(--muted);}
-.hub-ask{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:6px;border:2px solid var(--amber);background:var(--bg);}
+.hub-live-r{border:1px solid var(--line3);border-radius:0;padding:0 6px;color:var(--muted);}
+.hub-ask{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:0;border:2px solid var(--amber);background:var(--bg);}
 .hub-ask-t{font-size:12px;color:var(--amber);}
 .hub-ask-q{font-size:12px;line-height:1.5;color:var(--text);word-break:break-word;}
 .hub-ask-o{margin:0;padding-left:18px;font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px;}
@@ -62,5 +62,5 @@
 
 /* Repository manager: per-repo setup command and the repos suggested by the planning AI */
 .rp-setup{display:flex;flex-direction:column;gap:8px;padding:12px 0 2px;border-top:1px dashed var(--line2);}
-.rp-setup-input{flex:1 1 260px;min-width:0;font-size:12px;padding:6px 8px;border:1px solid var(--line3);border-radius:6px;background:var(--bg);color:var(--text);}
-.rp-suggested{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--amber);border-radius:8px;}
+.rp-setup-input{flex:1 1 260px;min-width:0;font-size:12px;padding:6px 8px;border:1px solid var(--line3);border-radius:0;background:var(--bg);color:var(--text);}
+.rp-suggested{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--amber);border-radius:0;}

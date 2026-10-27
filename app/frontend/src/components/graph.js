@@ -5,14 +5,14 @@
 import { html, useState, useEffect, useLayoutEffect, useRef, useMemo } from '../util/preact.js';
 
 export const STATUS_COLOR = {
-  pending: '#7D838C', speccing: '#8AA4FF', specced: '#A58BFF', approved: '#5CC8D6',
-  building: '#F2B544', verified: '#5BD38A', blocked: '#F06A5E',
+  pending: '#6F6B86', speccing: '#8AA4FF', specced: '#B3A8FF', approved: '#5CC8D6',
+  building: '#B3A8FF', verified: '#4FD1A1', blocked: '#F07A6E',
 };
 export const STATUS_BG = {
-  pending: '#1E2024', speccing: '#1A1F2B', specced: '#201B2C', approved: '#16252A',
-  building: '#2A2416', verified: '#15251C', blocked: '#2A1716',
+  pending: '#1D1C27', speccing: '#1A1B2E', specced: '#1C1833', approved: '#14232A',
+  building: '#1C1833', verified: '#0F2A21', blocked: '#2A1715',
 };
-const color = (s) => STATUS_COLOR[s] || '#7D838C';
+const color = (s) => STATUS_COLOR[s] || '#6F6B86';
 const G = { NW: 184, NH: 66, GX: 46, GY: 14, STAGE_GAP: 30, PAD: 18, HEAD: 34 };
 const MIN_SCALE = 0.2, MAX_SCALE = 2.5, PORT_STEP = 9;
 
@@ -87,7 +87,7 @@ function curve(x1, y1, x2, y2) {
   return `M${x1} ${y1} C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}`;
 }
 
-const ARROWS = { green: '#5BD38A', amber: '#F2B544', red: '#F06A5E', grey: '#4A4F57' };
+const ARROWS = { green: '#4FD1A1', amber: '#B3A8FF', red: '#F07A6E', grey: '#4A4664' };
 const walk = (start, map) => { const out = new Set(), stack = [start]; while (stack.length) { const n = stack.pop(); for (const m of map[n] || []) if (!out.has(m)) { out.add(m); stack.push(m); } } return out; };
 const graphSig = (fs, stages) => JSON.stringify([fs.map((f) => [f.id, f.name, f.status, f.stage, f.kind, f.deps, f.depends_on, f.dep_dirs]), stages]);
 /** Pan/zoom state of one graph (kept outside the component so a remount keeps the user's view). */
@@ -139,12 +139,12 @@ function GraphNode({ n, cls, pressed, onSelect, setHover }) {
       onClick=${pick} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }}
       onMouseEnter=${enter} onMouseLeave=${leave} onFocus=${enter} onBlur=${leave}>
     <title>${n.tip}</title>
-    <rect class="gf-box" width=${G.NW} height=${G.NH} rx="8" fill=${STATUS_BG[f.status] || '#15171A'} stroke=${n.c} />
+    <rect class="gf-box" width=${G.NW} height=${G.NH} rx="8" fill=${STATUS_BG[f.status] || '#13121A'} stroke=${n.c} />
     <rect class="gf-bar" width="4" height=${G.NH - 12} x="6" y="6" rx="2" fill=${n.c} />
     <text class="gf-title" x="16" y="20">${clip(f.name || f.id, titleChars)}</text>
     <text class="gf-status" x=${G.NW - 8} y="20" text-anchor="end" fill=${n.c}>${statusText}</text>
     <text class="gf-sub" x="16" y="38">${clip(f.name && f.name !== f.id ? f.id : (f.kind ? 'kind ' + f.kind : ''), SUB_CHARS)}</text>
-    <text class="gf-line" x="16" y="55" fill=${f.status === 'blocked' ? '#F06A5E' : n.waiting.length ? '#F2B544' : '#8B9098'}>${clip(n.line2 + (n.dirs.length ? ` · ${n.dirs.length} folder(s)` : ''), LINE_CHARS)}</text>
+    <text class="gf-line" x="16" y="55" fill=${f.status === 'blocked' ? '#F07A6E' : n.waiting.length ? '#B3A8FF' : '#8A86A1'}>${clip(n.line2 + (n.dirs.length ? ` · ${n.dirs.length} folder(s)` : ''), LINE_CHARS)}</text>
   </g>`;
 }
 
@@ -285,8 +285,8 @@ export function MachineContent({ counts, chosen = null, onPick }) {
   const c = counts || {}, { NW, NH } = SM;
   return html`<svg class="me-svg" viewBox=${`0 0 ${SM.W} ${SM.H}`} role="group" aria-label="Feature state machine with the count in each state">
       <defs>
-        <marker id="me-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#4A4F57" /></marker>
-        <marker id="me-arrow-r" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#F06A5E" /></marker>
+        <marker id="me-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#4A4664" /></marker>
+        <marker id="me-arrow-r" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#F07A6E" /></marker>
       </defs>
       ${SM.edges.map((d) => html`<path key=${d} class="me-edge" d=${d} marker-end="url(#me-arrow)" />`)}
       ${SM.fails.map((d) => html`<path key=${d} class="me-edge fail" d=${d} marker-end="url(#me-arrow-r)" />`)}

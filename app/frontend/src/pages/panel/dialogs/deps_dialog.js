@@ -12,7 +12,7 @@ import { featuresWithWaves, featureStatusAt, curN, FEATURE_COLOR } from '../pipe
 import { featureParts } from '../feature_label.js';
 import { clampCameraTo, fitCameraTo, sameCamera } from '../camera_clamp.js';
 
-const BADGE_COLOR = '#7fb2ff';
+const BADGE_COLOR = '#8AA4FF';
 const NEUTRAL_COLOR = '#6b727c';
 const BOX_WIDTH = 250, BOX_HEIGHT = 136;
 const COLUMN_STEP = 310, ROW_STEP = 166; // distance between wave columns / feature rows
@@ -169,10 +169,10 @@ function DepsBody() {
           <div class="bd-uml-tab" data-uml=${'wave:' + pack.wave} title="Drag to move the whole package" style=${{ left: pack.left + 'px', top: pack.top + 'px', height: PACKAGE_TAB_HEIGHT + 'px' }}>${'«wave» ' + pack.wave}</div>
         </div>`)}
         <svg class="bd-uml-edges" width="1" height="1" aria-hidden="true">
-          <defs><marker id="bd-uml-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#8b929c" stroke-width="1.4"></path></marker></defs>
+          <defs><marker id="bd-uml-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#8A86A1" stroke-width="1.4"></path></marker></defs>
           ${layout.edges.map((edge) => html`<g key=${edge.key}>
-            <path d=${edge.path} fill="none" stroke="#8b929c" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#bd-uml-open)"></path>
-            <text x=${edge.labelX} y=${edge.labelY} fill="#8b929c" font-size="10" font-family="IBM Plex Mono, monospace" text-anchor="middle">«use»</text>
+            <path d=${edge.path} fill="none" stroke="#8A86A1" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#bd-uml-open)"></path>
+            <text x=${edge.labelX} y=${edge.labelY} fill="#8A86A1" font-size="10" font-family="JetBrains Mono, monospace" text-anchor="middle">«use»</text>
           </g>`)}
         </svg>
         ${features.map((feature) => {
@@ -201,5 +201,5 @@ function DepsBody() {
 
 /** Opens the dependency diagram of the whole roadmap (global view: no chat column). */
 export function openDepsDialog() {
-  return openBigDialog({ badge: 'GLOBAL', badgeColor: BADGE_COLOR, title: 'Feature dependencies', body: () => html`<${DepsBody} />`, chat: null });
+  return openBigDialog({ page: 'Back to the score', badge: 'GLOBAL', badgeColor: BADGE_COLOR, title: 'Feature dependencies', body: () => html`<${DepsBody} />`, chat: null });
 }

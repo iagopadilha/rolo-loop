@@ -15,29 +15,29 @@ const GLOSSARY = [
   ['worktree', 'a working copy of the repository in a sibling folder (…-worktree-loop) on the loop branch. The loop works there, not in your folder.'],
 ];
 
-const PLEX_SANS = 'IBM Plex Sans, sans-serif', PLEX_MONO = 'IBM Plex Mono, monospace';
+const PLEX_SANS = 'Inter Tight, sans-serif', PLEX_MONO = 'JetBrains Mono, monospace';
 const Box = ({ x, y, w, title, sub, color }) => html`<g>
-  <rect x=${x} y=${y} width=${w} height="58" rx="10" fill="#15171A" stroke=${color} stroke-width="1.5" />
-  <text x=${x + w / 2} y=${y + 24} text-anchor="middle" fill="#E6E6E3" font-size="13" font-weight="600" font-family=${PLEX_SANS}>${title}</text>
-  <text x=${x + w / 2} y=${y + 42} text-anchor="middle" fill="#8B9098" font-size="10.5" font-family=${PLEX_MONO}>${sub}</text>
+  <rect x=${x} y=${y} width=${w} height="58" rx="10" fill="#13121A" stroke=${color} stroke-width="1.5" />
+  <text x=${x + w / 2} y=${y + 24} text-anchor="middle" fill="#EDEBF7" font-size="13" font-weight="600" font-family=${PLEX_SANS}>${title}</text>
+  <text x=${x + w / 2} y=${y + 42} text-anchor="middle" fill="#8A86A1" font-size="10.5" font-family=${PLEX_MONO}>${sub}</text>
 </g>`;
 const Arrow = ({ x1, x2, y, label }) => html`<g>
-  <path d=${`M${x1} ${y} L${x2 - 4} ${y}`} stroke="#4A4F57" stroke-width="1.5" marker-end="url(#why-arrow)" />
-  <text x=${(x1 + x2) / 2} y=${y - 7} text-anchor="middle" fill="#7D838C" font-size="9.5" font-family=${PLEX_MONO}>${label}</text>
+  <path d=${`M${x1} ${y} L${x2 - 4} ${y}`} stroke="#4A4664" stroke-width="1.5" marker-end="url(#why-arrow)" />
+  <text x=${(x1 + x2) / 2} y=${y - 7} text-anchor="middle" fill="#6F6B86" font-size="9.5" font-family=${PLEX_MONO}>${label}</text>
 </g>`;
 
 function FlowDiagram() {
   return html`<svg class="why-diagram" viewBox="0 0 660 92" role="img" aria-label="Flow: the /orchestrator skill is the brain; the app engine runs the turns; the state lives in .specs files; the panel reads all of it and sends your clicks back to the engine.">
-    <defs><marker id="why-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#4A4F57" /></marker></defs>
-    <${Box} x=${4} y=${18} w=${140} title="/orchestrator skill" sub="brain (prompt)" color="#A58BFF" />
+    <defs><marker id="why-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#4A4664" /></marker></defs>
+    <${Box} x=${4} y=${18} w=${140} title="/orchestrator skill" sub="brain (prompt)" color="#B3A8FF" />
     <${Arrow} x1=${144} x2=${186} y=${47} label="each turn" />
-    <${Box} x=${186} y=${18} w=${140} title="app · engine" sub="run_loop, state…" color="#F2B544" />
+    <${Box} x=${186} y=${18} w=${140} title="app · engine" sub="run_loop, state…" color="#B3A8FF" />
     <${Arrow} x1=${326} x2=${368} y=${47} label="writes" />
     <${Box} x=${368} y=${18} w=${120} title=".specs/" sub="dozens of .md/.json" color="#5CC8D6" />
     <${Arrow} x1=${488} x2=${530} y=${47} label="reads all" />
-    <${Box} x=${530} y=${18} w=${126} title="panel" sub="one single view" color="#5BD38A" />
-    <path d="M593 76 C593 90, 256 90, 256 78" fill="none" stroke="#F2B544" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#why-arrow)" />
-    <text x="424" y="88" text-anchor="middle" fill="#F2B544" font-size="9.5" font-family=${PLEX_MONO}>your clicks (with confirmation)</text>
+    <${Box} x=${530} y=${18} w=${126} title="panel" sub="one single view" color="#4FD1A1" />
+    <path d="M593 76 C593 90, 256 90, 256 78" fill="none" stroke="#B3A8FF" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#why-arrow)" />
+    <text x="424" y="88" text-anchor="middle" fill="#B3A8FF" font-size="9.5" font-family=${PLEX_MONO}>your clicks (with confirmation)</text>
   </svg>`;
 }
 

@@ -7,7 +7,7 @@ import { pipe, turnsList, liveN, curN, selectTurn } from './pipeline_model.js';
 import { toggleGlobalZone, globalZoneHidden, globalToggleArrow } from './layout.js';
 import { ClaudeBadge, describeClaude } from './claude_badge.js';
 
-const FALLBACK_DOT = '#4a4f57';
+const FALLBACK_DOT = '#4A4664';
 
 /** Number of steps of a turn: `changes` when the model gives a number, else the events it has. */
 export function stepsInTurn(turn) {

@@ -11,7 +11,7 @@ import { steps, turnFailures, STEP_COLOR } from './pipeline_model.js';
 import { openErrorDialog, openAgentDialog } from './dialogs/index.js';
 import { FeatureLabel } from './feature_label.js';
 
-const SEVERITY_COLOR = { error: '#f06a5e', warning: '#f5b82e', info: '#6b727c' };
+const SEVERITY_COLOR = { error: '#F07A6E', warning: '#B3A8FF', info: '#6b727c' };
 const NEUTRAL_COLOR = '#6b727c';
 const KIND_LABEL = { loop: 'loop stopped', turn: 'turn', guard: 'guard', feature: 'feature', launch: 'launch', step: 'agent step' };
 const GUARD_NOTE = 'The guard stopped an agent from doing something the loop does not allow. It worked: nothing was changed. Many blocks of one rule mean an agent kept retrying.';

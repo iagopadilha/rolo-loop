@@ -4,21 +4,21 @@ import { isNum, list } from '../../util/format.js';
 
 // ---------- visual constants (not data) ----------
 export const PAL = {
-  pending: ['#7D838C', '#1E2024'], speccing: ['#8AA4FF', '#1A1F2B'], specced: ['#A58BFF', '#201B2C'],
-  approved: ['#5CC8D6', '#16252A'], building: ['#F2B544', '#2A2416'], verified: ['#5BD38A', '#15251C'],
-  blocked: ['#F06A5E', '#2A1716'], running: ['#F2B544', '#2A2416'], done: ['#5BD38A', '#15251C'],
-  idle: ['#7D838C', '#1E2024'], failed: ['#F06A5E', '#2A1716'], queued: ['#8AA4FF', '#1A1F2B'],
+  pending: ['#6F6B86', '#1D1C27'], speccing: ['#8AA4FF', '#1A1B2E'], specced: ['#B3A8FF', '#1C1833'],
+  approved: ['#5CC8D6', '#14232A'], building: ['#B3A8FF', '#1C1833'], verified: ['#4FD1A1', '#0F2A21'],
+  blocked: ['#F07A6E', '#2A1715'], running: ['#B3A8FF', '#1C1833'], done: ['#4FD1A1', '#0F2A21'],
+  idle: ['#6F6B86', '#1D1C27'], failed: ['#F07A6E', '#2A1715'], queued: ['#8AA4FF', '#1A1B2E'],
 };
 export const pal = (s) => PAL[s] || PAL.idle;
 export const STATUS = {
-  running: { label: 'Running', c: '#F2B544', bg: '#2A2416', line: '#4A3D1C', pulse: true },
-  continue: { label: 'Continuing', c: '#8AA4FF', bg: '#1A1F2B', line: '#33405C' },
-  awaiting_user: { label: 'Waiting for you', c: '#F2B544', bg: '#3A2D0E', line: '#F2B544', pulse: true },
-  done: { label: 'Done', c: '#5BD38A', bg: '#15251C', line: '#2C5A40' },
-  error: { label: 'Error', c: '#F06A5E', bg: '#1E1413', line: '#5A2A26' },
-  stopped: { label: 'Stopped', c: '#C9C4BE', bg: '#1E2024', line: '#3A3E45' },
-  no_loop: { label: 'No loop', c: '#8B9098', bg: '#15171A', line: '#2A2D33' },
-  planning: { label: 'Planning', c: '#F2B544', bg: '#2A2416', line: '#4A3D1C' }, // planning mode (state.planning_required)
+  running: { label: 'Running', c: '#B3A8FF', bg: '#1C1833', line: '#3A3270', pulse: true },
+  continue: { label: 'Continuing', c: '#8AA4FF', bg: '#1A1B2E', line: '#33406E' },
+  awaiting_user: { label: 'Waiting for you', c: '#F5B44A', bg: '#2A2010', line: '#F5B44A', pulse: true },
+  done: { label: 'Done', c: '#4FD1A1', bg: '#0F2A21', line: '#1F4D3D' },
+  error: { label: 'Error', c: '#F07A6E', bg: '#2A1715', line: '#5A2A26' },
+  stopped: { label: 'Stopped', c: '#A7A3BD', bg: '#1D1C27', line: '#3A3750' },
+  no_loop: { label: 'No loop', c: '#8A86A1', bg: '#13121A', line: '#262434' },
+  planning: { label: 'Planning', c: '#B3A8FF', bg: '#1C1833', line: '#3A3270' }, // planning mode (state.planning_required)
 };
 export const ROLE_DESC = {
   orchestrator: 'roadmap · dispatch · commit · checkpoint',
@@ -28,11 +28,11 @@ export const ROLE_DESC = {
   verifier: 'build · typecheck · lint', 'verifier-flow': 'validates the flow by running the app',
 };
 export const LOG_KIND = {
-  sys: ['context', '#8B9098', '#121417', '#22252A', false], ai: [null, '#E6E6E3', '#15171A', '#24272C', false],
-  tool: ['tool', '#8AA4FF', '#13161D', '#232A3A', true], guard: ['guard', '#F06A5E', '#1E1413', '#5A2A26', true],
-  user: ['you → ANSWERS.md', '#F2B544', '#1F1B12', '#4A3D1C', false],
+  sys: ['context', '#8A86A1', '#0F0E15', '#1D1C27', false], ai: [null, '#EDEBF7', '#13121A', '#1D1C27', false],
+  tool: ['tool', '#8AA4FF', '#13121A', '#262434', true], guard: ['guard', '#F07A6E', '#2A1715', '#5A2A26', true],
+  user: ['you → ANSWERS.md', '#B3A8FF', '#1C1833', '#3A3270', false],
 };
-export const TURN_COLOR = { error: '#F06A5E', running: '#F2B544', awaiting_user: '#A58BFF', done: '#5BD38A', continue: '#4A4F57' };
+export const TURN_COLOR = { error: '#F07A6E', running: '#B3A8FF', awaiting_user: '#B3A8FF', done: '#4FD1A1', continue: '#4A4664' };
 export const LIFECYCLE = ['pending', 'speccing', 'specced', 'approved', 'building', 'verified'];
 export const FEATURE_STATUSES = ['pending', 'speccing', 'specced', 'approved', 'building', 'verified', 'blocked'];
 export const RESUME_WAIT_MS = 25000;

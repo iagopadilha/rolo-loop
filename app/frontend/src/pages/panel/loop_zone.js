@@ -31,6 +31,7 @@ function commandName(path) {
 
 function pickTab(tab) { pipe.tab = tab; renderAll(); }
 function pickView(view) { pipe.view = view; renderAll(); }
+function pickFocus(focus) { pipe.focus = focus; renderAll(); }
 
 /** "LOOP > Turn N", the title with status badge, the decision of the orchestrator and the three figures of the turn. */
 function TurnHeader({ turn }) {
@@ -82,6 +83,8 @@ export function LoopZone({ on, planning }) {
           <${TabBar} tabs=${tabs} current=${tab} label="Loop views" className="z-ltabs" onPick=${pickTab} />
           <span class="z-spacer"></span>
           <button type="button" class="z-btn-global z-btn-inline" title="the dependency diagram of the whole roadmap" onClick=${openDepsDialog}>⤢ dependencies</button>
+          ${tab === 'pipeline' ? html`<div class="z-toggle" role="group" aria-label="Show waves">${[[true, 'Focus'], [false, 'Everything']].map(([focus, label]) => html`<button key=${label} type="button"
+            class=${'z-toggle-btn mono' + (pipe.focus === focus ? ' is-on' : '')} aria-pressed=${String(pipe.focus === focus)} onClick=${() => pickFocus(focus)}>${label}</button>`)}</div>` : null}
           ${tab === 'pipeline' ? html`<div class="z-toggle" role="group" aria-label="Pipeline view">${[['diagram', 'Diagram'], ['list', 'List']].map(([view, label]) => html`<button key=${view} type="button"
             class=${'z-toggle-btn mono' + (pipe.view === view ? ' is-on' : '')} aria-pressed=${String(pipe.view === view)} onClick=${() => pickView(view)}>${label}</button>`)}</div>` : null}
         </div></div>` : null}

@@ -15,12 +15,12 @@ import { ClaudeBadge, WhoSpawnsToggle, describeClaude } from '../claude_badge.js
 import { openAgentDialog } from './agent_dialog.js';
 import { taskGraphOf, waveModeLabel, splitNoteOf, agentChipOf, statusCounts, layoutTaskGraph, agentRowsOf, fallbackSteps } from '../feature_dialog_model.js';
 
-const BADGE_COLOR = '#f5b82e';
+const BADGE_COLOR = '#B3A8FF';
 const POLL_MS = 3000;
 const REQUEST_TIMEOUT_MS = 15000;
-const STEP_STATE_COLOR = { done: '#3fb950', running: '#f5b82e', pending: '#6b727c', failed: '#f85149', skipped: '#6b727c' };
-const TASK_COLOR = { done: '#3fb950', running: '#f5b82e', failed: '#f85149', pending: '#6b727c' };
-const EDGE_COLOR = { done: '#3fb950', running: '#f5b82e', failed: '#f85149', pending: '#3a3e45' };
+const STEP_STATE_COLOR = { done: '#4FD1A1', running: '#B3A8FF', pending: '#6b727c', failed: '#F07A6E', skipped: '#6b727c' };
+const TASK_COLOR = { done: '#4FD1A1', running: '#B3A8FF', failed: '#F07A6E', pending: '#6b727c' };
+const EDGE_COLOR = { done: '#4FD1A1', running: '#B3A8FF', failed: '#F07A6E', pending: '#3A3750' };
 
 const stateFeature = (slug) => list(ctx.state && ctx.state.features).find((item) => item && item.id === slug) || null;
 const loopIsRunning = () => !!(ctx.state && ctx.state.loop && ctx.state.loop.running);
@@ -94,7 +94,7 @@ function AgentChip({ slug, task }) {
     <span class="fd-chip-top">${chip.running ? html`<span class="spinner sm"></span>` : html`<span class="fd-chip-dot" style=${{ background: resultColor || '#6b727c' }}></span>`}
       <span class="fd-chip-role"><span class="fd-chip-spawned">spawned</span> ${chip.role}</span><${ClaudeBadge} source=${chip.agent} inherited />
       ${chip.attempts > 1 ? html`<span class="fd-chip-attempts" title="attempts">${chip.attempts}×</span>` : null}</span>
-    <span class="fd-chip-bottom">${chip.running ? 'running' : html`<span style=${{ color: resultColor || '#8b929c' }}>${txt(chip.result)}</span>`}${chip.duration ? ' · ' + chip.duration : ''}</span>
+    <span class="fd-chip-bottom">${chip.running ? 'running' : html`<span style=${{ color: resultColor || '#8A86A1' }}>${txt(chip.result)}</span>`}${chip.duration ? ' · ' + chip.duration : ''}</span>
   </button>`;
 }
 
@@ -113,7 +113,7 @@ function TaskGraph({ slug, payload }) {
   if (!graph.tasks.length) return html`<div class="bd-dim-note">This feature has no task list (no tasks.md): it runs as a single executor call.</div>`;
   return html`<div>
     <div class="fd-summary">${graph.tasks.length} tasks in ${graph.waves.length} waves · max ${graph.maxParallel == null ? '?' : graph.maxParallel} in parallel ·
-      ${counts.map(([status, total]) => html`<span key=${status} style=${{ color: TASK_COLOR[status] || '#8b929c' }}>${total} ${status}</span>`).reduce((all, part) => (all ? [all, ' · ', part] : part), null)}</div>
+      ${counts.map(([status, total]) => html`<span key=${status} style=${{ color: TASK_COLOR[status] || '#8A86A1' }}>${total} ${status}</span>`).reduce((all, part) => (all ? [all, ' · ', part] : part), null)}</div>
     <div class="fd-graph-scroll"><div class="fd-graph" style=${{ width: layout.width + 'px', height: layout.height + 'px' }}>
       <svg class="fd-edges" width=${layout.width} height=${layout.height} aria-hidden="true">
         <defs>${Object.entries(EDGE_COLOR).map(([kind, color]) => html`<marker key=${kind} id=${'fd-arrow-' + kind} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill=${color} /></marker>`)}</defs>
@@ -158,7 +158,7 @@ function FeatureBody({ slug }) {
 /** Opens the Feature dialog of one feature slug. */
 export function openFeatureDialog({ feature }) {
   return openBigDialog({
-    badge: 'FEATURE', badgeColor: BADGE_COLOR, title: html`<${FeatureLabel} slug=${feature} />`,
+    page: 'Back to the score', badge: 'FEATURE', badgeColor: BADGE_COLOR, title: html`<${FeatureLabel} slug=${feature} />`,
     body: () => html`<${FeatureBody} slug=${feature} />`,
   });
 }

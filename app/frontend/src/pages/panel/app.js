@@ -9,7 +9,6 @@
    The zones stay in the DOM (hidden in planning) because the one-time setup of startPanel is bound to them. */
 import { html } from '../../util/preact.js';
 import { disconnectedDetail } from '../../api/api_client.js';
-import { WhyButton } from '../../components/why_panel.js';
 import { ctx, ui } from './context.js';
 import { BrandSub, RepoLine, RepoChip, StatusPill, NavbarLoopStatus, Meters, HeaderActions, headerModel } from './header.js';
 import { errorCount, openErrors } from './errors.js';
@@ -17,6 +16,7 @@ import { idleText, StatusDialog } from './alert.js';
 import { PlanningScreen, planningRequired } from './planning.js';
 import { GlobalZone, consumeViewRequest } from './global_zone.js';
 import { LoopZone } from './loop_zone.js';
+import { LogoMark } from '../../components/logo.js';
 
 /** Content of #closed: "App shut down" (header) or "Project not found" (polling 404). */
 function ClosedCard({ c }) {
@@ -34,7 +34,7 @@ function ClosedCard({ c }) {
 function Brand({ has, withRepoLine }) {
   const hd = headerModel();
   return html`<div class="brand">
-    <a class="logo logo-link" href="/" title="back to the projects" aria-label="back to the projects">M</a>
+    <a class="logo logo-link" href="/" title="back to the projects" aria-label="back to the projects"><${LogoMark} /></a>
     <div>
       <div class="brand-name"><a href="/" class="brand-link">Claude Maestro</a></div>
       <div class="brand-sub mono" id="brand-sub" title=${has ? hd.repo : null}>${has ? html`<${BrandSub} />` : '—'}</div>
@@ -47,7 +47,6 @@ function GuardBadge() {
   return html`<button type="button" class="guard-badge mono" id="guard-badge" hidden=${!blocks} title="open the list of errors and warnings" onClick=${openErrors}>
     <span class="gb-dot"></span>${blocks ? `${blocks} problem${blocks === 1 ? '' : 's'}` : ''}</button>`;
 }
-function HelpActions() { return html`<div class="header-actions" id="header-extra"><${WhyButton} /></div>`; }
 
 /** Loop mode header: the navbar (NAV-01..04). */
 function Navbar({ has }) {
@@ -61,7 +60,6 @@ function Navbar({ has }) {
     <${GuardBadge} />
     <div class="spacer"></div>
     <div class="header-actions" id="header-actions">${has ? html`<${HeaderActions} mode="loop" />` : null}</div>
-    <${HelpActions} />
   </header>`;
 }
 /** Planning mode header (WS-01): the same navbar frame as the loop mode, with the "Planning" pill on the LEFT right after the project block
@@ -78,7 +76,6 @@ function PlanningHeader({ has }) {
     <${GuardBadge} />
     <div class="spacer"></div>
     <div class="header-actions" id="header-actions">${has ? html`<${HeaderActions} mode="planning" />` : null}</div>
-    <${HelpActions} />
   </header>`;
 }
 /** Loop mode: no zones above the content; only the status dialog (mounted here, opens from the navbar). */

@@ -3,8 +3,8 @@
 import { html, useState, useLayoutEffect, useMemo } from '../util/preact.js';
 
 const STATUS_COLOR = {
-  pending: '#7D838C', speccing: '#8AA4FF', specced: '#A58BFF', approved: '#5CC8D6',
-  building: '#F2B544', verified: '#5BD38A', blocked: '#F06A5E',
+  pending: '#6F6B86', speccing: '#8AA4FF', specced: '#B3A8FF', approved: '#5CC8D6',
+  building: '#B3A8FF', verified: '#4FD1A1', blocked: '#F07A6E',
 };
 const GROUP_TITLES = { project: 'Project', codebase: 'Codebase', features: 'Features', loop: 'Loop', other: 'Other' };
 const GROUP_ORDER = ['project', 'codebase', 'features', 'loop', 'other'];
@@ -141,7 +141,7 @@ function visibleRows(st) {
 function TreeRow({ core, v, tab }) {
   const { n, level, group, isDir, isOpen } = v;
   const sel = !isDir && core.st.selected === n.path;
-  const c = n.status ? STATUS_COLOR[n.status] || '#7D838C' : null;
+  const c = n.status ? STATUS_COLOR[n.status] || '#6F6B86' : null;
   return html`<div ref=${(el) => { if (el) core.els.set(v.key, el); }} class=${'tree-row' + (isDir ? ' dir' : ' file') + (sel ? ' sel' : '') + (level === 0 ? ' group' : '')}
       role="treeitem" aria-level=${String(level + 1)} aria-expanded=${isDir ? String(isOpen) : null} aria-selected=${isDir ? null : String(sel)}
       tabindex=${tab ? '0' : '-1'} title=${n.path || n.name} style=${{ paddingLeft: (6 + level * 14) + 'px' }} onClick=${() => core.activate(v.key)}>

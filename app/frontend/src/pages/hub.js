@@ -10,18 +10,19 @@ import { pickFolderNativeFirst } from '../components/folder_browser.js';
 import { Conformance, conformanceDefault } from '../components/conformance.js';
 import { openWhyOnFirstVisit, WhyButton } from '../components/why_panel.js';
 import { SettingsButton } from '../components/settings_dialog.js';
+import { LogoMark } from '../components/logo.js';
 
 const MODE = {
-  new: ['new project', '#8AA4FF'], no_specs: ['no .specs', '#8B9098'], planning: ['planning', '#A58BFF'],
-  ready_for_loop: ['ready for the loop', '#5CC8D6'], in_loop: ['in loop', '#F2B544'], done: ['done', '#5BD38A'],
+  new: ['new project', '#8AA4FF'], no_specs: ['no .specs', '#8A86A1'], planning: ['planning', '#B3A8FF'],
+  ready_for_loop: ['ready for the loop', '#5CC8D6'], in_loop: ['in loop', '#B3A8FF'], done: ['done', '#4FD1A1'],
 };
 const NEXT_ACTION = {
   structure: 'initialize .specs', conformance: 'choose conformance', map: 'map the code', roadmap: 'generate the roadmap',
   approve: 'approve the roadmap', test_environment: 'describe the test environment', check: 'check the loop', start_loop: 'start the loop', follow: 'follow the loop',
 };
 const LOOP = {
-  running: ['running', '#F2B544', true], awaiting_user: ['waiting for you', '#F2B544', true], continue: ['between turns', '#8AA4FF'],
-  done: ['done', '#5BD38A'], error: ['error', '#F06A5E'], stopped: ['stopped', '#C9C4BE'], no_loop: ['no loop', '#8B9098'],
+  running: ['running', '#B3A8FF', true], awaiting_user: ['waiting for you', '#F5B44A', true], continue: ['between turns', '#8AA4FF'],
+  done: ['done', '#4FD1A1'], error: ['error', '#F07A6E'], stopped: ['stopped', '#A7A3BD'], no_loop: ['no loop', '#8A86A1'],
 };
 const INVALID_NAME = /[\\/:*?"<>|]/;
 const INVALID_NAME_MSG = 'The name cannot contain \\ / : * ? " < > |';
@@ -91,7 +92,7 @@ function ProjectCard({ p }) {
       <a class="hub-project-name" href=${url}>${txt(p.name || p.id)}</a>
       ${loop ? html`<${Chip} text=${loop[0]} color=${loop[1]} pulse=${loop[2]} />` : null}
       ${mode && !(loop && loop[0] === mode[0]) ? html`<${Chip} text=${mode[0]} color=${mode[1]} />` : null}
-      ${p.folder_exists === false ? html`<${Chip} text="folder missing" color="#F06A5E" />` : null}
+      ${p.folder_exists === false ? html`<${Chip} text="folder missing" color="#F07A6E" />` : null}
     </div>
     <div class="hub-project-path mono" title=${p.repo_path || ''}>${txt(p.repo_path)}</div>
     <div class="hub-project-meta">
@@ -354,6 +355,25 @@ async function shutDown() {
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
+/** The hero picture: many lines converge into a point of light and leave organized. */
+function HubFigure() {
+  const fan = [[20, 30, 0.35], [60, 8, 0.5], [0, 90, 0.3], [40, 120, 0.6], [10, 160, 0.4], [70, 200, 0.5], [30, 245, 0.3], [110, 40, 0.6], [120, 230, 0.45], [90, 70, 0.25], [140, 180, 0.6], [150, 90, 0.5]];
+  const mid = [50, 80, 110, 150, 180, 210];
+  const out = [50, 90, 130, 170, 210];
+  return html`<div class="hub-figure" aria-hidden="false">
+    <svg viewBox="0 0 560 260" width="100%" role="img" aria-label="Many lines converge into one point of light and leave organized">
+      <defs><radialGradient id="hub-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#FFFFFF" /><stop offset="0.2" stop-color="#C9BFFF" stop-opacity="0.8" /><stop offset="1" stop-color="#7C6CF6" stop-opacity="0" /></radialGradient></defs>
+      <g stroke="#EDEBF7" stroke-width="1" fill="none">${fan.map(([x, y, o]) => html`<path key=${x + '-' + y} d=${`M${x} ${y} L210 130`} opacity=${o} />`)}</g>
+      <g stroke="#7C6CF6" stroke-width="1.1" fill="none" opacity="0.85">${mid.map((y) => html`<path key=${y} d=${`M210 130 C270 ${y} 330 ${y} 390 130`} />`)}</g>
+      <g stroke="#B3A8FF" stroke-width="1" fill="none" opacity="0.7">${out.map((y) => html`<path key=${y} d=${`M390 130 C450 130 480 ${y} 560 ${y}`} />`)}</g>
+      <circle cx="210" cy="130" r="34" fill="url(#hub-glow)" /><circle cx="210" cy="130" r="3.5" fill="#FFFFFF" />
+      <circle cx="390" cy="130" r="26" fill="url(#hub-glow)" /><circle cx="390" cy="130" r="3" fill="#FFFFFF" />
+    </svg>
+    <span class="hub-figure-l mono">SPECS · TURNS · AGENTS</span>
+    <span class="hub-figure-r mono">ONE VIEW</span>
+  </div>`;
+}
+
 /** The whole hub page (#hub). The offline banner is driven by showDisconnectedBanner(); its props never change, so Preact leaves it alone. */
 export function Hub() {
   return html`<div id="hub" class="hub">
@@ -364,7 +384,7 @@ export function Hub() {
     </div>
     <header class="header hub-header">
       <div class="brand">
-        <div class="logo" aria-hidden="true">M</div>
+        <div class="logo" aria-hidden="true"><${LogoMark} /></div>
         <div>
           <div class="brand-name">Claude Maestro</div>
           <div class="brand-sub mono">projects</div>
@@ -377,13 +397,17 @@ export function Hub() {
 
     <main class="hub-main">
       <section class="hub-start" aria-labelledby="hub-title">
-        <h1 id="hub-title" class="hub-h1">Projects</h1>
-        <p class="muted hub-lead"><strong>Claude Maestro</strong> runs and follows the loop of the <span class="mono">/orchestrator</span> skill on your machine. Open the folder of a project (new, existing or with a loop stopped midway) or create one from scratch. The project panel then shows where it stands and what the next step is.</p>
-        <div class="hub-buttons">
-          <button type="button" class="btn btn-primary hub-big" id="hub-open" onClick=${openFolder}>Open folder</button>
-          <button type="button" class="btn hub-big" id="hub-create" onClick=${createDialog}>Create project from scratch</button>
+        <div class="hub-hero-copy">
+          <span class="hub-eyebrow mono">LOOP ENGINEERING · ON YOUR MACHINE</span>
+          <h1 id="hub-title" class="hub-h1">Projects<br /><span class="hub-h1-sub">open one and follow the loop</span></h1>
+          <p class="muted hub-lead"><strong>Claude Maestro</strong> runs and follows the loop of the <span class="mono">/orchestrator</span> skill on your machine. Open the folder of a project (new, existing or with a loop stopped midway) or create one from scratch. The project panel then shows where it stands and what the next step is.</p>
+          <div class="hub-buttons">
+            <button type="button" class="btn btn-primary hub-big hub-split" id="hub-open" onClick=${openFolder}><span>Open folder</span><span class="hub-split-arrow" aria-hidden="true">→</span></button>
+            <button type="button" class="btn hub-big hub-dashed" id="hub-create" onClick=${createDialog}>Create project from scratch</button>
+          </div>
+          <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
         </div>
-        <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
+        <${HubFigure} />
       </section>
 
       <section class="hub-recent" aria-labelledby="hub-recent-t">

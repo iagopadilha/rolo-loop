@@ -9,14 +9,14 @@ import { stepRuns, steps, stateAt, curN, featureName, turnAt } from '../pipeline
 import { FeatureLabel } from '../feature_label.js';
 import { ClaudeBadge } from '../claude_badge.js';
 
-const BADGE_COLOR = '#7fb2ff';
+const BADGE_COLOR = '#8AA4FF';
 const ORCHESTRATOR = 'orchestrator';
 const LOG_TIMEOUT_MS = 20000;
-const RUN_STATUS_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: '#f85149', BLOCKED: '#f85149', PENDING: '#6b727c' };
-const LOG_TYPE_COLOR = { sys: '#8b929c', ai: '#e6e8eb', tool: '#7fb2ff', guard: '#f85149', user: '#f5b82e' };
+const RUN_STATUS_COLOR = { DONE: '#4FD1A1', RUNNING: '#B3A8FF', QUEUED: '#8AA4FF', FAIL: '#F07A6E', BLOCKED: '#F07A6E', PENDING: '#6b727c' };
+const LOG_TYPE_COLOR = { sys: '#8A86A1', ai: '#EDEBF7', tool: '#8AA4FF', guard: '#F07A6E', user: '#B3A8FF' };
 const NOT_RUN_MESSAGE = 'This step has not run yet: it is pending in the flow.';
 
-const statusColor = (status) => RUN_STATUS_COLOR[status] || '#8b929c';
+const statusColor = (status) => RUN_STATUS_COLOR[status] || '#8A86A1';
 /** Newest turn first; inside one turn the later run goes on top (stepRuns is chronological). */
 const newestFirst = (runs) => [...list(runs)].reverse().sort((first, second) => second.turn - first.turn);
 
@@ -33,7 +33,7 @@ function RunLog({ log }) {
   if (log.error) return html`<div class="bd-inline-error" role="alert">${'Log unavailable: ' + log.error}</div>`;
   if (!log.lines.length) return html`<div class="bd-dim-note">The log of this run is empty.</div>`;
   return html`<div class="bd-log">${log.lines.map((line, index) => html`<div key=${index} class="bd-log-line">
-      <span class="bd-log-type" style=${{ color: LOG_TYPE_COLOR[line.type] || '#8b929c' }}>${txt(line.type)}</span>
+      <span class="bd-log-type" style=${{ color: LOG_TYPE_COLOR[line.type] || '#8A86A1' }}>${txt(line.type)}</span>
       <span class="bd-log-text">${txt(line.text)}${line.result ? html`<span class="bd-log-result">${String(line.result)}</span>` : null}</span>
     </div>`)}${log.truncated ? html`<div class="bd-dim-note">log truncated by the server</div>` : null}</div>`;
 }
@@ -80,7 +80,7 @@ function AgentBody({ feature, step, focus }) {
   const handsOffTo = (definitions[step + 1] || {}).agent || ORCHESTRATOR;
   const facts = [
     { label: 'STATUS', value: status, color: statusColor(status) },
-    { label: 'RUNS', value: String(runs.length), color: '#e6e8eb' },
+    { label: 'RUNS', value: String(runs.length), color: '#EDEBF7' },
     { label: 'CALLED BY', value: calledBy, color: BADGE_COLOR },
     { label: 'HANDS OFF TO', value: handsOffTo, color: BADGE_COLOR },
   ];
@@ -104,7 +104,7 @@ export function openAgentDialog({ feature, step, focus = null }) {
     ? { type: 'agent', agent_id: newestRun.agent_id, turn: newestRun.turn }
     : { type: 'general', agent_id: null, turn: null };
   return openBigDialog({
-    badge: 'AGENT', badgeColor: BADGE_COLOR, title: html`${agentName} @ <${FeatureLabel} slug=${feature} />`,
+    page: 'Back to the score', badge: 'AGENT', badgeColor: BADGE_COLOR, title: html`${agentName} @ <${FeatureLabel} slug=${feature} />`,
     body: () => html`<${AgentBody} feature=${feature} step=${step} focus=${focus} />`,
     chat: {
       title: 'Ask ' + agentName, placeholder: 'Ask something about this run…', scope,

@@ -8,7 +8,7 @@
 .canvas .dep-life .me-svg { position: static; inset: auto; width: 774px; height: 148px; max-width: none; flex: none; overflow: visible; pointer-events: none; }
 .canvas .dep-life .me-node { pointer-events: auto; }
 .dep-life .me-total { font-size: 12px; }
-.dep-note { position: absolute; right: 12px; top: 6px; max-width: 45%; background: var(--panel); padding: 2px 8px; border-radius: 4px; pointer-events: none; z-index: 2; }
+.dep-note { position: absolute; right: 12px; top: 6px; max-width: 45%; background: var(--panel); padding: 2px 8px; border-radius:0; pointer-events: none; z-index: 2; }
 .dep-note:empty { display: none; }
 .dep-legend { top: 6px; right: auto; max-width: 55%; z-index: 2; }
 .dep-mermaid { max-height: 45%; overflow: auto; }

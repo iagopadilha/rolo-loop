@@ -18,9 +18,9 @@ import { featureName } from '../pipeline_model.js';
 const QUARANTINE_FAILURE_LIMIT = 2; // the engine quarantines a feature at its second failure
 const SUMMARY_POLL_INTERVAL_MS = 1500;
 const SUMMARY_GIVE_UP_MS = 240000;
-const BADGE_COLOR = '#f5b82e';
-const FAILURE_COLOR = '#f85149';
-const ATTEMPT_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: FAILURE_COLOR, BLOCKED: FAILURE_COLOR };
+const BADGE_COLOR = '#B3A8FF';
+const FAILURE_COLOR = '#F07A6E';
+const ATTEMPT_COLOR = { DONE: '#4FD1A1', RUNNING: '#B3A8FF', QUEUED: '#8AA4FF', FAIL: FAILURE_COLOR, BLOCKED: FAILURE_COLOR };
 
 const GREETING = 'I read the recorded facts of this pause. Ask why the feature failed, what each option risks, or ask me to draft the guidance for the new attempt.';
 const SUGGESTIONS = ['Why did this feature fail?', 'What is the risk of trying again?', 'Write the guidance for the new attempt'];
@@ -155,7 +155,7 @@ function PauseBody({ slug, bridge, onFinished }) {
     <div class="bd-section-label">ATTEMPT HISTORY</div>
     <div class="bd-attempts">${attempts.length ? attempts.map((attempt, index) => html`<div key=${index} class="bd-attempt">
         <span class="bd-turn">${'T' + attempt.turn}</span><span class="bd-mono">${txt(attempt.agent)}</span>
-        <span class="bd-mono" style=${{ color: ATTEMPT_COLOR[attempt.status] || '#8b929c' }}>${txt(attempt.status)}</span>
+        <span class="bd-mono" style=${{ color: ATTEMPT_COLOR[attempt.status] || '#8A86A1' }}>${txt(attempt.status)}</span>
         <span class="bd-attempt-out">${txt(attempt.out)}</span></div>`)
       : html`<div class="bd-dim-note">No recorded attempt.</div>`}</div>
 

@@ -15,6 +15,7 @@ import { openAgentDialog, openFeatureDialog } from './dialogs/index.js';
 import { taskGraphOf, waveModeLabel, splitNoteOf } from './feature_dialog_model.js';
 import { FeatureLabel } from './feature_label.js';
 import { ctx } from './context.js';
+import { renderAll } from '../project_panel.js';
 import { ClaudeBadge, WhoSpawnsToggle } from './claude_badge.js';
 import { clampCameraTo, fitCameraTo, sameCamera } from './camera_clamp.js';
 
@@ -147,7 +148,13 @@ function buildGraph(turn) {
   const G = GEOMETRY, stepList = steps(), state = stateAt(turn), changed = changedStepsAt(turn), selected = activeNode();
   const laneWidth = G.LANE_PAD * 2 + (stepList.length - 1) * G.STEP_GAP + G.NODE_W, width = G.LANE_X + laneWidth;
   const allFeatures = featuresInState(state), dispatched = allFeatures.filter((feature) => state[feature.id]);
-  const waveNumbers = [...new Set(dispatched.map((feature) => feature.wave))].sort((a, b) => a - b);
+  const everyWave = [...new Set(dispatched.map((feature) => feature.wave))].sort((a, b) => a - b);
+  const isConcluded = (n) => dispatched.filter((feature) => feature.wave === n).every((feature) => featureStatusAt(feature.id, turn) === 'DONE');
+  // Focus folds the waves already concluded into one line, as long as something is still open (all concluded = show everything)
+  const folding = pipe.focus && everyWave.some((n) => !isConcluded(n));
+  const foldedWaves = folding ? everyWave.filter(isConcluded) : [];
+  const waveNumbers = everyWave.filter((n) => !foldedWaves.includes(n));
+  const folded = foldedWaves.length ? { waves: foldedWaves, features: dispatched.filter((feature) => foldedWaves.includes(feature.wave)).length } : null;
   const lanes = [], nodes = [], edges = [], waves = [], starts = [];
   view.waveMembers = {};
   let y = 0;
@@ -196,7 +203,7 @@ function buildGraph(turn) {
     [orchestrator.x, orchestrator.y, orchestrator.x + G.ORCH_W, orchestrator.y + G.ORCH_H]];
   const bounds = { x0: Math.min(...boxes.map((box) => box[0])), y0: Math.min(...boxes.map((box) => box[1])),
     x1: Math.max(...boxes.map((box) => box[2])), y1: Math.max(height, ...boxes.map((box) => box[3])) + (next.length ? TEASER_HEIGHT : 0) };
-  return { width, height, lanes, nodes, edges, waves, orchestrator, next, nextWave, selected, turn, changedCount: changed.size, bounds };
+  return { width, height, lanes, nodes, edges, waves, orchestrator, next, nextWave, selected, turn, folded, changedCount: changed.size, bounds };
 }
 
 function orchestratorSummary(turn) {
@@ -240,6 +247,15 @@ function StepNode({ node }) {
     <div class="pl-node-top"><span class="pl-node-agent"><span class="pl-dot"></span><span class="pl-node-name">${node.agent}</span></span>${node.tagged ? html`<span class="pl-tag">${node.tag}</span>` : null}</div>
     <div class="pl-node-bottom"><span class="pl-node-status">${node.st}</span>${node.turnClaude ? html`<${ClaudeBadge} source=${node.turnClaude} inherited />` : null}<span class="pl-node-attempts">${node.attempts}</span></div>
   </div>`;
+}
+
+/** "Waves 1-2 concluded": what Focus folded away, one click to bring it back. */
+function FoldedNote({ graph }) {
+  const folded = graph.folded;
+  if (!folded) return null;
+  const first = folded.waves[0], last = folded.waves[folded.waves.length - 1];
+  return html`<button type="button" class="pl-folded mono" onPointerDown=${stopPropagation} onClick=${() => { pipe.focus = false; renderAll(); }}
+    title="Show every wave"><span class="pl-folded-dot"></span>${(first === last ? 'WAVE ' + first : 'WAVES ' + first + '–' + last) + ' · ' + folded.features + ' DONE, FOLDED'} <span class="pl-folded-show">SHOW ▸</span></button>`;
 }
 
 function Diagram({ graph }) {
@@ -309,6 +325,7 @@ function OpenFeatureButton({ slug }) {
 function ListMode({ graph }) {
   return html`<div class="pl-list">
     <div class="pl-list-note"><${WhoSpawnsToggle} /></div>
+    ${graph.folded ? html`<${FoldedNote} graph=${graph} />` : null}
     ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-card' + (lane.quarantined ? ' quarantined' : '')}>
       <div class="pl-card-head" onClick=${() => openFeatureDialog({ feature: lane.id })}><span class="pl-lane-stage">W${lane.wave} · ${lane.stage == null ? 'STAGE ?' : 'STAGE ' + lane.stage}</span><${FeatureLabel} slug=${lane.id} className="pl-lane-id" />
         <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span><${OpenFeatureButton} slug=${lane.id} /></div>
@@ -361,6 +378,7 @@ export function PipelineView() {
   return html`<div class="pl-shell">
     <div class=${'pl-viewport' + (view.dragging ? ' dragging' : '')} ref=${viewportRef} onPointerDown=${beginDrag} onClickCapture=${swallowClickAfterDrag}>
       <${Diagram} graph=${graph} />
+      <${FoldedNote} graph=${graph} />
       <${Toolbar} />
     </div>
     <${Legend} turn=${turn} />

@@ -6,7 +6,7 @@ import { ctx, ui } from './context.js';
 import { renderAll } from '../project_panel.js';
 import { sendResume } from './alert.js';
 
-const SEVERITY_COLOR = { error: '#F06A5E', warning: '#F2B544', info: '#7D838C' };
+const SEVERITY_COLOR = { error: '#F07A6E', warning: '#B3A8FF', info: '#6F6B86' };
 const RECOVER_LABEL = { retry: 'Try again', commit_leftovers: 'Commit leftovers and try again', discard_leftovers: 'Discard leftovers and try again' };
 const KIND_LABEL = { loop: 'loop stopped', turn: 'turn', guard: 'guard', feature: 'feature', launch: 'launch' };
 
@@ -44,7 +44,7 @@ function RecoverButtons({ it }) {
 }
 
 function ErrorItem({ it, neutral }) {
-  const color = neutral ? '#7D838C' : SEVERITY_COLOR[it.severity] || '#7D838C', open = ui.errors.open[it.id] != null ? ui.errors.open[it.id] : it.kind === 'loop';
+  const color = neutral ? '#6F6B86' : SEVERITY_COLOR[it.severity] || '#6F6B86', open = ui.errors.open[it.id] != null ? ui.errors.open[it.id] : it.kind === 'loop';
   return html`<div class="err-item" style=${{ borderLeftColor: color }}>
     <button type="button" class="err-head" aria-expanded=${String(open)} onClick=${() => { ui.errors.open[it.id] = !open; renderAll(); }}>
       <span class="hchev">${open ? '▾' : '▸'}</span>

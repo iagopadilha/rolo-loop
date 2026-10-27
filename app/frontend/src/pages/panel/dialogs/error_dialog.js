@@ -9,7 +9,7 @@ import { sendResume } from '../alert.js';
 import { selectTurn } from '../pipeline_model.js';
 import { openPauseDialog } from './pause_dialog.js';
 
-const SEVERITY_COLOR = { error: '#f85149', warning: '#f5b82e', info: '#7fb2ff' };
+const SEVERITY_COLOR = { error: '#F07A6E', warning: '#B3A8FF', info: '#8AA4FF' };
 const KIND_LABEL = { loop: 'loop stopped', turn: 'turn', guard: 'guard', feature: 'feature', launch: 'launch' };
 const RECOVER_LABEL = { retry: 'Try again', commit_leftovers: 'Commit leftovers and try again', discard_leftovers: 'Discard leftovers and try again' };
 const RECOVER_PRIMARY = ['retry', 'commit_leftovers'];

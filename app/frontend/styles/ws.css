@@ -15,7 +15,7 @@
 .wsd-reason{margin:-4px 0 0;}
 .ws-role-switch{flex:none;}
 .ws-role-tag{cursor:help;}
-.wsd-files{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--amber-line);border-radius:6px;background:var(--amber-bg);font-size:12px;}
+.wsd-files{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--amber-line);border-radius:0;background:var(--amber-bg);font-size:12px;}
 .wsd-other{border-color:var(--line3);background:var(--panel2);}
 .wsd-list{font-size:11px;color:var(--text2);word-break:break-word;}
 .plan-ready-u .plan-ready-files{font-size:11px;color:var(--text2);word-break:break-word;}
