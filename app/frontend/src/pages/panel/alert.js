@@ -50,9 +50,14 @@ export function costNumbers() {
   const cap = isNum(m.max_cost_usd) ? m.max_cost_usd : isNum(limit.max) ? limit.max : null;
   return { spent, cap };
 }
+/** The engine's estimate of the whole run and the limit it suggests (meta.cost_forecast, meta.cost_cap_ladder): absent before the first turn. */
+export function costForecast() {
+  const m = (ctx.state && ctx.state.meta) || {};
+  return { forecast: m.cost_forecast && typeof m.cost_forecast === 'object' ? m.cost_forecast : null, ladder: m.cost_cap_ladder && typeof m.cost_cap_ladder === 'object' ? m.cost_cap_ladder : null };
+}
 const raise = { value: null, error: null, busy: false };
 const usd = (v) => (isNum(v) ? v.toFixed(2) : DASH);
-const defaultRaise = () => { const { cap, spent } = costNumbers(); return String(Math.ceil(((isNum(cap) ? cap : isNum(spent) ? spent : 0) + RAISE_STEP_USD) * 100) / 100); };
+const defaultRaise = () => { const { ladder } = costForecast(); if (ladder && isNum(ladder.suggested)) return String(ladder.suggested); const { cap, spent } = costNumbers(); return String(Math.ceil(((isNum(cap) ? cap : isNum(spent) ? spent : 0) + RAISE_STEP_USD) * 100) / 100); };
 function raiseProblem(raw) {
   const { spent } = costNumbers(), v = Number(raw);
   if (raw === '' || !Number.isFinite(v)) return 'Type the new limit in US$.';
@@ -148,7 +153,11 @@ export function CostCap() {
           onInput=${(e) => { raise.value = e.currentTarget.value; raise.error = null; renderAll(); }} />
         <button type="button" class="btn btn-primary" id="btn-raise-limit" disabled=${raise.busy || !!problem} onClick=${raiseLimit}>Raise the limit and continue</button>
       </div>
-      ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${`Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>
+      ${(() => { const { forecast, ladder } = costForecast(), rungs = ladder ? list(ladder.rungs).filter(isNum) : [];
+        return html`${forecast && isNum(forecast.estimated_total) ? html`<div class="hint">${`The engine estimates about US$ ${usd(forecast.estimated_total)} for the whole run (about US$ ${usd(forecast.per_turn)} per turn, ${forecast.remaining_turns} turn(s) to go).`}</div>` : null}
+          ${rungs.length ? html`<div class="card-row" role="group" aria-label="Quick limits">${rungs.map((rung) => html`<button key=${rung} type="button" class="btn btn-sm" disabled=${raise.busy}
+            onClick=${() => { raise.value = String(rung); raise.error = null; renderAll(); }}>${'US$ ' + rung}</button>`)}</div>` : null}`; })()}
+      ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${isNum((costForecast().ladder || {}).suggested) ? 'The suggested limit covers the estimate with a margin.' : `Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>
     <div class="card-row"><button type="button" class="btn" id="btn-stop-here" onClick=${() => { closeStatusDialog(); toast('The loop stays paused. Use Finish or Back to planning when you are ready.', 'ok'); }}>Stop here</button>
       <span class="hint">the loop stays paused; nothing runs and nothing more is spent</span></div>
   </div>`;

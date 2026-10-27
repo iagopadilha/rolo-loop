@@ -12,7 +12,7 @@ import { copyText } from '../../components/copy.js';
 import { NavbarStatus, NavbarMeter, navbarStatusKey, METER_ATTENTION_PCT } from '../../components/navbar_status.js';
 import { ctx, ui, STATUS, status, loop, pauseRequested, projectName } from './context.js';
 import { renderAll, requestRender, schedulePoll, stopPanel } from '../project_panel.js';
-import { costCapPause, costNumbers, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
+import { costCapPause, costForecast, costNumbers, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
 import { openReopenPlanning } from './reopen_planning.js';
 import { openFinishDialog } from './wrap_up.js';
 import { openWorkspaceDialog } from './workspace_dialog.js';
@@ -115,7 +115,9 @@ function CostMeter() {
   const cap = noRun ? (isNum(planCap) ? planCap : stateCap) : stateCap;
   if (!isNum(spent) && !isNum(cap)) return null;
   const pct = isNum(spent) && isNum(cap) && cap > 0 ? (spent / cap) * 100 : 0;
-  const title = isNum(cap) ? `Spent US$ ${isNum(spent) ? spent.toFixed(2) : DASH} of the US$ ${cap.toFixed(2)} limit of this run.` : 'Spent in this run.';
+  const { forecast } = costForecast();
+  const estimate = forecast && isNum(forecast.estimated_total) ? ` The engine estimates about US$ ${forecast.estimated_total.toFixed(2)} for the whole run${forecast.exceeds_cap ? ', which is above the limit' : ''}.` : '';
+  const title = (isNum(cap) ? `Spent US$ ${isNum(spent) ? spent.toFixed(2) : DASH} of the US$ ${cap.toFixed(2)} limit of this run.` : 'Spent in this run.') + estimate;
   return html`<${NavbarMeter} label="cost" value=${spent} max=${cap} unit="$" attention=${pct >= METER_ATTENTION_PCT} danger=${pct >= 100} title=${title} />`;
 }
 /** Progress meter: verified features of the roadmap. */

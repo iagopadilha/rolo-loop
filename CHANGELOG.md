@@ -6,6 +6,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Changed
 
+- Panel: the cost cap dialog shows the engine's estimate for the whole run and quick limit buttons from `meta.cost_cap_ladder`; the navbar cost meter tooltip carries the estimate.
 - Panel: a "Processes" card in the inspector lists what the engine runs right now (pid, turn, account, since when), built from `state.processes`.
 - Panel: a generic step-by-step list (`components/stepper.js`) for guided flows; the Finish dialog now shows its steps in order (decisions, push, pull request, deliver) with one action at a time.
 - Panel: the turns sit in a slim bar at the bottom of the loop view, with an always-visible "AI decisions" button that opens the dialog; the mouse wheel zooms every diagram (Shift + wheel pans).
