@@ -29,7 +29,7 @@ In `.specs/features/<slug>/`:
 | `regression-baseline.json` | `verifier-flow` (baseline mode) | what the old code did |
 | `regression-new.json` | `verifier-flow` (new mode) | what the new code did |
 
-Same format as the snapshots of `craft regression-diff`: `{"responses": {...}, "tables": {...}, "externalCalls": [...], "logs": [...]}`.
+Same format as the snapshots of `craft regression_diff`: `{"responses": {...}, "tables": {...}, "externalCalls": [...], "logs": [...]}`.
 
 ## What an `RG-xx` case is
 
@@ -74,7 +74,7 @@ spec (+ regression.md) -> gate -> BASELINE -> executor -> verifier (build/lint) 
    - **Principle: go as far as possible.** Do everything you can: baseline of what is covered, refactoring, build, verification and comparison of the covered cases. Only consider stopping when, to close the feature, **only** the gap is left and there is nothing more to do in it. Even then the rule below comes first: a partial gap becomes `not-covered` and the feature continues. Stopping and notifying is for what `TEST-ENVIRONMENT.md` cannot solve even in part (no comparable case at all, or a gap the user marked there as mandatory). The right way not to get here is to close the test environment **at the start** (`SKILL.md`, Phase 2b).
    - **An environment gap that does not prevent the rest** (missing test data, such as an account with no records; a secret missing for only some cases; an e-mail that must not be sent): the case becomes `not-covered:<reason>` in the Baseline and New columns, gets **one line in `VALIDATE.md`** (`- [<slug>] case RG-xx without test data | chose: continue with a partial regression | revert: provide the data and run only that case`) and the feature **continues**. **Never stop the loop for that** (user decision: the headless loop exists so it does not stop for nothing). Before declaring a gap, look for the data: `TEST-ENVIRONMENT.md`, a read of the DEV database, another user or account listed there; never create what `RULES.md` forbids. `VALIDATE.md` goes in the summary, the notification and the PR.
 3. **Executor + verifier** as usual.
-4. **Regression (after the `verifier` gives PASS).** `verifier-flow` with `MODE: new`: runs the same cases on the new code, writes `regression-new.json` and the New column; compares with `"<TOOLKIT>/bin/craft.exe" regression-diff regression-baseline.json regression-new.json` (run in the feature folder). A large drop in counts (rows, calls) is an alert until explained.
+4. **Regression (after the `verifier` gives PASS).** `verifier-flow` with `MODE: new`: runs the same cases on the new code, writes `regression-new.json` and the New column; compares with `"<TOOLKIT>/bin/craft.exe" regression_diff regression-baseline.json regression-new.json` (run in the feature folder). A large drop in counts (rows, calls) is an alert until explained.
    - All `ok` -> `regression=ok`, go to commit.
    - Any `fail` -> `regression=failed`, the feature goes back to `approved` with `note=regression-failed`, the same executor receives the failed `RG-xx` (expected x obtained). `tries` +1; second failure = quarantine. **The baseline is not redone**: it belongs to the old code and remains valid.
 5. **Done.** The summary, `VALIDATE.md` and the PR list per feature: `ok` cases, `not-covered` (with reason) and what failed.
