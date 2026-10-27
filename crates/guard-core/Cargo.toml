@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "guard-core"
 description = "Policy engine of the claude-maestro PreToolUse guard"
 version.workspace = true

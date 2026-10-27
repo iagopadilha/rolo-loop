@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "guard"
 description = "The claude-maestro PreToolUse guard hook"
 version.workspace = true

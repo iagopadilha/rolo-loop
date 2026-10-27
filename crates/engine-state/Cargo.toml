@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "engine-state"
 description = "Typed state of the orchestrator graph: ROADMAP grammar, legal transitions, scheduler, snapshots"
 version.workspace = true
