@@ -74,7 +74,7 @@ impl RepoRegistryService<'_> {
     }
 
     /// Names of the repos some ROADMAP feature changes (`paths=<repo>:...`); empty without a readable ROADMAP.
-    fn read_changed_repo_names(&self, context: &ProjectContext, stored: &[RepoRef]) -> BTreeSet<String> {
+    pub fn read_changed_repo_names(&self, context: &ProjectContext, stored: &[RepoRef]) -> BTreeSet<String> {
         let mut folders: Vec<String> = Vec::new();
         for folder in [context.specs_dir(), Path::new(context.repo_path()).join(".specs").display().to_string()] {
             if !folders.contains(&folder) {

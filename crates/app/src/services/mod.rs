@@ -34,6 +34,7 @@ pub mod decisions;
 pub mod roadmap_view;
 pub mod spec_file;
 pub mod turns;
+pub mod workspace;
 pub mod engine_script;
 pub mod error_center;
 pub mod error_event_sync;
