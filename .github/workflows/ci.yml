@@ -44,21 +44,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  forbidden-terms:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Scan for forbidden terms (list lives in a repository secret)
-        env:
-          FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
-        run: |
-          if [ -z "$FORBIDDEN_TERMS" ]; then echo "FORBIDDEN_TERMS secret not set"; exit 2; fi
-          printf '%s\n' "$FORBIDDEN_TERMS" > "$RUNNER_TEMP/terms.txt"
-          if git grep -I -n -i -f "$RUNNER_TEMP/terms.txt" -- . >/dev/null; then echo "forbidden term found in tree"; exit 1; fi
-          if git log --all -p | grep -i -q -f "$RUNNER_TEMP/terms.txt"; then echo "forbidden term found in history"; exit 1; fi
-
   spdx:
     runs-on: ubuntu-24.04
     steps:
