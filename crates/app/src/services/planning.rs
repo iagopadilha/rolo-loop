@@ -44,7 +44,7 @@ const PLANNING_CREDENTIALS_NOTE: &str = "[Test credentials: the file .specs/proj
 const PLANNING_MCP_NOTE: &str = "\n[MCP read access: besides the files you may use ONLY these read tools: {}. Use them to find sample data (real ids, routes, payload shapes) for TEST-ENVIRONMENT.md and FLOWS.md and to check how the data is built. Never write through them. Never copy a secret, token or personal data from a result into a document.]";
 /// guard profile of the PreToolUse hook: Write/Edit only inside .specs/ (extra layer, deterministic)
 pub const PLANNING_HOOK_PROFILE: &str = "planning";
-const GUARD_IGNORED_PATHS: [&str; 5] = [".git", "node_modules", ".specs/project/loop/internal", ".specs/project/loop/json/MONITOR.json", ".specs/.trash"];
+pub const GUARD_IGNORED_PATHS: [&str; 5] = [".git", "node_modules", ".specs/project/loop/internal", ".specs/project/loop/json/MONITOR.json", ".specs/.trash"];
 const GUARD_NOTE_FILES_SHOWN: usize = 8;
 const ROLE_USER: &str = "user";
 const ROLE_AI: &str = "ai";

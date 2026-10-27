@@ -42,6 +42,7 @@ pub mod error_center;
 pub mod error_event_sync;
 pub mod feature_detail;
 pub mod folder_picker;
+pub mod follow_up;
 pub mod guard_events;
 pub mod loop_control;
 pub mod loop_panel;
