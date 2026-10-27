@@ -34,3 +34,6 @@ Cargo.lock -diff
 fixtures/** linguist-generated
 cases/** linguist-generated
 docs/media/** linguist-documentation
+
+# The panel front end is the reference's, byte for byte (its files keep their line endings; app/frontend.sha256 pins them)
+app/frontend/** -text

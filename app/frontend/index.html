@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The server replaces the content below with the session token. The client uses the first meta with a real value. -->
+<meta name="monitor-token" content="__MONITOR_TOKEN__">
+<title>Claude Maestro</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/styles/base.css">
+<link rel="stylesheet" href="/static/styles/panel.css">
+<link rel="stylesheet" href="/static/styles/components.css">
+<link rel="stylesheet" href="/static/styles/newloop.css">
+<link rel="stylesheet" href="/static/styles/hub.css">
+<link rel="stylesheet" href="/static/styles/guard.css">
+<link rel="stylesheet" href="/static/styles/diagram.css">
+<link rel="stylesheet" href="/static/styles/composer.css">
+<link rel="stylesheet" href="/static/styles/roadmap.css">
+<link rel="stylesheet" href="/static/styles/ws.css">
+<link rel="stylesheet" href="/static/styles/inspector.css">
+<link rel="stylesheet" href="/static/styles/polish.css">
+<link rel="stylesheet" href="/static/styles/deps.css">
+<link rel="stylesheet" href="/static/styles/specs_view.css">
+<link rel="stylesheet" href="/static/styles/chrome.css">
+<link rel="stylesheet" href="/static/styles/ux_header.css">
+<link rel="stylesheet" href="/static/styles/navbar.css">
+<link rel="stylesheet" href="/static/styles/ux_history.css">
+<link rel="stylesheet" href="/static/styles/ux_errors.css">
+<link rel="stylesheet" href="/static/styles/ux_deps.css">
+<link rel="stylesheet" href="/static/styles/ux_specs.css">
+<link rel="stylesheet" href="/static/styles/zones.css">
+<link rel="stylesheet" href="/static/styles/pipeline.css">
+<link rel="stylesheet" href="/static/styles/big_dialog.css">
+<link rel="stylesheet" href="/static/styles/planning_layout.css">
+<link rel="stylesheet" href="/static/styles/subprojects.css">
+<link rel="stylesheet" href="/static/styles/decisions.css">
+<link rel="stylesheet" href="/static/styles/wrap_up.css">
+<link rel="stylesheet" href="/static/styles/settings.css">
+</head>
+<body>
+<div id="root"><noscript>This panel needs JavaScript.</noscript></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<!-- HUB (/) = Hub component (src/pages/hub.js); PANEL (/p/<id>/) = Panel component (src/pages/panel/app.js: global_zone.js + loop_zone.js) -->
+
+<script type="importmap">
+{ "imports": {
+  "preact": "/static/vendor/preact.module.js",
+  "preact/hooks": "/static/vendor/hooks.module.js",
+  "htm": "/static/vendor/htm.module.js",
+  "htm/preact": "/static/vendor/htm-preact.module.js"
+} }
+</script>
+<script type="module" src="/static/src/main.js"></script>
+</body>
+</html>

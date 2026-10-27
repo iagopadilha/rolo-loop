@@ -1,0 +1,64 @@
+/* Start dialog (start_loop_dialog.js, classes sl-) and the Plan & files dialog (plan_files_dialog.js, classes pf-). Tokens of base.css only.
+   The generic nl-box / nl-msg / nl-verdict / cmd-row rules live in panel.css and are reused. */
+
+/* ---- Start dialog ---- */
+.sl-dlg .dlg-body{gap:14px;}
+.sl{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.sl-sec{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.sl-h{margin:0;font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.sl-kv{display:grid;grid-template-columns:minmax(150px,max-content) 1fr;gap:4px 18px;margin:0;font-size:12px;}
+.sl-kv dt{color:var(--muted);}
+.sl-kv dd{margin:0;color:var(--text);min-width:0;overflow-wrap:anywhere;}
+.sl-note{color:var(--muted);font-size:11px;}
+.sl-bad{color:var(--red-text);}
+.sl-muted{font-size:12px;color:var(--muted);line-height:1.5;}
+.plan-rm-settings{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+.sl-models{font:500 12px var(--mono);color:var(--text2);padding:6px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel0);}
+.sl-choice{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel0);cursor:pointer;line-height:1.4;}
+.sl-choice input{width:16px;height:16px;margin-top:2px;accent-color:var(--amber);flex:none;}
+.sl-choice b{display:block;font-size:12px;color:var(--text);}
+.sl-explain{display:block;margin-top:2px;font-size:11px;color:var(--muted);line-height:1.5;}
+.sl-repos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+.sl-repo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;}
+.sl-repo-name{font-weight:600;color:var(--text);}
+.sl-status{display:flex;flex-direction:column;gap:10px;}
+.sl-status:empty{display:none;}
+.sl-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
+/* ---- Plan & files dialog ---- */
+.pf{display:flex;height:100%;min-height:0;gap:0;}
+.pf-side{width:340px;flex:none;min-height:0;display:flex;flex-direction:column;gap:6px;padding-right:12px;border-right:1px solid var(--line);overflow:auto;}
+.pf-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;padding-left:16px;min-height:0;}
+.pf-doc{flex:1;min-height:0;overflow:auto;}
+.pf-note{flex:none;border-top:1px solid var(--line);padding-top:8px;font-size:12px;color:var(--muted);line-height:1.5;}
+.pf-status{font-size:11px;color:var(--muted);min-height:16px;}
+.pf-status.is-bad{color:var(--red-text);}
+.pf-empty{color:var(--muted);padding:8px 2px;font-size:12px;line-height:1.5;}
+.pf-sec{margin:8px 0 2px;font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.pf-stage{display:flex;flex-direction:column;gap:2px;}
+.pf-stage-h,.pf-feat-h,.pf-file{display:flex;align-items:center;gap:6px;width:100%;text-align:left;background:none;border:0;border-radius:6px;color:var(--text);font:inherit;padding:4px 6px;cursor:pointer;min-width:0;}
+.pf-stage-h{font-weight:600;font-size:12px;}
+.pf-stage-h:hover,.pf-feat-h:hover,.pf-file:hover{background:var(--hover-wash2);}
+.pf-file.is-sel{background:var(--amber-bg);color:var(--amber-soft);}
+.pf-caret{width:12px;flex:none;color:var(--muted);}
+.pf-stage-n{margin-left:auto;font:400 10px var(--mono);color:var(--muted);white-space:nowrap;}
+.pf-feats{display:flex;flex-direction:column;gap:1px;padding-left:14px;}
+.pf-feat-h{flex-wrap:wrap;font-size:12px;}
+.pf-feat-title{font-weight:500;min-width:0;overflow-wrap:anywhere;}
+.pf-slug{font:400 10px var(--mono);color:var(--muted);}
+.pf-feat-status{margin-left:auto;font-size:10px;color:var(--text2);border:1px solid var(--line3);border-radius:999px;padding:0 7px;white-space:nowrap;}
+.pf-files{display:flex;flex-direction:column;gap:1px;padding-left:18px;}
+.pf-file{font-size:12px;flex-wrap:wrap;color:var(--text2);}
+.pf-file-label{font-weight:500;}
+.pf-file-name{font:400 10px var(--mono);color:var(--muted);}
+.pf-group{display:flex;flex-direction:column;gap:1px;}
+
+/* ---- Plan & files tab (GLOBAL column) ---- */
+.pf-sum{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+.pf-sum-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text2);}
+.pf-sum-link{background:none;border:0;padding:0;color:var(--amber);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;}
+.pf-sum-stage{display:flex;justify-content:space-between;gap:8px;font-size:12px;}
+.pf-sum-stage .pf-stage-n{white-space:normal;text-align:right;}
+
+/* ---- trail: AI roadmap stays visually apart from the start action ---- */
+.tr-action .tr-ai-sep{margin-left:14px;padding-left:14px;border-left:1px solid var(--line3);border-radius:0 6px 6px 0;}

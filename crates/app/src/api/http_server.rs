@@ -267,7 +267,8 @@ impl AppHttpServer {
         let Ok(bytes) = std::fs::read(Path::new(&self.frontend_dir).join("index.html")) else {
             return Response::error(404, "frontend/index.html does not exist yet");
         };
-        let html = String::from_utf8_lossy(&bytes);
+        // read as text, like the reference does: universal newlines (CRLF and a lone CR become LF)
+        let html = String::from_utf8_lossy(&bytes).replace("\r\n", "\n").replace('\r', "\n");
         Response::bytes(200, inject_token_into_page(&html, &self.token).into_bytes(), "text/html; charset=utf-8")
     }
 

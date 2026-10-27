@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TARGET = os.environ.get("CARGO_TARGET_DIR") or os.path.join(os.path.dirname(HERE), "target")
 DEFAULT_RUST = os.path.join(TARGET, "debug", "harness.exe")
 VOLATILE_KEYS = {"now", "at", "t", "opened_at", "last_opened_at", "started_at", "finished_at", "updated_at", "created_at", "pid", "version", "modified_at",
-                 "seconds_until_shutdown", "shutdown_in_s", "idle_in_s", "age_seconds", "read_at", "closed_at", "checked_at", "stamp", "order"}
+                 "validated_at", "seconds_until_shutdown", "shutdown_in_s", "idle_in_s", "age_seconds", "read_at", "closed_at", "checked_at", "stamp", "order"}
 SKIP_PREFIXES = ()
 
 CASES = []  # (name, method, path, body, token)
@@ -101,6 +101,10 @@ def cases():
     case("get:unknown-project", "GET", "/p/nope/api/state")
     case("get:unknown-route", "GET", "/p/{pid}/api/nothing-here")
     case("method-not-allowed", "DELETE", prefix + "state")
+    for name, path in (("hub-page", "/"), ("project-page", "/p/{pid}/"), ("project-page-no-slash", "/p/{pid}"), ("static-main", "/static/src/main.js"),
+                       ("static-css", "/static/styles/base.css"), ("static-vendor", "/static/vendor/preact.module.js"), ("static-missing", "/static/nope.js"),
+                       ("static-escape", "/static/..%5C..%5Charness.py"), ("static-folder", "/static/src")):
+        case("page:" + name, "GET", path)
     case("no-token", "POST", prefix + "note", {"text": "x"}, token=False)
     case("bad-token-hub", "POST", "/api/app/settings", {"key": "loop_isolation", "value": False, "confirm": True}, token=False)
     # ---- writes (same order on both)
@@ -224,7 +228,11 @@ class Side:
             request.add_header("X-Monitor-Token", self.token)
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
-                return response.status, json.loads(response.read().decode("utf-8") or "null")
+                raw = response.read().decode("utf-8")
+                try:
+                    return response.status, json.loads(raw or "null")
+                except ValueError:
+                    return response.status, raw
         except urllib.error.HTTPError as error:
             raw = error.read().decode("utf-8")
             try:
@@ -250,6 +258,7 @@ def normalise(value, side):
         text = text.replace("\\", "/")
         text = text.replace(side.project_id, "<PID>")
         text = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:<PORT>", text)
+        text = re.sub(r'(name="monitor-token" content=")[0-9a-f]{64}', lambda m: m.group(1) + "<TOKEN>", text)
         return text
     return value
 
@@ -286,7 +295,7 @@ def main():
     write(os.path.join(skill, "SKILL.md"), "---" + chr(10) + "name: orchestrator" + chr(10) + "---" + chr(10) + "fake" + chr(10))
     clean_env["LOOP_SKILL_DIR"] = skill
     reference = Side("reference", os.path.join(scratch, "ref"), [sys.executable, PY_HARNESS], clean_env)
-    rust = Side("rust", os.path.join(scratch, "rust"), [options.harness], clean_env)
+    rust = Side("rust", os.path.join(scratch, "rust"), [options.harness], dict(clean_env, LOOP_REPO_ROOT=os.path.dirname(HERE)))
     failures, total = [], 0
     try:
         reference.start(47811)
