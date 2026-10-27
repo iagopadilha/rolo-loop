@@ -140,3 +140,28 @@ mod tests {
         assert_eq!(sum_usage_tokens(&json!({"x": 9})), None);
     }
 }
+
+/// Python `str(value or "")` of a JSON value.
+pub fn text_or_empty(value: Option<&Value>) -> String {
+    match value {
+        Some(v) if engine_state::notify_truthy(Some(v)) => match v {
+            Value::String(s) => s.clone(),
+            Value::Bool(true) => "True".into(),
+            other => pycompat::json::py_json_dumps(other, false),
+        },
+        _ => String::new(),
+    }
+}
+
+/// `redact_credentials(value, limit)` for a value that may be missing or not text.
+pub fn redact_value(value: Option<&Value>, limit: Option<usize>) -> String {
+    redact_credentials(&text_or_empty(value), limit)
+}
+
+/// `to_number(value)` keeping the JSON number as it was read (a whole number stays whole): `null` for anything else.
+pub fn number_value(value: Option<&Value>) -> Value {
+    match value {
+        Some(v) if v.is_number() => v.clone(),
+        _ => Value::Null,
+    }
+}

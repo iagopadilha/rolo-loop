@@ -4,7 +4,7 @@
 use super::claude_accounts::build_turn_claude;
 use super::App;
 use crate::domain::project::ProjectContext;
-use crate::repositories::loop_read_formatting::{ms_to_seconds, redact_credentials, to_number, to_text_list};
+use crate::repositories::loop_read_formatting::{ms_to_seconds, redact_credentials, to_text_list};
 use engine_state::loop_state;
 use pycompat::json::py_json_dumps;
 use serde_json::{json, Map, Value};
@@ -75,7 +75,7 @@ impl TurnService<'_> {
             let status = if Some(number) == running_number { Some(TURN_STATUS_RUNNING.to_string()) } else { get_turn_status(&record, &snapshot_loop) };
             let mut row = Map::new();
             row.insert("n".into(), json!(number));
-            row.insert("cost_usd".into(), json!(to_number(record.get("total_cost_usd").unwrap_or(&Value::Null))));
+            row.insert("cost_usd".into(), crate::repositories::loop_read_formatting::number_value(record.get("total_cost_usd")));
             row.insert("duration_s".into(), json!(ms_to_seconds(record.get("duration_ms").unwrap_or(&Value::Null))));
             row.insert("status".into(), json!(status));
             row.insert("feature".into(), json!(to_text_list(snapshot_loop.get("feature").unwrap_or(&Value::Null))));

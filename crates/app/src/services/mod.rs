@@ -24,6 +24,7 @@ pub mod claude_accounts;
 pub mod claude_call_log;
 pub mod claude_jobs;
 pub mod code_inventory;
+pub mod agent_history;
 pub mod app_settings_service;
 pub mod context_block;
 pub mod decisions;
