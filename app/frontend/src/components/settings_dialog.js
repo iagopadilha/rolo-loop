@@ -6,9 +6,10 @@ import { html, useState, useEffect } from '../util/preact.js';
 import { appApi } from '../api/api_client.js';
 import { toast } from './toast.js';
 import { openDialog } from './dialog.js';
-import { McpServersSection } from './mcp_servers_section.js';
+import { SkillsToolsSection } from './skills_tools_section.js';
 import { LogoMark } from './logo.js';
 
+const OWN_SECTION_KEYS = ['loop_extra_skills']; // edited in the "Skills and tools" section, not as a plain row
 const SAVE_TIMEOUT_MS = 15000;
 const RESTART_TEXT = 'Takes effect after restarting the app.';
 const NEXT_RUN_TEXT = 'Applies to the next claude run.';
@@ -20,7 +21,7 @@ const SECTIONS = [
   { id: 'model', label: 'Model and command', sub: 'which claude runs the loop', note: 'Takes effect after restarting the app', keys: ['orchestrator_model', 'claude_binary', 'claude_fallback_binaries'] },
   { id: 'limits', label: 'Limits', sub: 'how much the app may do and wait', note: 'Most limits take effect after restarting the app', keys: ['max_parallel_maps', 'idle_hours', 'inventory_giant_lines', 'inventory_giant_kb', 'loop_max_hours'] },
   { id: 'network', label: 'Network and files', sub: 'where agents may reach and write', note: 'Applies to every project', keys: ['output_dir', 'egress_hosts', 'egress_never', 'egress_builtin_read', 'env_sources'] },
-  { id: 'mcp', label: 'MCP servers', sub: 'tools the isolated runs may load', note: 'Applies to the next claude run', keys: [] },
+  { id: 'mcp', label: 'Skills and tools', sub: 'what every agent of the loop receives', note: 'Applies to the next claude run', keys: [] },
   { id: 'about', label: 'About this installation', sub: 'read only', note: 'Where the app keeps its files', keys: [] },
 ];
 const money = (n) => (typeof n === 'number' ? '$' + n.toFixed(2) : '—');
@@ -130,7 +131,7 @@ export function SettingsBody() {
   if (!data) return html`<div class="nl-msg" role="status"><div class="spinner" aria-hidden="true" /><span>loading settings…</span></div>`;
   const replace = (saved) => setData((old) => Object.assign({}, old, { settings: old.settings.map((s) => (s.key === saved.key ? saved : s)) }));
   const known = new Set(SECTIONS.flatMap((x) => x.keys));
-  const itemsOf = (section) => data.settings.filter((item) => section.keys.includes(item.key) || (section.id === 'network' && !known.has(item.key)));
+  const itemsOf = (section) => data.settings.filter((item) => !OWN_SECTION_KEYS.includes(item.key) && (section.keys.includes(item.key) || (section.id === 'network' && !known.has(item.key))));
   const section = SECTIONS.find((x) => x.id === current) || SECTIONS[0];
   const items = itemsOf(section);
   const badge = (x) => {
@@ -150,7 +151,7 @@ export function SettingsBody() {
       <h2 class="set-h">${section.label} <span class="set-h-sub">${section.sub}</span></h2>
       <span class="set-kicker mono">${section.note.toUpperCase()}</span>
       ${items.length ? html`<div class="set-list">${items.map((item) => html`<${SettingRow} key=${item.key} item=${item} caveman=${data.caveman} onSaved=${replace} />`)}</div>` : null}
-      ${section.id === 'mcp' ? html`<${McpServersSection} />` : null}
+      ${section.id === 'mcp' ? html`<${SkillsToolsSection} />` : null}
       ${section.id === 'about' ? html`<${InfoRows} info=${data.info} />` : null}
     </div>
   </div>`;

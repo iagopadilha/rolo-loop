@@ -146,6 +146,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/api/app/settings` | yes | yes |
 | `GET` | `/api/app/settings/mcp-servers` | no | no |
 | `POST` | `/api/app/settings/mcp-servers` | yes | yes |
+| `GET` | `/api/app/settings/skills` | no | no |
 
 The response shapes are the ones the panel front end in `app/frontend/` reads; they are pinned by `tools/api_diff.py`, which compares every route with the reference implementation.
 

@@ -18,6 +18,8 @@ pub const LIST: &str = "list";
 pub const CHOICE: &str = "choice";
 const TEXT_MAX_LENGTH: usize = 500;
 const LIST_MAX_ITEMS: usize = 50;
+/// `loop_extra_skills` takes the whole skill list of a machine (the Settings screen lists at most this many).
+const SKILLS_MAX_ITEMS: usize = 400;
 pub const CAVEMAN_NOT_INSTALLED_NOTE: &str =
     "Not installed: no SessionStart hook that mentions caveman was found in your Claude settings (~/.claude/settings.json), so there is nothing to carry.";
 pub const CAVEMAN_RECOMMENDATION: &str = "Off by default: loop output is mostly machine-read lines and files, so terse replies save little. Turn it on to measure.";
@@ -162,8 +164,9 @@ fn read_list_value(definition: &SettingDefinition, value: &Value) -> Result<Valu
             items.push(text);
         }
     }
-    if items.len() > LIST_MAX_ITEMS {
-        return Err(invalid_setting(format!("{} accepts at most {LIST_MAX_ITEMS} items", definition.key)));
+    let max_items = if definition.key == "loop_extra_skills" { SKILLS_MAX_ITEMS } else { LIST_MAX_ITEMS };
+    if items.len() > max_items {
+        return Err(invalid_setting(format!("{} accepts at most {max_items} items", definition.key)));
     }
     if definition.key == "loop_extra_skills" {
         for name in &items {
@@ -336,8 +339,11 @@ mod tests {
             "env_sources item 1 (relative/.env): use a full path (or one that starts with ~)"
         );
         assert!(validate_setting_value(&def_of("env_sources"), &json!(["C:\\a\\.env", "~/x/.env"])).is_ok());
-        let many: Vec<Value> = (0..51).map(|i| json!(format!("s{i}"))).collect();
-        assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(many)).unwrap_err().message, "loop_extra_skills accepts at most 50 items");
+        let many: Vec<Value> = (0..401).map(|i| json!(format!("s{i}"))).collect();
+        assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(many)).unwrap_err().message, "loop_extra_skills accepts at most 400 items");
+        let fifty_one: Vec<Value> = (0..51).map(|i| json!(format!("s{i}"))).collect();
+        assert!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(fifty_one.clone())).is_ok());
+        assert_eq!(validate_setting_value(&def_of("egress_hosts"), &Value::Array(fifty_one)).unwrap_err().message, "egress_hosts accepts at most 50 items");
     }
 
     #[test]

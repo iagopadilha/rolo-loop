@@ -10,13 +10,24 @@ const TIMEOUT_MS = 15000;
 const NONE_ALLOWED_HINT = 'Loops cannot use any MCP server until you allow one.';
 const SOURCE_TEXT = { user: 'your Claude config', project: 'this project', '.mcp.json': 'project .mcp.json', plugin: 'a plugin', permissions: 'Claude permissions', manual: 'added by name' };
 const sourceText = (sources) => (sources || []).map((s) => SOURCE_TEXT[s] || s).join(', ');
-const toRow = (r) => ({ name: r.name, sources: r.sources || [], defined: !!r.defined, saved: !!r.saved, allow: !!r.allow, kind: r.kind === 'sql' ? 'sql' : 'other', production: !!r.production, read_only: !!r.read_only });
+const toRow = (r) => ({ name: r.name, sources: r.sources || [], defined: !!r.defined, saved: !!r.saved, allow: !!r.allow, kind: r.kind === 'sql' ? 'sql' : 'other', production: !!r.production, read_only: !!r.read_only, prefix: r.prefix || '', tools: r.tools || [] });
 const cleanKey = (row) => ({ allow: row.allow, kind: row.kind, production: row.production, read_only: row.read_only });
 const isDefault = (row) => !row.allow && row.kind === 'other' && !row.production && !row.read_only;
 const extraLines = (text) => String(text).split('\n').map((line) => line.trim()).filter(Boolean);
 const snapshot = (rows, extra) => JSON.stringify([rows.filter((r) => r.saved || !isDefault(r)).map((r) => [r.name, cleanKey(r)]), extraLines(extra)]);
 
-function ServerRow({ row, index, disabled, onChange }) {
+const NO_TOOLS_TEXT = 'Tools cannot be listed: the app does not start servers, it only knows tool names from your Claude permissions and the patterns below.';
+const patternOf = (row, tool) => 'mcp__' + row.prefix + '__' + tool;
+
+/** One box per known tool: ticks add or remove the pattern `mcp__<server>__<tool>` in the extra patterns. With the whole server allowed they are all on. */
+function ToolList({ row, index, disabled, patterns, onTool }) {
+  if (!row.tools.length) return html`<div class="hint sk-notools">${NO_TOOLS_TEXT}</div>`;
+  return html`<ul class="sk-tools" aria-label=${'Tools of ' + row.name}>${row.tools.map((tool) => html`<li key=${tool}><label class="nl-check" for=${'mcp-' + index + '-t-' + tool}>
+      <input type="checkbox" id=${'mcp-' + index + '-t-' + tool} checked=${row.allow || patterns.has(patternOf(row, tool))} disabled=${disabled || row.allow}
+        onChange=${(e) => onTool(patternOf(row, tool), e.currentTarget.checked)} /><span class="mono">${tool}</span></label></li>`)}</ul>`;
+}
+
+function ServerRow({ row, index, disabled, patterns, onTool, onChange }) {
   const id = 'mcp-' + index;
   const set = (patch) => onChange(Object.assign({}, row, patch));
   return html`<li class="mcp-row" data-server=${row.name}>
@@ -31,7 +42,8 @@ function ServerRow({ row, index, disabled, onChange }) {
         onChange=${(e) => set({ production: e.currentTarget.checked })} /><span>Production</span></label>
       <label class="nl-check" for=${id + '-ro'}><input type="checkbox" id=${id + '-ro'} checked=${row.read_only} disabled=${disabled}
         onChange=${(e) => set({ read_only: e.currentTarget.checked })} /><span>Read-only</span></label>
-    </div></li>`;
+    </div>
+    <${ToolList} row=${row} index=${index} disabled=${disabled} patterns=${patterns} onTool=${onTool} /></li>`;
 }
 
 export function McpServersSection() {
@@ -50,10 +62,12 @@ export function McpServersSection() {
     const project = projectIdFromUrl();
     appApi.get('settings/mcp-servers' + (project ? '?project=' + encodeURIComponent(project) : ''), TIMEOUT_MS).then(load).catch((e) => setError(e.message));
   }, []);
-  if (error && !rows) return html`<section class="set-row"><div class="nl-err" role="alert">Could not read the MCP servers: ${error}</div></section>`;
-  if (!rows) return html`<section class="set-row"><div class="nl-msg" role="status"><div class="spinner" aria-hidden="true" /><span>loading MCP servers…</span></div></section>`;
+  if (error && !rows) return html`<div class="sk-group"><div class="nl-err" role="alert">Could not read the MCP servers: ${error}</div></div>`;
+  if (!rows) return html`<div class="sk-group"><div class="nl-msg" role="status"><div class="spinner" aria-hidden="true" /><span>loading MCP servers…</span></div></div>`;
   const changed = snapshot(rows, extra) !== saved;
   const nothingAllowed = !rows.some((r) => r.allow) && extraLines(extra).length === 0;
+  const patterns = new Set(extraLines(extra));
+  const onTool = (pattern, on) => { const lines = extraLines(extra).filter((l) => l !== pattern); setExtra((on ? lines.concat([pattern]) : lines).join('\n')); };
   const update = (index, row) => setRows((old) => old.map((r, i) => (i === index ? row : r)));
   const add = (event) => {
     event.preventDefault();
@@ -71,13 +85,13 @@ export function McpServersSection() {
       toast('MCP servers saved. Applies to the next claude run.', 'ok');
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
-  return html`<section class="set-row mcp-section" id="set-mcp" aria-labelledby="set-mcp-title">
-    <div class="set-head"><h3 class="set-label" id="set-mcp-title">MCP servers</h3></div>
-    <p class="set-desc">Tick the servers a loop may use. Type <em>Database</em> makes the guard inspect every statement; <em>Production</em> means writes are
+  return html`<div class="sk-group mcp-section" id="set-mcp">
+    <h4 class="sk-title" id="set-mcp-title">MCP servers and tools</h4>
+    <p class="set-desc">Received by every agent of the loop. Tick the servers a loop may use; a ticked server gives all its tools, otherwise tick single tools. Type <em>Database</em> makes the guard inspect every statement; <em>Production</em> means writes are
       never allowed and only the orchestrator and planning reach it; <em>Read-only</em> blocks write tools. Found on this machine: your Claude config, the project
       <span class="mono">.mcp.json</span> and enabled plugins. A claude.ai connector cannot be found: add it by name below.</p>
     ${nothingAllowed ? html`<div class="nl-box mcp-none" id="mcp-none" role="status">${NONE_ALLOWED_HINT}</div>` : null}
-    ${rows.length ? html`<ul class="mcp-list" aria-label="MCP servers">${rows.map((row, i) => html`<${ServerRow} key=${row.name} row=${row} index=${i} disabled=${busy} onChange=${(r) => update(i, r)} />`)}</ul>`
+    ${rows.length ? html`<ul class="mcp-list" aria-label="MCP servers">${rows.map((row, i) => html`<${ServerRow} key=${row.name} row=${row} index=${i} disabled=${busy} patterns=${patterns} onTool=${onTool} onChange=${(r) => update(i, r)} />`)}</ul>`
       : html`<div class="hint">No MCP server was found on this machine.</div>`}
     <form class="set-edit mcp-add" onSubmit=${add}>
       <label class="sr-only" for="mcp-add-name">Server name</label>
@@ -92,5 +106,5 @@ export function McpServersSection() {
     ${notes.map((n, i) => html`<div class="hint set-note" key=${i}>${n}</div>`)}
     ${error ? html`<div class="nl-err" role="alert">${error}</div>` : null}
     <div class="set-edit"><button type="button" class="btn btn-sm btn-primary" id="mcp-save" disabled=${busy || !changed} onClick=${save}>Save MCP servers</button></div>
-  </section>`;
+  </div>`;
 }
