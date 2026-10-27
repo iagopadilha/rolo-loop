@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Typed state of the orchestrator graph and the pure parts of the engine around it.
 
+pub mod access_grant;
 pub mod access_report;
 pub mod access_settings;
 pub mod app_ctx;
@@ -20,6 +21,7 @@ pub mod credential_check;
 pub mod decisions;
 pub mod delivery;
 pub mod detect_setup;
+pub mod dev_baseline;
 pub mod e2e_evidence;
 pub mod egress_proxy;
 pub mod email;

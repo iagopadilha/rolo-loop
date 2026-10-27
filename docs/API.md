@@ -172,6 +172,12 @@ These fields are added to the state payload (feature `live-status-and-notices`).
 | `now` | `{running, turn, label, started_at, pid, claude, claude_account, lanes: [{feature, name, step, stage, stage_title}]}` | The "running now" strip built from `processes` and the roadmap view. `{running: false, lanes: []}` when idle. |
 | `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `picker_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
 
+The state payload also carries the permissions journal (feature `e2e-dev-baseline`), read-only:
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit` or `baseline`; `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Nothing in the panel writes it: grants come from `harness grant` / `harness baseline` and the engine function `grant_access`. |
+
 Planning gates (`/api/pipeline` and the readiness routes) also change:
 
 - The `ready` gate carries `problems` and `warnings` as separate lists; `items` keeps both, as before. When a loop is running with an approved plan, a stale readiness result no longer turns the gate red (`approved_running: true`).

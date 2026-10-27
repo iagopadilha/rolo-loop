@@ -40,6 +40,28 @@ If essential data is missing (how to authenticate, which app, success criterion)
 - **Clean everything up:** close the browser, shut down only what you started, remove only the test data you created.
 - **Never `PASS` without having run.** If it did not start, did not authenticate or the browser did not open: `UNVERIFIED`.
 
+## Call forms the guard accepts
+
+<!-- BEGIN call-forms (generated from the guard's rule data by `cargo test -p guard-core call_forms`; do not edit by hand) -->
+### How the E2E must call things (forms the guard accepts)
+
+Most guard refusals in an E2E run are about HOW a call is written, not about a missing permission. Write each call in the form below the first time.
+
+- **Not this** (call form, `egress-host`): a `curl` whose URL is built in a sub-shell, read from a file or held in a variable with another name.
+  **This:** write the URL in the command (`curl http://localhost:5000/health`) or use a variable named `*_URL / *_HOST / *_BASE` that is defined in `.specs/project/.env.test` (`curl $API_URL/health`).
+- **Not this** (call form, `egress-host`): a wrapper function or script that forwards its arguments (`call() { curl "$@"; }`, `$*`), because the URL is no longer in the command.
+  **This:** call `curl` directly in every command, with the URL or the variable written in that command.
+- **Not this** (refused on purpose, `egress-tamper`): `python -S`, `python -E`, `python -I`: they skip the preload the loop's network layer depends on.
+  **This:** run the script as `python script.py` (or `python -c '...'`) without those flags.
+- **Not this** (call form, `egress-tamper`): `playwright-cli run-code --filename x.js` when the file does not exist yet (written in the same call), because the guard must read it first.
+  **This:** write the script file in one call and run it in a LATER call (`playwright-cli run-code --filename=<worktree>/e2e/step.js`), or pass the code inline.
+- **Not this** (call form, `repo-only`): a write, or a git command, from a folder that is not one of the loop's worktrees (for example the parent folder of the worktrees).
+  **This:** run from inside the worktree and keep the evidence and scripts in it.
+- **Not this** (call form, Claude Code): a token or password written in the command (`curl -H "Authorization: Bearer eyJ..."`).
+  **This:** let the test runner set it: `"<TOOLKIT>/bin/craft.exe" testenv exec --project <root> '<command>'` puts it in an environment variable, and the command sends `-H "Authorization: Bearer $JWT"`; never write the value.
+- **Network list:** only `localhost` and the hosts of `.specs/project/NETWORK.json` are reachable; a host that is not listed is `UNVERIFIED` with the host named in `NOTES`, never a reason to try another client.
+<!-- END call-forms -->
+
 ## Monorepo and context
 
 - No `SUBPROJECT:` line in the prompt = nothing in this section changes: work as before.
