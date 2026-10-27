@@ -5,6 +5,7 @@ mod access_cmd;
 mod demo_cmd;
 mod doctor_cmd;
 mod forward;
+mod grant_cmd;
 mod install_cmd;
 mod paths;
 mod serve_cmd;
@@ -27,6 +28,10 @@ enum Command {
     Check(forward::Forwarded),
     /// Diagnostics: skill, guard, claude, toolkit, notify channels (--access: what a loop session can reach)
     Doctor(doctor_cmd::Args),
+    /// The granted E2E baseline: localhost plus the development hosts YOU list, production left denied (dry run unless --write)
+    Baseline(grant_cmd::BaselineArgs),
+    /// Releases one thing the E2E needs (a network entry or a higher cost limit) and journals it
+    Grant(grant_cmd::GrantArgs),
     /// Writes ~/.loop-harness/config.json so the skill finds the app
     Install(install_cmd::Args),
     /// The panel on a fake project with mocked, moving loop data (never calls claude)
@@ -86,6 +91,8 @@ fn main() {
         Command::Doctor(args) => doctor_cmd::run(args),
         Command::Install(args) => install_cmd::run(args),
         Command::Paths(args) => paths::run(args),
+        Command::Baseline(args) => grant_cmd::baseline(&cfg::Env::process(), args),
+        Command::Grant(args) => grant_cmd::grant(&cfg::Env::process(), args),
         Command::State(args) => state_cmd::run(args),
         Command::Tasks(a) => forward::tasks(a),
         Command::Graph(a) => forward::graph(a),

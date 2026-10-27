@@ -306,7 +306,7 @@ pub fn block_text(block: &Value) -> String {
 
 // ---- loop inputs: credentials, network list and the files derived from them ---------------------------------------------------------------
 
-fn same_folder(first: &str, second: &str) -> bool {
+pub(crate) fn same_folder(first: &str, second: &str) -> bool {
     nt_normcase(&nt_abspath(first)) == nt_normcase(&nt_abspath(second))
 }
 

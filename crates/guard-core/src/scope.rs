@@ -777,7 +777,7 @@ pub fn check_scope(g: &G, target: &str, rules: &[String], specs_dir: Option<&str
         return hits;
     }
     if has_rule(rules, "repo-only") && !inside_repo {
-        hits.push(h("repo-only", "file outside the project's worktrees: only repository code"));
+        hits.push(h("repo-only", format!("file {}: only repository code", crate::call_forms::OUTSIDE_WORKTREES)));
         return hits;
     }
     if absolute.starts_with(&format!("{root}/.regression/")) {

@@ -220,6 +220,8 @@ pub fn run(g: &G, profile_arg: &str, stdin_text: &str) -> Outcome {
         names.join(", "),
         blocked.iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>().join("; ")
     ));
+    // after the final line, never inside it: says which accepted form the refusal is about; changes nothing about what was blocked
+    stderr.push_str(&crate::call_forms::explain(&blocked));
     Outcome { code: 2, stdout: String::new(), stderr }
 }
 

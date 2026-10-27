@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Policy engine of the claude-maestro guard.
 
+pub mod call_forms;
 pub mod check;
 pub mod egress;
 pub mod net;

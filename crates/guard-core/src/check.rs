@@ -153,7 +153,7 @@ impl<'a> Check<'a> {
                 let outside: Vec<&String> = folders.iter().filter(|f| !inside_any(f, roots)).collect();
                 if let Some(first) = outside.first() {
                     let shown: String = first.chars().take(80).collect();
-                    hits.push(hit("repo-only", format!("git {sub} outside the project's worktrees ({shown}): the repo of its -C/cwd must be one of them")));
+                    hits.push(hit("repo-only", format!("git {sub} {} ({shown}): the repo of its -C/cwd must be one of them", crate::call_forms::OUTSIDE_WORKTREES)));
                 }
             }
             if sub != "push" && has_rule(rules, "git-write") {

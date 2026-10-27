@@ -17,6 +17,7 @@ use std::sync::LazyLock;
 pub const QUARANTINE_OPTIONS: [&str; 2] = ["try again", "skip and continue"];
 const KNOWN_ACTIONS: [&str; 4] = ["deliver", "summary", "push", "clean_worktrees"];
 const RECENT_ACTIONS_LIMIT: usize = 10;
+const PERMISSIONS_LOG_LIMIT: usize = 50;
 const LOOP_WORKTREE_SUFFIX: &str = "-worktree-loop";
 const SECONDS_PER_MINUTE: f64 = 60.0;
 const COST_UNIT: &str = "USD";
@@ -273,6 +274,7 @@ impl LoopPanelService<'_> {
         let now_block = build_now(&processes, &stages, &features, running_turn);
         json!({
             "processes": processes, "now": now_block,
+            "permissions_log": engine_state::access_grant::journal_view(&work_dir, PERMISSIONS_LOG_LIMIT),
             "now": now_iso(), "project": get_project_name(&meta, context), "repo": context.repo_path(), "work": work_dir, "branch": g("branch"),
             "project_ref": {"id": context.project.id, "name": context.project.name, "repo_path": context.project.repo_path},
             "loop": self.build_loop_block(&work_dir, &summary, turn.clone()),

@@ -16,6 +16,11 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 ### Added
 
 - First version of the Rust rebuild.
+- E2E call forms published up front (W9, E6): `guard_core::call_forms` holds the accepted forms as data (literal URL or `*_URL`/`*_HOST`/`*_BASE` variable, no wrapper functions, no `python -S/-E/-I`, write a browser script before running it in a later call, stay inside a worktree, tokens through the runner's `exec`). The guard builds its reasons from the same constants, and a generated "How the E2E must call things" block sits in `plugin/agents/verifier-flow.md` and the orchestrator `SKILL.md`; a test fails when the block and the guard drift (`UPDATE_CALL_FORMS=1 cargo test -p guard-core call_forms` rewrites it).
+- Refusal explainer: when the guard blocks a call form it now adds a line after the usual message that names the rule, the exact accepted form and says "this is a call form, not a missing permission"; `python -I` and the like say "refused on purpose". Only text is added: what is blocked is unchanged, so `tools/guard_diff.py` shows a longer stderr on those refusals only.
+- `harness baseline [--dev-host ...] [--production-host ...] [--write --reason ...]`: a granted E2E baseline on request (dry run by default). It allows the localhost forms and exactly the development hosts the user lists, leaves the listed production hosts denied (a development entry that reaches one is refused), keeps a backup of `NETWORK.json`, never overwrites `TEST-ENVIRONMENT.md` and writes a skeleton with `FILL_IN` lines. No host is ever invented.
+- Simple access release (C1 to C3): `engine_state::access_grant::grant_access(kind, value, reason)` and `harness grant --kind host|cost_limit --value ... --reason ...` release a network entry or raise the cost limit, copy the change into the running worktree, and refuse production hosts, a missing reason and a lower limit. Every grant and every refusal is a line (what, why, who, when, backup) in `.specs/project/loop/json/PERMISSIONS-LOG.json`.
+- `state.permissions_log` in the panel state payload: the permissions journal, read-only (see `docs/API.md`).
 
 ### Fixed
 
