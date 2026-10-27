@@ -52,6 +52,11 @@ enum Command {
     Scale(forward::Forwarded),
     /// Audits forgotten dependencies between ROADMAP features
     Audit(forward::Forwarded),
+    /// Monorepo subprojects: detect, show, for-paths
+    Subprojects(forward::Forwarded),
+    /// Contract merge into the root docs/codebase/SYSTEM.md (merge, pending)
+    #[command(name = "system-map")]
+    SystemMap(forward::Forwarded),
     /// Shows or edits the Standards slots of a project's CLAUDE.md
     Standards(forward::Forwarded),
     /// Writes the loop's final summary in Markdown
@@ -91,6 +96,8 @@ fn main() {
         Command::Classify(a) => forward::classify(a),
         Command::Scale(a) => forward::scale(a),
         Command::Audit(a) => forward::audit(a),
+        Command::Subprojects(a) => forward::subprojects(a),
+        Command::SystemMap(a) => forward::system_map(a),
         Command::Standards(a) => forward::standards(a),
         Command::Summary(a) => forward::summary(a),
         Command::Inventory(a) => forward::inventory(a),

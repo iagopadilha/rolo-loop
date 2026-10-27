@@ -43,6 +43,16 @@ pub fn audit(f: Forwarded) -> i32 {
     emit(code, &out, "")
 }
 
+pub fn subprojects(f: Forwarded) -> i32 {
+    let (code, out, err) = engine_state::subprojects::run_cli(&f.args);
+    emit(code, &out, &err)
+}
+
+pub fn system_map(f: Forwarded) -> i32 {
+    let (code, out) = engine_state::system_map::run_cli(&f.args);
+    emit(code, &out, "")
+}
+
 pub fn standards(f: Forwarded) -> i32 {
     let (code, out, err) = engine_state::standards::run_cli(&f.args);
     emit(code, &out, &err)

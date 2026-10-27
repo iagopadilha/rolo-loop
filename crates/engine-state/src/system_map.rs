@@ -329,6 +329,45 @@ pub fn pending_slugs(root: &str, slugs: &[String]) -> Vec<String> {
         .collect()
 }
 
+const USAGE: &str = "Contract merge for the root `docs/codebase/SYSTEM.md` of a monorepo (deterministic, no AI).
+
+Usage:
+  harness system-map merge   <repo-root> --slugs a,b [--json]
+  harness system-map pending <repo-root> --slugs a,b
+";
+
+fn parse_slugs(args: &[String]) -> Vec<String> {
+    let Some(at) = args.iter().position(|a| a == "--slugs") else { return vec![] };
+    args.get(at + 1).map(|v| v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()).unwrap_or_default()
+}
+
+/// `harness system-map merge|pending <root> --slugs a,b [--json]`: returns (exit code, stdout).
+pub fn run_cli(args: &[String]) -> (i32, String) {
+    if args.len() < 2 || !matches!(args[0].as_str(), "merge" | "pending") {
+        return (2, format!("{USAGE}
+"));
+    }
+    let slugs = parse_slugs(args);
+    if args[0] == "pending" {
+        let lines: String = pending_slugs(&args[1], &slugs).iter().map(|slug| format!("{}
+", pending_line(slug))).collect();
+        return (0, lines);
+    }
+    let result = merge_contract_deltas(&args[1], &slugs);
+    if args.iter().any(|a| a == "--json") {
+        let body = json!({"changed": result.changed, "warnings": result.warnings});
+        return (0, format!("{}
+", py_json_dumps_indent(&body, false, 2)));
+    }
+    let mut out = format!("changed: {}
+", if result.changed { "yes" } else { "no" });
+    for warning in &result.warnings {
+        out.push_str(&format!("WARNING: {warning}
+"));
+    }
+    (0, out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
