@@ -6,6 +6,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Changed
 
+- Panel: AI decision cards use plain words (what was unclear, what the AI chose, how to undo it) and each button says what it does ("I agree", "Ask to change it").
 - Panel: the cost cap dialog shows the engine's estimate for the whole run and quick limit buttons from `meta.cost_cap_ladder`; the navbar cost meter tooltip carries the estimate.
 - Panel: a "Processes" card in the inspector lists what the engine runs right now (pid, turn, account, since when), built from `state.processes`.
 - Panel: a generic step-by-step list (`components/stepper.js`) for guided flows; the Finish dialog now shows its steps in order (decisions, push, pull request, deliver) with one action at a time.
