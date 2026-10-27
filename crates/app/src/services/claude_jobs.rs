@@ -14,7 +14,9 @@ use engine_state::{egress_proxy, loop_state, runtime_isolation};
 use pycompat::Re;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+#[cfg(test)]
+use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 pub const JOB_TYPE_ROADMAP: &str = "roadmap";

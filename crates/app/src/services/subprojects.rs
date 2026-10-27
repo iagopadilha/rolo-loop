@@ -31,9 +31,7 @@ pub const VALIDATED_BY_USER: &str = "user";
 pub const SUBPROJECTS_NOT_CONFIRMED_CODE: &str = "subprojects_not_confirmed";
 pub const SUBPROJECTS_NOT_CONFIRMED_MESSAGE: &str = "confirm the list of subprojects first";
 pub const LIST_CONFIRMED_CODE: &str = "list_confirmed";
-/// The markers of the block the app itself wrote (`classify_structure`).
-const ROOT_CONFORMANCE_BEGIN: &str = "<!-- CONFORMANCE:BEGIN -->";
-const ROOT_CONFORMANCE_END: &str = "<!-- CONFORMANCE:END -->";
+/// The block the app itself wrote (`classify_structure`), between CONFORMANCE:BEGIN and CONFORMANCE:END markers.
 static ROOT_CONFORMANCE_BLOCK: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?s)<!-- CONFORMANCE:BEGIN -->.*?<!-- CONFORMANCE:END -->\n?"));
 pub const MAP_RELATIVE_FOLDER: &str = "docs/codebase";
 const MISSING_CONFORMANCE: &str = "conformance";

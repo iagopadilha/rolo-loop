@@ -645,13 +645,13 @@ pub fn next_work(everything: &Features, wave: i64, headless: bool, primary_name:
         by("building").into_iter().chain(by("speccing")).take(cap as usize).map(|s| (s, LANE_RECOVER)).collect();
     let room = cap - lanes.len() as i64;
     let mut chosen = if room > 0 { pick_wave(&features, &approved, room, headless, primary_name) } else { vec![] };
-    let alone;
-    if chosen.iter().any(|s| alone_in_wave(features.get(s).expect("exists"), headless)) {
+    
+    let alone = if chosen.iter().any(|s| alone_in_wave(features.get(s).expect("exists"), headless)) {
         chosen = if lanes.is_empty() { chosen.into_iter().take(1).collect() } else { vec![] };
-        alone = !chosen.is_empty();
+        !chosen.is_empty()
     } else {
-        alone = false;
-    }
+        false
+    };
     lanes.extend(chosen.iter().map(|s| (s.clone(), LANE_EXECUTE)));
     let mut room = if alone { 0 } else { cap - lanes.len() as i64 };
     for (step, status) in [(LANE_GATE, "specced"), (LANE_SPEC, "pending")] {

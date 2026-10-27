@@ -20,7 +20,7 @@ pub fn process_start_time(pid: u32) -> Option<u64> {
         let (mut created, mut exited, mut kernel, mut user) = (zero, zero, zero, zero);
         let ok = GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user);
         CloseHandle(handle);
-        (ok != 0).then(|| ((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
+        (ok != 0).then_some(((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
     }
 }
 

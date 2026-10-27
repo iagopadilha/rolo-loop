@@ -131,7 +131,7 @@ pub fn hook_path_problems(ctx: &AppCtx) -> Vec<String> {
         }
     }
     let text = read(&ctx.skill_dir.join("SKILL.md"));
-    let frontmatter = if text.starts_with("---") && text.matches("---").count() >= 2 { text.splitn(3, "---").nth(1).unwrap_or("").to_string() } else { String::new() };
+    let frontmatter = if text.starts_with("---") && text.matches("---").count() >= 2 { text.split("---").nth(1).unwrap_or("").to_string() } else { String::new() };
     for m in COMMAND_LINE.find_all(&frontmatter) {
         let command = m.group(1).unwrap_or("");
         if command.contains("guard.exe") {

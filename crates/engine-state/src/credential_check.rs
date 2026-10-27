@@ -298,7 +298,7 @@ pub fn plaintext_secret_lines(document_text: &str) -> Vec<usize> {
     for (index, line) in pycompat::splitlines(document_text).into_iter().enumerate() {
         for m in PLAINTEXT_SECRET.find_all(line) {
             let value = m.group(2).or(m.group(3)).unwrap_or("");
-            if m.group(1) == Some("|") && !value.chars().any(|c| c.is_ascii_digit() || (c.is_numeric() && c.to_digit(10).is_some())) {
+            if m.group(1) == Some("|") && !value.chars().any(|c| c.is_ascii_digit()) {
                 continue; // a table cell next to a secret-looking word ("| Access token | obtained from login |") is prose, not a value
             }
             if !value.is_empty() && HARMLESS_VALUE.match_start(value).is_none() {

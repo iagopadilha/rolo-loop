@@ -153,13 +153,13 @@ impl P<'_> {
             s
         };
         let lo = digits(&mut j);
-        let hi;
-        if self.c.get(j) == Some(&',') {
+        
+        let hi = if self.c.get(j) == Some(&',') {
             j += 1;
-            hi = digits(&mut j);
+            digits(&mut j)
         } else {
-            hi = lo.clone();
-        }
+            lo.clone()
+        };
         if self.c.get(j) != Some(&'}') {
             return None;
         }

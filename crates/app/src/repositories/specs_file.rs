@@ -209,7 +209,7 @@ impl SpecsFileRepository {
             }
         }
         for name in folders {
-            self.walk_markdown(&current.join(&name), &format!("{relative}/{name}").trim_matches('/').to_string(), ignored, found);
+            self.walk_markdown(&current.join(&name), format!("{relative}/{name}").trim_matches('/'), ignored, found);
         }
     }
 

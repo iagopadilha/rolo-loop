@@ -30,7 +30,7 @@ pub fn clip_redacted_text(text: &str, limit: usize) -> String {
 pub fn to_text_list(value: &Value) -> Vec<String> {
     match value {
         Value::Array(items) => items.iter().map(|i| match i { Value::String(s) => s.clone(), other => pycompat::json::py_json_dumps(other, false) }).collect(),
-        Value::String(s) => LIST_SPLIT.split(s).into_iter().filter(|p| !p.is_empty()).map(String::from).collect(),
+        Value::String(s) => LIST_SPLIT.split(s).into_iter().filter(|p| !p.is_empty()).collect(),
         _ => vec![],
     }
 }

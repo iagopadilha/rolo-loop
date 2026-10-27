@@ -25,6 +25,23 @@ insta = { version = "1", features = ["json"] }
 [workspace.lints.rust]
 unsafe_code = "deny"
 
+[workspace.lints.clippy]
+# AppError carries the whole error body of the API on purpose; the signatures mirror the reference design.
+result_large_err = "allow"
+type_complexity = "allow"
+too_many_arguments = "allow"
+# Style lints that would reshape code written to mirror the reference line by line (the differential tests are the safety net).
+needless_range_loop = "allow"
+if_same_then_else = "allow"
+manual_strip = "allow"
+unnecessary_to_owned = "allow"
+bool_assert_comparison = "allow"
+doc_overindented_list_items = "allow"
+items_after_test_module = "allow"
+result_unit_err = "allow"
+unnecessary_sort_by = "allow"
+cloned_ref_to_slice_refs = "allow"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

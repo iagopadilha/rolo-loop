@@ -653,8 +653,8 @@ impl Runner {
             }
             {
                 let mut env = self.env();
-                let mut wctx = Ctx { env: &mut env, toolkit_root: self.ctx.toolkit_text() };
-                crate::worktrees::refresh_inputs(&mut wctx, repo, work, "", true); // the panel writes .env.test / NETWORK.json in the repo: a running loop picks them up here
+                let wctx = Ctx { env: &mut env, toolkit_root: self.ctx.toolkit_text() };
+                crate::worktrees::refresh_inputs(&wctx, repo, work, "", true); // the panel writes .env.test / NETWORK.json in the repo: a running loop picks them up here
             }
             if let Some(layer) = egress {
                 layer.set_turn(turn); // egress.log lines carry the turn

@@ -493,7 +493,7 @@ impl FollowUpService<'_> {
             return Err(repo_conflict("there is no Follow-up stage with open features: send a follow-up first", NO_STAGE_CODE));
         };
         let delivery = self.app.loop_control().read_delivery(context); // meta.delivery, then delivery-pending.json, then on/on
-        let truthy_or = |key: &str| delivery.get(key).map_or(true, |v| engine_state::notify_truthy(Some(v)));
+        let truthy_or = |key: &str| delivery.get(key).is_none_or(|v| engine_state::notify_truthy(Some(v)));
         let body = json!({"push": truthy_or("push_pr"), "remove_worktree_on_finish": truthy_or("remove_worktree_on_finish")});
         loop_state::approve_roadmap(&work_dir, &now_iso()).map_err(|failure| AppError::new(Kind::InvalidRoadmap, failure))?;
         let round_number = current_follow_up_round(&work_dir);

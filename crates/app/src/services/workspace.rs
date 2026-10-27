@@ -322,8 +322,8 @@ impl WorkspaceService<'_> {
             return json!({"state": SETUP_MAPPING, "monorepo": monorepo});
         }
         let needs_conformance = repo.role != project_repos::ROLE_REFERENCE;
-        let missing_map;
-        if monorepo {
+        
+        let missing_map = if monorepo {
             let entry = entry.as_ref().unwrap();
             if entry.get("confirmed") != Some(&Value::Bool(true)) {
                 return json!({"state": SETUP_NOT_SET_UP, "monorepo": true});
@@ -334,14 +334,14 @@ impl WorkspaceService<'_> {
             if needs_conformance && row_misses("conformance") {
                 return json!({"state": SETUP_NOT_SET_UP, "monorepo": true});
             }
-            missing_map = row_misses("map");
+            row_misses("map")
         } else {
             if needs_conformance && self.app.specs_structure().get_conformance(&folder).is_none() {
                 return json!({"state": SETUP_NOT_SET_UP, "monorepo": false});
             }
-            missing_map = super::project_progress::ProjectProgressService::repo_has_code(&folder)
-                && !super::project_progress::ProjectProgressService::read_map_facts(&folder, &folder)["map_files"].as_array().is_some_and(|f| !f.is_empty());
-        }
+            super::project_progress::ProjectProgressService::repo_has_code(&folder)
+                && !super::project_progress::ProjectProgressService::read_map_facts(&folder, &folder)["map_files"].as_array().is_some_and(|f| !f.is_empty())
+        };
         json!({"state": if missing_map { SETUP_MAP_MISSING } else { SETUP_SET_UP }, "monorepo": monorepo})
     }
 

@@ -402,8 +402,12 @@ impl PlanningService<'_> {
     fn apply_reply_effects(&self, context: &ProjectContext) {
         let steps: [(&str, Box<dyn Fn() + '_>); 3] = [
             ("repos", Box::new(|| drop(self.app.planning_repos().apply_suggested_repos(context)))),
-            ("capabilities", Box::new(|| drop(self.app.capabilities().write(context)))),
-            ("readiness", Box::new(|| drop(self.app.readiness_schedule(context)))),
+            ("capabilities", Box::new(|| {
+                let _ = self.app.capabilities().write(context);
+            })),
+            ("readiness", Box::new(|| {
+                let _ = self.app.readiness_schedule(context);
+            })),
         ];
         for (name, step) in steps {
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(step)).is_err() {

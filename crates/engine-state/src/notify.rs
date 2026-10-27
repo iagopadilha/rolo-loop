@@ -568,19 +568,19 @@ pub fn run_cli(args: &[String], env: &mut Env) -> (i32, String, String) {
     load_all(env);
     let only: Vec<String> = opt("--channels").split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
     let only = if only.is_empty() { None } else { Some(only) };
-    let ctx;
-    if args.iter().any(|a| a == "--test") {
-        ctx = json!({"event": "test", "project": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "script": "run_loop.py", "repo": "/path/to/project",
-                     "flags": " --wave 1", "worktree": "/path/to/project-worktree-loop", "features": [["example-feature", "verified"], ["other-feature", "pending"]]});
+    
+    let ctx = if args.iter().any(|a| a == "--test") {
+        json!({"event": "test", "project": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "script": "run_loop.py", "repo": "/path/to/project",
+                     "flags": " --wave 1", "worktree": "/path/to/project-worktree-loop", "features": [["example-feature", "verified"], ["other-feature", "pending"]]})
     } else if !opt("--subject").is_empty() && (!opt("--body").is_empty() || !opt("--body-file").is_empty()) {
         let mut text = opt("--body");
         if !opt("--body-file").is_empty() {
             text = std::fs::read(opt("--body-file")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
         }
-        ctx = json!({"event": "custom", "subject": opt("--subject"), "project": "", "extra_body": clip(&text, 3000)});
+        json!({"event": "custom", "subject": opt("--subject"), "project": "", "extra_body": clip(&text, 3000)})
     } else {
         return (2, NOTIFY_USAGE.into(), String::new());
-    }
+    };
     let results = dispatch(env, &ctx, "", only);
     let mut out = String::new();
     for (name, status) in &results {

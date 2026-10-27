@@ -111,7 +111,7 @@ pub fn append(root: &str, slug: &str, turn: Option<i64>, level: &str, doubt: &st
     let _ = std::fs::create_dir_all(path.parent().expect("has parent"));
     let current = read_file(root);
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = write!(file, "{}{}\n", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" }, line);
+        let _ = writeln!(file, "{}{}", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" }, line);
     }
     line
 }

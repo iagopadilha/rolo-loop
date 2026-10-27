@@ -506,7 +506,7 @@ pub fn read_transcript_summary(path: &Path) -> Option<Value> {
         }
     }
     let finished = handback_return.is_some() || last_stop_reason.as_deref() == Some(END_TURN_REASON);
-    let final_return = handback_return.or_else(|| if finished { last_text } else { None });
+    let final_return = handback_return.or(if finished { last_text } else { None });
     let found = prompt
         .as_deref()
         .filter(|p| !p.is_empty())

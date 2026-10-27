@@ -62,7 +62,7 @@ pub fn parse_coverage(text: &str) -> Coverage {
             continue;
         }
         let cells = split_table_cells(stripped);
-        if is_separator_row(&cells) || cells.len() <= ITEM_COLUMN {
+        if is_separator_row(&cells) || cells.is_empty() {
             continue;
         }
         let item = strip_marks(&cells[ITEM_COLUMN]);

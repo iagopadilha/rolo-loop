@@ -172,6 +172,7 @@ fn temp_body(text: &str) -> Option<std::path::PathBuf> {
     Some(path)
 }
 
+#[derive(Default)]
 pub struct Options<'a> {
     pub branch: &'a str,
     pub base: &'a str,
@@ -182,11 +183,6 @@ pub struct Options<'a> {
     pub own_name: &'a str,
 }
 
-impl Default for Options<'_> {
-    fn default() -> Self {
-        Options { branch: "", base: "", draft: false, dry_run: false, roadmap_root: "", related: &[], own_name: "" }
-    }
-}
 
 /// Push of the feature branch + PR. Returns `{"push", "pr", "pr_status"}`; never fails; never forces or merges.
 pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {

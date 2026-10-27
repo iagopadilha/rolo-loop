@@ -515,7 +515,7 @@ fn foreign_content_in_specs(worktree: &str, saved_plan: &[String], repo: &str) -
         if normal.starts_with(&format!("{}\\", nt_normcase(ENGINE_RUN_STATE_FOLDER))) {
             continue;
         }
-        let dir = nt_normcase(&relative.rsplit_once('\\').map(|x| x.0).unwrap_or("").to_string());
+        let dir = nt_normcase(relative.rsplit_once('\\').map(|x| x.0).unwrap_or(""));
         let name = full.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
         if !(dir.starts_with(&nt_normcase(ENGINE_SPECS_FOLDER)) && name.ends_with(".json")) {
             return Some(unix);

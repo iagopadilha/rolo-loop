@@ -425,7 +425,7 @@ pub fn secret_target_hit(g: &G, target: &str, cwd: Option<&str>, specs_dir: Opti
         || mentions_copied_secret(g, target, cwd, specs_dir)
 }
 
-fn value_str<'a>(v: Option<&'a Value>) -> Option<&'a str> {
+fn value_str(v: Option<&Value>) -> Option<&str> {
     v.and_then(Value::as_str)
 }
 

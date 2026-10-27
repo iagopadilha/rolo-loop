@@ -404,6 +404,6 @@ mod tests {
         for item in &FEATURES {
             assert!(commits.contains(&item.slug), "{} is never committed", item.slug);
         }
-        assert!(plans.iter().all(|(_, steps)| matches!(steps.iter().rev().flatten().find(|a| matches!(a, Action::EndTurn { .. } | Action::WaitForAnswer { .. })), Some(_))));
+        assert!(plans.iter().all(|(_, steps)| steps.iter().rev().flatten().any(|a| matches!(a, Action::EndTurn { .. } | Action::WaitForAnswer { .. }))));
     }
 }

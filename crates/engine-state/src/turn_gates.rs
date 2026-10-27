@@ -93,7 +93,7 @@ pub fn append_validate_line(specs: &str, line: &str) {
     let current = read(&path);
     let _ = std::fs::create_dir_all(path.parent().expect("has parent"));
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = write!(file, "{}{line}\n", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" });
+        let _ = writeln!(file, "{}{line}", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" });
     }
 }
 
@@ -117,7 +117,7 @@ pub fn merge_verified_contracts(work: &str, meta: &mut Value, state: &mut Value,
         if feature.status() != "verified" || handled.contains(slug) {
             continue;
         }
-        let result = system_map::merge_contract_deltas(work, &[slug.clone()]);
+        let result = system_map::merge_contract_deltas(work, std::slice::from_ref(slug));
         handled.push(slug.clone());
         let mut warnings = result.warnings.clone();
         if missing_backend_contract(work, slug, feature) {

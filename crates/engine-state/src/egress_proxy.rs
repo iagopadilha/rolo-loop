@@ -314,9 +314,9 @@ fn forward(shared: &Shared, client: &mut TcpStream, method: &str, target: &str, 
     }
     let path_only = if parts.path.is_empty() { "/".to_string() } else { parts.path.clone() };
     if !allowed {
-        return deny(shared, client, &host, u32::from(port), &method.to_uppercase(), &path_only, &reason);
+        return deny(shared, client, &host, port, &method.to_uppercase(), &path_only, &reason);
     }
-    let Some(mut upstream) = open_upstream(client, &host, u32::from(port)) else { return };
+    let Some(mut upstream) = open_upstream(client, &host, port) else { return };
     let path = format!("{path_only}{}", if parts.query.is_empty() { String::new() } else { format!("?{}", parts.query) });
     let mut lines = vec![format!("{method} {path} {version}")];
     lines.extend(headers.iter().filter(|(n, _)| !["proxy-connection", "proxy-authorization", "connection"].contains(&n.to_lowercase().as_str())).map(|(n, v)| format!("{n}: {v}")));
