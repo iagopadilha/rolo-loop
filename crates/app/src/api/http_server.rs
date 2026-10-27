@@ -185,7 +185,18 @@ impl AppHttpServer {
             None => return,
         };
         self.send(&mut stream, response);
-        let _ = stream.shutdown(Shutdown::Both);
+        // Graceful close: the answer goes first (FIN), then whatever the client still sends is read and dropped. Closing with unread data would send a
+        // reset, and on Windows a reset can overtake the answer (an early 403 or 413 would then never reach the client).
+        let _ = stream.shutdown(Shutdown::Write);
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+        let mut drained = 0usize;
+        let mut buffer = [0u8; 65536];
+        while drained < BODY_DISCARD_LIMIT_BYTES {
+            match stream.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => drained += count,
+            }
+        }
     }
 
     fn send(&self, stream: &mut TcpStream, response: Response) {
