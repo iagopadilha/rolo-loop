@@ -36,3 +36,8 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - A roadmap with `Etapa N` headings is read as stages; a roadmap without readable stages shows "Features" instead of "Stage ?".
 - The dispatch of a loop follows the ROADMAP recommendation (`--wave N`, "single chain") when no `Dispatch` line is set, and `--wave` is always passed to the engine.
 - Settings > "Skills and tools": every skill found on the machine with a checkbox, search, all/none (saves `loop_extra_skills`, now up to 400 items), a box per MCP server and per tool, and a warning when a root CLAUDE.md Standards section is ignored. New read route `GET /api/app/settings/skills`; names only, no secret leaves.
+- History hygiene: a new run's worktree no longer inherits turns, snapshots, answers or state of another run, and the baseline snapshot is rebuilt when it does not match the approved roadmap.
+- A checkpoint commit that already holds a feature's paths now counts as that feature's commit; leftovers of a feature that just became verified are committed once, and the dirty-tree stop lists the exact files.
+- Preflight: stale `index.lock` warning; a confirmed-monorepo extra repo is checked per subproject for the Conformance line.
+- Planning: the chat may write `IMPORT-COVERAGE.md`, is told its real (fixed) permissions, and importing into an existing feature folder takes `on_existing` merge or replace.
+- A map job that wrote nothing now names the guard refusals instead of blaming the skill.

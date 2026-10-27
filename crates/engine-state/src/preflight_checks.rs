@@ -274,9 +274,10 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
             problems.push(format!("{tag}{} is not a git repository", item.path));
             continue;
         }
-        if CONFORMANCE.search(&read(&Path::new(&item.path).join("CLAUDE.md"))).is_none() {
-            problems.push(format!("{tag}its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {} --write STANDARD|LEGACY)", item.path));
+        for problem in repo_conformance_problems(&item.path) {
+            problems.push(format!("{tag}{problem}"));
         }
+        warns.extend(stale_git_lock_warnings(&item.path).into_iter().map(|w| format!("{tag}{w}")));
         if !Path::new(&item.loop_worktree_path()).is_dir() && git(&item.path, &["branch", "--show-current"]).1.is_empty() {
             problems.push(format!("{tag}no current branch (detached HEAD)"));
         }
@@ -285,6 +286,45 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
         }
     }
     (problems, warns)
+}
+
+/// S1. The Conformance line of a repo. A confirmed monorepo keeps it per subproject (its owner), so the repo root `CLAUDE.md` is not asked for
+/// it: every subproject that is not skipped needs its own line. A repo that is not a confirmed monorepo needs the root line.
+pub fn repo_conformance_problems(path: &str) -> Vec<String> {
+    if !subprojects::monorepo_confirmed(path, None) {
+        if CONFORMANCE.search(&read(&Path::new(path).join("CLAUDE.md"))).is_some() {
+            return vec![];
+        }
+        return vec![format!("its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {path} --write STANDARD|LEGACY)")];
+    }
+    let (entry, _) = subprojects::load(path, None);
+    subprojects::entry_projects(entry.as_ref())
+        .iter()
+        .filter(|p| p.get("skip") != Some(&Value::Bool(true)))
+        .filter_map(|p| p.get("path").and_then(Value::as_str))
+        .filter(|sub| subprojects::read_conformance(path, sub) == "-")
+        .map(|sub| format!("subproject {sub} has no `Conformance: STANDARD|LEGACY` line in its own CLAUDE.md (confirmed monorepo: the line lives per subproject)"))
+        .collect()
+}
+
+/// A repository lock this old was left by a process that died.
+pub const STALE_LOCK_SECONDS: u64 = 60;
+
+/// S2. Warns about a stale `index.lock` of the repo (or of its linked worktree): every commit fails with it and the cause is not obvious.
+pub fn stale_git_lock_warnings(path: &str) -> Vec<String> {
+    let (code, lock, _) = git(path, &["rev-parse", "--git-path", "index.lock"]);
+    if code != 0 || lock.is_empty() {
+        return vec![];
+    }
+    let lock_path = if Path::new(&lock).is_absolute() { PathBuf::from(&lock) } else { Path::new(path).join(&lock) };
+    let age = std::fs::metadata(&lock_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|d| d.as_secs());
+    match age {
+        Some(seconds) if seconds >= STALE_LOCK_SECONDS => vec![format!(
+            "{} is {seconds}s old: a process that died left it and every commit will fail. If no git process is running, delete that file",
+            lock_path.display()
+        )],
+        _ => vec![],
+    }
 }
 
 fn readiness_checks_folder_has_map(folder: &str) -> bool {
@@ -757,6 +797,11 @@ pub fn preflight(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
     apply(&mut problems, &mut warns, repo_branch_problems(repo));
     apply(&mut problems, &mut warns, extra_repos_preflight(&repos, opts, Some(&features)));
     apply(&mut problems, &mut warns, (root_conformance_problems(&root), vec![]));
+    let mut lock_warns = stale_git_lock_warnings(repo);
+    if root != repo {
+        lock_warns.extend(stale_git_lock_warnings(&root));
+    }
+    apply(&mut problems, &mut warns, (vec![], lock_warns));
     apply(&mut problems, &mut warns, (if has_roadmap { vec![] } else { readiness_checks::installer_problems(&root, &repos) }, vec![]));
     let setup_open = !problems.is_empty(); // a real earlier step is still open: "generate the roadmap" is not said yet
     apply(&mut problems, &mut warns, roadmap_problems(&root, &repos, opts, setup_open));
@@ -808,6 +853,48 @@ mod tests {
             assert!(std::process::Command::new("git").arg("-C").arg(&r).args(&args).output().unwrap().status.success());
         }
         r.display().to_string()
+    }
+
+    #[test]
+    fn a_confirmed_monorepo_asks_the_conformance_line_per_subproject_not_at_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        std::fs::write(Path::new(&r).join("CLAUDE.md"), "no line here\n").unwrap();
+        assert_eq!(repo_conformance_problems(&r).len(), 1, "a plain repo still needs the root line");
+        let name = default_name_of(&r);
+        std::fs::create_dir_all(Path::new(&r).join(".specs/project")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/web")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/api")).unwrap();
+        std::fs::write(
+            Path::new(&r).join(".specs/project/SUBPROJECTS.json"),
+            format!("{{\"repos\": {{\"{name}\": {{\"monorepo\": true, \"confirmed\": true, \"projects\": [{{\"path\": \"apps/web\", \"skill\": \"x\"}}, {{\"path\": \"apps/api\", \"skill\": \"x\"}}, {{\"path\": \"tools\", \"skip\": true}}]}}}}}}"),
+        )
+        .unwrap();
+        std::fs::write(Path::new(&r).join("apps/web/CLAUDE.md"), "Conformance: STANDARD\n").unwrap();
+        let problems = repo_conformance_problems(&r);
+        assert_eq!(problems.len(), 1, "the root file is not asked, a subproject without its line still is: {problems:?}");
+        assert!(problems[0].contains("apps/api") && !problems[0].contains("tools"));
+        std::fs::write(Path::new(&r).join("apps/api/CLAUDE.md"), "Conformance: LEGACY\n").unwrap();
+        assert!(repo_conformance_problems(&r).is_empty());
+    }
+
+    fn default_name_of(path: &str) -> String {
+        subprojects::default_repo_name(path)
+    }
+
+    #[test]
+    fn only_an_old_index_lock_is_warned_about() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        assert!(stale_git_lock_warnings(&r).is_empty());
+        let lock = Path::new(&r).join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        assert!(stale_git_lock_warnings(&r).is_empty(), "a fresh lock may belong to a running git");
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+        std::fs::OpenOptions::new().write(true).open(&lock).unwrap().set_modified(old).unwrap();
+        let warnings = stale_git_lock_warnings(&r);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("index.lock") && warnings[0].contains("no git process is running"));
     }
 
     #[test]

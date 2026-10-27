@@ -178,3 +178,6 @@ Planning gates (`/api/pipeline` and the readiness routes) also change:
 - The `repos` and `import_coverage` gates are always present; when they do not apply they are `ok`, `optional` and `not_applicable: true`.
 
 Notices (message, e-mail, `NOTICE.txt`) name the features and the stage, use one vocabulary ("verificadas" until the branch is pushed, then "entregues"), and also fire when a turn verifies a feature or closes a stage (`LOOP_NOTIFY_MILESTONES=off` turns that off).
+## Payload notes
+
+- `POST /p/{project_id}/api/planning/import`: the body may carry `on_existing` (`"merge"` or `"replace"`). When the feature folder `.specs/features/<slug>` already exists without an import record and `on_existing` is missing, the answer is `409` with `code: "feature_folder_exists"` and `choices: ["merge", "replace"]`. `merge` keeps the files already in the folder and adds the missing ones; `replace` swaps the folder for the imported copy. Any other value is a `400`.

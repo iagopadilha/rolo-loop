@@ -327,6 +327,9 @@ pub fn refresh_unused_worktree(repo: &str, work: &str, meta_path: &Path) {
         let _ = if source.is_dir() { copy_tree(&source, &target, &[]) } else { copy2(&source, &target) };
         refreshed.push(name);
     }
+    if refreshed.contains(&".specs") {
+        loop_state::drop_foreign_history(work); // the repo's .specs may hold the history of an older run
+    }
     loop_state::migrate_layout(work);
     if kept.is_dir() {
         let _ = copy_tree(&kept, &loop_folder, &["ROADMAP-APPROVED.json"]);
@@ -564,6 +567,9 @@ pub fn ensure_worktree(
         }
     }
     let copied = copy_into_worktree(repo, &work);
+    if copied.iter().any(|c| c == ".specs") {
+        loop_state::drop_foreign_history(&work); // a new run never inherits the turns, snapshots and answers of another one
+    }
     // the root CLAUDE.md copied whole (not "carried") is a setup file too when it holds an app block: it joins the setup commit
     let copied_claude: Vec<String> =
         if copied.iter().any(|c| c == "CLAUDE.md") && setup_files::has_app_block(&work, "CLAUDE.md") { vec!["CLAUDE.md".into()] } else { vec![] };
