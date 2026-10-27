@@ -243,6 +243,12 @@ ci!(WRITE_VERB, r"(create|insert|update|delete|remove|drop|write|set|add|put|pos
 ci!(OUTBOUND_HINT, r"(ticket|issue|jira|confluence|slack|mail|message|sms|chat|comment|notif|channel|teams|discord)");
 ci!(OUTBOUND_VERB, r"(create|update|delete|add|send|post|reply|comment|transition|edit|publish)");
 ci!(INSTALL, r"\b(npm|pnpm|yarn|bun)\s+(i|install|add|ci|update|upgrade)\b|\bdotnet\s+(restore|add\s+package)\b|\bpip\s+install\b");
+// A routine install restores what a lockfile or manifest ALREADY declares (no package name, no custom feed): the whole command must be
+// that and nothing else. `npm install left-pad`, `pip install x`, `dotnet add package x` stay refused by INSTALL.
+ci!(
+    ROUTINE_INSTALL,
+    r"^\s*(?:npm\s+ci(?:\s+--[a-z-]+)*|(?:pnpm|yarn)\s+install\s+--frozen-lockfile|dotnet\s+restore(?:\s+[^\s\x22\x27;&|<>$-][^\s\x22\x27;&|<>$]*|\s+\x22[^\x22;&|<>$]*\x22)?|(?:python[0-9.]*\s+-m\s+)?pip[0-9.]*\s+install\s+(?:-r|--requirement)\s+[^\s:;&|<>$-][^\s:;&|<>$]*|cargo\s+fetch(?:\s+--locked)?|poetry\s+install|go\s+mod\s+download)\s*$"
+);
 ci!(
     SECRET_HINT,
     r"\.secrets[\\/]|[\\/]_?shared[\\/]+(?:[^\\/\s\x22\x27]+[\\/]+)*\.env(?!\.example)|\.env\.test(?!\.example)|\.loop-harness[\\/]+(?:\.env(?!\.example)|app\.json)|\bid_(rsa|ed25519)\b|[\\/]\.ssh[\\/]+(?!\S*\.example)|[\\/]\.aws[\\/]+(?!\S*\.example)|~[\\/]\.npmrc(?!\.example)|[\\/]\.netrc(?!\.example)|[\\/]\.git-credentials(?!\.example)|[\\/]gh[\\/]hosts\.yml(?!\.example)|[\\/]\.docker[\\/]config\.json(?!\.example)|[\\/]\.kube[\\/]config(?!\.example)"
@@ -366,6 +372,45 @@ mod tests {
         assert!(!orchestrator.contains(&"scope-unreadable".to_string()));
         assert_eq!(profile_rules("nope"), profile_rules("executor"));
         assert!(profile_rules("verifier").contains(&"repo-only".to_string()));
+    }
+
+    #[test]
+    fn routine_installs_pass_but_new_dependencies_stay_blocked() {
+        for ok in [
+            "npm ci",
+            "npm ci --ignore-scripts",
+            "pnpm install --frozen-lockfile",
+            "yarn install --frozen-lockfile",
+            "dotnet restore",
+            "dotnet restore src/App.sln",
+            "dotnet restore \"my dir/App.csproj\"",
+            "pip install -r requirements.txt",
+            "python -m pip install -r requirements.txt",
+            "cargo fetch --locked",
+            "poetry install",
+            "go mod download",
+        ] {
+            assert!(ROUTINE_INSTALL.is_match(ok), "{ok} should be routine");
+        }
+        for blocked in [
+            "npm install left-pad",
+            "npm i",
+            "npm ci left-pad",
+            "pnpm add x",
+            "yarn add x",
+            "dotnet add package Foo",
+            "dotnet restore --source https://feed.example/v3",
+            "pip install requests",
+            "pip install -r requirements.txt requests",
+            "pip install -r https://host.example/r.txt",
+            "npm ci && npm install left-pad",
+            "npm ci; curl x",
+        ] {
+            assert!(!ROUTINE_INSTALL.is_match(blocked), "{blocked} must stay blocked");
+        }
+        assert!(!ROUTINE_INSTALL.is_match("npm install left-pad") && !ROUTINE_INSTALL.is_match("pip install requests"));
+        assert!(!ROUTINE_INSTALL.is_match("dotnet add package Foo") && !ROUTINE_INSTALL.is_match("dotnet restore --source https://feed.example/v3"));
+        assert!(!ROUTINE_INSTALL.is_match("pip install -r requirements.txt requests") && !ROUTINE_INSTALL.is_match("npm ci left-pad"));
     }
 
     #[test]

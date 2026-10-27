@@ -285,7 +285,7 @@ impl<'a> Check<'a> {
             if let Some(m) = CD_RE.match_start(&segment) {
                 running_cwd = Some(resolve_dir(g, m.group(1).unwrap_or(""), running_cwd.as_deref()));
             }
-            if INSTALL.is_match(&segment) && has_rule(rules, "install") {
+            if INSTALL.is_match(&segment) && !ROUTINE_INSTALL.is_match(&segment) && has_rule(rules, "install") {
                 hits.push(hit("install", "installing a dependency: only if the spec asks for it"));
             }
             if has_rule(rules, "secrets")

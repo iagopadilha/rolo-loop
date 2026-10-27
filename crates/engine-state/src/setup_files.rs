@@ -43,8 +43,12 @@ pub const NETWORK_ALLOW_FILE: &str = "network-allow.json";
 /// The toolkit's binary that writes the filter: `craft testenv network-filter --project <work>`.
 const TOOLKIT_BINARY: [&str; 2] = ["bin", "craft.exe"];
 const TESTENV_TIMEOUT_SECONDS: u64 = 30;
-/// The only line(s) the app adds to the user's .gitignore.
-const APP_IGNORE_LINES: [&str; 1] = [".specs/project/.env.test"];
+/// The only lines the app adds to the user's .gitignore (secret files, `.specs/` and its trash).
+const APP_IGNORE_LINES: [&str; 7] = [".env", ".env.*", "!.env.example", ".specs/project/.env.test", ".specs/project/ACCESS.json", ".specs/", ".specs/.trash/"];
+const GITATTRIBUTES_FILE: &str = ".gitattributes";
+const GITATTRIBUTES_PATHSPEC: &str = ":(glob).gitattributes";
+/// The line the app adds to `.gitattributes`: text files are LF in the repository, so a CRLF checkout is not a change.
+pub const APP_ATTRIBUTE_LINE: &str = "* text=auto eol=lf";
 
 /// `git status --porcelain -z <arguments>` -> `[(code, path)]` in the order git printed them; `[]` on any failure.
 pub fn run_status(repo: &str, arguments: &[&str]) -> Vec<(String, String)> {
@@ -95,6 +99,7 @@ fn setup_pathspecs(entry: Option<&Map<String, Value>>) -> (Vec<String>, bool) {
     let mut specs = build_pathspecs(entry);
     specs.extend(SPECS_PATHSPECS.iter().map(|s| s.to_string()));
     specs.push(GITIGNORE_PATHSPEC.into());
+    specs.push(GITATTRIBUTES_PATHSPEC.into());
     if monorepo {
         specs.extend(MONOREPO_ROOT_PATHSPECS.iter().map(|s| s.to_string()));
     }
@@ -104,23 +109,60 @@ fn setup_pathspecs(entry: Option<&Map<String, Value>>) -> (Vec<String>, bool) {
 
 /// True when the uncommitted change of the root `.gitignore` is ONLY the line(s) the app added.
 pub fn is_app_only_gitignore_change(repo: &str, path: &str) -> bool {
-    if path != GITIGNORE_FILE {
-        return false;
+    path == GITIGNORE_FILE && only_app_lines_added(repo, path, &APP_IGNORE_LINES)
+}
+
+/// True when the uncommitted change of the root `.gitattributes` is ONLY the line-ending rule the app adds.
+pub fn is_app_only_gitattributes_change(repo: &str, path: &str) -> bool {
+    path == GITATTRIBUTES_FILE && only_app_lines_added(repo, path, &[APP_ATTRIBUTE_LINE])
+}
+
+/// Appends the LF rule to the repo's `.gitattributes` (created when missing) unless a catch-all `*` text rule is already there, so a
+/// CRLF/LF difference stops counting as a changed file. Returns the names written (`[".gitattributes"]`) or `[]`. The file is then a
+/// setup file: it is carried and committed with the others. Whether the user's git also sets `core.autocrlf=input` is advice, see
+/// `preflight_checks::line_ending_warnings`.
+pub fn ensure_line_endings(repo: &str) -> Vec<String> {
+    let path = Path::new(repo).join(GITATTRIBUTES_FILE);
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let has_rule = pycompat::splitlines(&text).iter().any(|l| {
+        let l = l.trim();
+        l.starts_with("* ") && (l.contains("text") || l.contains("eol="))
+    });
+    if has_rule {
+        return vec![];
     }
-    let (code, out, _) = run_timeout_raw("git", &["-C", repo, "diff", "HEAD", "--unified=0", "--", GITIGNORE_FILE], None, GIT_TIMEOUT_SECONDS);
+    let separator = if text.is_empty() || text.ends_with('\n') { "" } else { "\n" };
+    match atomic_write_text(&path, &format!("{text}{separator}{APP_ATTRIBUTE_LINE}\n")) {
+        Ok(()) => vec![GITATTRIBUTES_FILE.into()],
+        Err(_) => vec![],
+    }
+}
+
+fn only_app_lines_added(repo: &str, path: &str, allowed: &[&str]) -> bool {
+    let (code, out, _) = run_timeout_raw("git", &["-C", repo, "diff", "HEAD", "--unified=0", "--ignore-cr-at-eol", "--", path], None, GIT_TIMEOUT_SECONDS);
     if code != 0 {
         return false;
     }
     // Python's `line[:1] in "+-"` is also true for an empty line
     let changed: Vec<&str> =
         pycompat::splitlines(&out).into_iter().filter(|l| (l.is_empty() || l.starts_with(['+', '-'])) && !l.starts_with("+++") && !l.starts_with("---")).collect();
-    !changed.is_empty() && changed.iter().all(|l| l.starts_with('+') && APP_IGNORE_LINES.contains(&l[1..].trim()))
+    if changed.is_empty() {
+        // a file git does not know yet has no diff: it is the app's when every line in it is one the app writes
+        let (_, tracked, _) = run_timeout_raw("git", &["-C", repo, "ls-files", "--cached", "--", path], None, GIT_TIMEOUT_SECONDS);
+        let content = std::fs::read_to_string(Path::new(repo).join(path)).unwrap_or_default();
+        let lines: Vec<&str> = content.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        return tracked.trim().is_empty() && !lines.is_empty() && lines.iter().all(|l| allowed.contains(l));
+    }
+    changed.iter().all(|l| l.starts_with('+') && allowed.contains(&l[1..].trim()))
 }
 
 /// True when `path` (found by status or ls-files) is a setup file the app generated.
 fn is_setup_path(repo: &str, path: &str, monorepo: bool) -> bool {
     if path == GITIGNORE_FILE {
         return is_app_only_gitignore_change(repo, path);
+    }
+    if path == GITATTRIBUTES_FILE {
+        return is_app_only_gitattributes_change(repo, path);
     }
     if path.starts_with(SPECS_PREFIX) {
         return !path.starts_with(LOOP_STATE_PREFIX);
@@ -172,7 +214,11 @@ pub fn list_present_setup_files(repo: &str, entry: Option<&Map<String, Value>>) 
 /// Tracked files changed in the folder that are not setup files (untracked files are not walked: node_modules and the like).
 pub fn list_other_changes(repo: &str, setup_paths: &[String]) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
-    for (_, path) in run_status(repo, &["--untracked-files=no"]) {
+    for (code, path) in run_status(repo, &["--untracked-files=no"]) {
+        // a file whose only difference is CRLF vs LF is not a change (S3)
+        if code.trim() == "M" && crate::loop_io::line_ending_only_change(repo, &path) {
+            continue;
+        }
         if !setup_paths.contains(&path) && !path.starts_with(LOOP_STATE_PREFIX) && !paths.contains(&path) {
             paths.push(path);
         }
@@ -248,7 +294,12 @@ pub fn block_text(block: &Value) -> String {
         ));
     }
     if !other.is_empty() {
-        parts.push(format!("{} other changed file{} will NOT be carried: {}", other.len(), if other.len() == 1 { "" } else { "s" }, shortened(&other)));
+        parts.push(format!(
+            "{} other changed file{} will NOT be carried (commit them on your branch first if the loop needs them): {}",
+            other.len(),
+            if other.len() == 1 { "" } else { "s" },
+            shortened(&other)
+        ));
     }
     format!("uncommitted changes in {}: {}", block["repo"].as_str().unwrap_or(""), parts.join("; "))
 }
@@ -405,7 +456,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(work.path().join("docs/codebase/STACK.md")).unwrap(), "already there");
         assert!(!work.path().join(".specs/project/.env.test").exists());
         let block = json!({"repo": "api", "setup_files": ["a", "b"], "other_changes": ["c"]});
-        assert_eq!(block_text(&block), "uncommitted changes in api: 2 setup files not committed: they will be carried into the worktree (or commit them from Workspace): a, b; 1 other changed file will NOT be carried: c");
+        assert_eq!(block_text(&block), "uncommitted changes in api: 2 setup files not committed: they will be carried into the worktree (or commit them from Workspace): a, b; 1 other changed file will NOT be carried (commit them on your branch first if the loop needs them): c");
     }
 
     #[test]
@@ -420,6 +471,57 @@ mod tests {
         write(repo.path(), ".gitignore", "target\n.specs/project/.env.test\nsecret\n");
         assert!(!is_app_only_gitignore_change(&r, ".gitignore"));
         assert!(!is_app_only_gitignore_change(&r, "other"));
+    }
+
+    #[test]
+    fn all_the_lines_the_app_writes_keep_gitignore_a_setup_file() {
+        let repo = repo();
+        let r = repo.path().display().to_string();
+        write(repo.path(), ".gitignore", "target\n");
+        git(repo.path(), &["add", ".gitignore"]);
+        git(repo.path(), &["commit", "-q", "-m", "ignore"]);
+        write(repo.path(), ".gitignore", "target\n.env\n.env.*\n!.env.example\n.specs/project/.env.test\n.specs/project/ACCESS.json\n.specs/\n.specs/.trash/\n");
+        assert!(is_app_only_gitignore_change(&r, ".gitignore"));
+        assert!(list_setup_files(&r, None).iter().any(|v| v["path"] == ".gitignore"));
+        write(repo.path(), ".gitignore", "target\n.env\nnode_modules/\n");
+        assert!(!is_app_only_gitignore_change(&r, ".gitignore"), "a line the app did not write makes it the user's change");
+    }
+
+    #[test]
+    fn line_ending_rule_is_a_setup_file_and_is_not_added_twice() {
+        let repo = repo();
+        let r = repo.path().display().to_string();
+        assert_eq!(ensure_line_endings(&r), vec![".gitattributes"]);
+        assert_eq!(std::fs::read_to_string(repo.path().join(".gitattributes")).unwrap(), "* text=auto eol=lf\n");
+        assert!(ensure_line_endings(&r).is_empty(), "the rule is already there");
+        assert!(list_setup_files(&r, None).iter().any(|v| v["path"] == ".gitattributes"), "the new file is offered as a setup file");
+        let work = tempfile::tempdir().unwrap();
+        let carried = carry_setup_files(&r, &work.path().display().to_string(), None, true);
+        assert!(carried.contains(&".gitattributes".to_string()));
+        // a user's own rules are never rewritten, and a user's own edit is not a setup file
+        git(repo.path(), &["add", ".gitattributes"]);
+        git(repo.path(), &["commit", "-q", "-m", "attrs"]);
+        write(repo.path(), ".gitattributes", "* text=auto eol=lf\n*.png binary\n");
+        assert!(!is_app_only_gitattributes_change(&r, ".gitattributes"));
+        let other = tempfile::tempdir().unwrap();
+        write(other.path(), ".gitattributes", "*.png binary\n");
+        assert_eq!(ensure_line_endings(&other.path().display().to_string()), vec![".gitattributes"]);
+        assert_eq!(std::fs::read_to_string(other.path().join(".gitattributes")).unwrap(), "*.png binary\n* text=auto eol=lf\n");
+    }
+
+    #[test]
+    fn crlf_only_files_are_not_other_changes() {
+        let repo = repo();
+        let r = repo.path().display().to_string();
+        git(repo.path(), &["config", "core.autocrlf", "false"]);
+        write(repo.path(), "src/a.txt", "one\ntwo\n");
+        write(repo.path(), "src/b.txt", "one\ntwo\n");
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "files"]);
+        write(repo.path(), "src/a.txt", "one\r\ntwo\r\n");
+        assert!(list_other_changes(&r, &[]).is_empty(), "CRLF only: nothing changed");
+        write(repo.path(), "src/b.txt", "one\r\nTWO\r\n");
+        assert_eq!(list_other_changes(&r, &[]), vec!["src/b.txt"], "a real edit still counts");
     }
 
     #[test]

@@ -22,6 +22,7 @@ pub mod detect_setup;
 pub mod egress_proxy;
 pub mod email;
 pub mod graph_view;
+pub mod installs;
 pub mod limit_waits;
 pub mod loop_command;
 pub mod loop_io;

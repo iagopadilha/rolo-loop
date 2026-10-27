@@ -303,7 +303,7 @@ pub fn check_fix(kind: &str) -> &'static str {
         "missing-roadmap" => "Generate and approve the roadmap in Planning",
         "uncommitted" => "Commit these files (the worktree is born from the last commit)",
         "dotnet-restore" => "Add `dotnet restore` as the Setup line in the ROADMAP header (planning)",
-        "node-modules" => "Add `npm ci` as the Setup line",
+        "node-modules" => "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line",
         "permission-mode" => "If the first turn fails, use permission mode acceptEdits",
         _ => "",
     }
@@ -371,6 +371,34 @@ pub fn claude_command_problems(opts: &LoopOpts) -> Pair {
 pub fn repo_branch_problems(repo: &str) -> Pair {
     let problems = if git(repo, &["branch", "--show-current"]).1.is_empty() { vec!["repo has no current branch (detached HEAD)".to_string()] } else { vec![] };
     (problems, vec![])
+}
+
+/// S2: a `index.lock` left in the repo's git folder stops every commit, checkout and worktree command with an unhelpful message.
+/// The problem names the file, how old it is and what to do. It is only a problem; nothing is deleted here (a live git may own it).
+pub fn index_lock_problems(folder: &str) -> Vec<String> {
+    let (code, out, _) = git(folder, &["rev-parse", "--git-path", "index.lock"]);
+    if code != 0 || out.is_empty() {
+        return vec![];
+    }
+    let path = if Path::new(&out).is_absolute() { PathBuf::from(&out) } else { Path::new(folder).join(&out) };
+    let Ok(meta) = std::fs::metadata(&path) else { return vec![] };
+    let minutes = meta.modified().ok().and_then(|m| m.elapsed().ok()).map(|e| e.as_secs() / 60).unwrap_or(0);
+    vec![format!(
+        "git lock file {} exists (about {minutes} min old): another git command is running or one was interrupted. Close other git tools (IDE, Git GUI); if nothing is running, delete that file and start again.",
+        path.display()
+    )]
+}
+
+/// Line endings: with `core.autocrlf=true` and no `.gitattributes` rule, a file checked out as CRLF reads as changed. The engine does not
+/// count line-ending-only changes, but the diff and the final PR still would; the app can add the LF rule to `.gitattributes`.
+pub fn line_ending_warnings(repo: &str) -> Vec<String> {
+    let attributes = read(&Path::new(repo).join(".gitattributes"));
+    let has_rule = pycompat::splitlines(&attributes).iter().any(|l| l.trim().starts_with("* ") && (l.contains("text") || l.contains("eol=")));
+    let autocrlf = git(repo, &["config", "--get", "core.autocrlf"]).1;
+    if has_rule || autocrlf == "input" || autocrlf == "false" {
+        return vec![];
+    }
+    vec!["line endings: this repo has no `* text=auto eol=lf` rule in .gitattributes and git converts to CRLF (core.autocrlf is not `input`), so files can read as changed only because of CRLF. Add the rule (the app offers it as a setup file) or run `git config core.autocrlf input`.".into()]
 }
 
 /// A repo whose worktree is not created yet and has no local integration branch starts from its current branch: say which.
@@ -545,17 +573,21 @@ pub fn push_problems(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
     (problems, warns)
 }
 
-/// Node / .NET repos: what a fresh worktree is born without.
+/// Node / .NET repos: what a fresh worktree is born without. Routine installs (a lockfile beside its manifest: `npm ci`, `dotnet restore`...)
+/// are run by the engine per subproject, so only what the engine will NOT install is said here.
 pub fn build_setup_warnings(repo: &str, work: &str, opts: &LoopOpts) -> Vec<String> {
     let mut warns = Vec::new();
-    let has_package = Path::new(repo).join("package.json").is_file();
-    if has_package && opts.setup.is_empty() && !Path::new(work).is_dir() {
-        warns.push("Node project: the worktree is born without node_modules. Use --setup \"npm ci\" (otherwise verify returns UNVERIFIED).".into());
+    let plan = crate::detect_setup::install_plan(repo);
+    let has_package = Path::new(repo).join("package.json").is_file() || plan.iter().any(|s| s.artifact == "node_modules");
+    if opts.setup.is_empty() && !Path::new(work).is_dir() {
+        for step in plan.iter().filter(|s| !s.routine) {
+            let place = if step.dir.is_empty() { "the root".to_string() } else { step.dir.clone() };
+            warns.push(format!(
+                "Node project ({place}): package.json without a lockfile, so the engine installs nothing there and the worktree is born without node_modules (verify returns UNVERIFIED). Commit a lockfile (`npm install` once) or use --setup \"npm install\"."
+            ));
+        }
     }
     let dotnet = find_dotnet(repo, 3);
-    if !dotnet.is_empty() && !Path::new(work).is_dir() {
-        warns.push(format!(".NET detected ({dotnet}): the worktree is born without bin/obj; `dotnet build` does an implicit restore (needs network or the NuGet cache). The executor does not run `dotnet restore` nor `dotnet add package` (guard); to restore beforehand, use --setup with `dotnet restore`."));
-    }
     if (!dotnet.is_empty() || has_package) && !Path::new(repo).join(".gitignore").is_file() {
         warns.push("repo has no .gitignore: bin/obj/node_modules generated by the build dirty the worktree and the loop stops on `dirty tree`.".into());
     }
@@ -747,6 +779,11 @@ pub fn preflight(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
         push_new(warns, step_warns);
     };
     apply(&mut problems, &mut warns, repo_branch_problems(repo));
+    apply(&mut problems, &mut warns, (index_lock_problems(repo), vec![]));
+    if Path::new(&work).is_dir() {
+        apply(&mut problems, &mut warns, (index_lock_problems(&work), vec![]));
+    }
+    apply(&mut problems, &mut warns, (vec![], line_ending_warnings(repo)));
     apply(&mut problems, &mut warns, extra_repos_preflight(&repos, opts, Some(&features)));
     apply(&mut problems, &mut warns, (root_conformance_problems(&root), vec![]));
     apply(&mut problems, &mut warns, (if has_roadmap { vec![] } else { readiness_checks::installer_problems(&root, &repos) }, vec![]));
@@ -803,6 +840,47 @@ mod tests {
     }
 
     #[test]
+    fn a_stale_index_lock_is_a_problem_with_the_next_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        assert!(index_lock_problems(&r).is_empty());
+        std::fs::write(Path::new(&r).join(".git").join("index.lock"), "").unwrap();
+        let problems = index_lock_problems(&r);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("index.lock") && problems[0].contains("delete that file"), "{}", problems[0]);
+        assert!(index_lock_problems("C:\\no-such-folder-here").is_empty());
+    }
+
+    #[test]
+    fn line_ending_advice_goes_away_with_a_rule_or_autocrlf_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        git(&r, &["config", "core.autocrlf", "true"]);
+        assert_eq!(line_ending_warnings(&r).len(), 1);
+        std::fs::write(Path::new(&r).join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
+        assert!(line_ending_warnings(&r).is_empty());
+        std::fs::remove_file(Path::new(&r).join(".gitattributes")).unwrap();
+        git(&r, &["config", "core.autocrlf", "input"]);
+        assert!(line_ending_warnings(&r).is_empty());
+    }
+
+    #[test]
+    fn engine_installs_make_the_node_warning_about_lockfiles_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo_dir, work) = (dir.path().join("proj"), dir.path().join("proj-worktree-loop").display().to_string());
+        std::fs::create_dir_all(repo_dir.join("web")).unwrap();
+        std::fs::create_dir_all(repo_dir.join("docs")).unwrap();
+        std::fs::write(repo_dir.join(".gitignore"), "node_modules\n").unwrap();
+        std::fs::write(repo_dir.join("web/package.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("web/package-lock.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("docs/package.json"), "{}").unwrap();
+        let warns = build_setup_warnings(&repo_dir.display().to_string(), &work, &LoopOpts::new(""));
+        assert_eq!(warns.len(), 1, "{warns:?}");
+        assert!(warns[0].starts_with("Node project (docs)") && warns[0].contains("without a lockfile"), "{}", warns[0]);
+        assert_eq!(check_item_kind(&warns[0]), "node-modules");
+    }
+
+    #[test]
     fn kinds_and_fixes() {
         assert_eq!(check_item_kind("Missing .specs/project/ROADMAP.md: generate"), "missing-roadmap");
         assert_eq!(check_item_kind("uncommitted changes in api: 1 setup file"), "uncommitted");
@@ -810,7 +888,7 @@ mod tests {
         assert_eq!(check_item_kind("Node project: the worktree"), "node-modules");
         assert_eq!(check_item_kind("`auto` mode depends on the plan"), "permission-mode");
         assert_eq!(check_item_kind("anything else"), "other");
-        assert_eq!(check_fix("node-modules"), "Add `npm ci` as the Setup line");
+        assert_eq!(check_fix("node-modules"), "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line");
         let items = check_items(&["a problem".to_string()], &["Node project: x".to_string()], &[], "C:\\nope");
         assert_eq!((items[0]["level"].clone(), items[1]["kind"].clone(), items[1]["level"].clone()), (json!("problem"), json!("node-modules"), json!("warning")));
     }
