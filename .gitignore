@@ -67,3 +67,6 @@ tmp/
 docs/media/raw/
 *.mp4
 *.mov
+
+# Release binaries (built by cargo, shipped in release assets)
+plugin/bin/
