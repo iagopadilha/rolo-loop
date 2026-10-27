@@ -178,7 +178,7 @@ impl App {
 }
 
 impl LoopPanelService<'_> {
-    pub fn build_state(&self, context: &ProjectContext, project_url: &str) -> Value {
+    pub fn build_state(&self, context: &ProjectContext, project_url: Option<&str>) -> Value {
         let work_dir = context.work_dir();
         let files = &self.app.loop_files;
         let summary = self.app.loop_status().get_loop_summary(context);
@@ -467,7 +467,7 @@ mod tests {
         std::fs::write(repo.join(".specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=pending\n- [b] status=blocked deps=a note=x tries=2\n").unwrap();
         let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
         let panel = app.loop_panel();
-        let state = panel.build_state(&context, "http://localhost:1");
+        let state = panel.build_state(&context, Some("http://localhost:1"));
         assert_eq!((state["counts"]["total"].clone(), state["loop"]["running"].clone(), state["project"].clone()), (json!(2), json!(false), json!("p")));
         assert_eq!(state["quarantine"][0]["reason"], "x (2 failures)");
         assert_eq!(state["limits"].as_array().unwrap().len(), 2);

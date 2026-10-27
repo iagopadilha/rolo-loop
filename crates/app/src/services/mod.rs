@@ -5,7 +5,7 @@
 use crate::config::{load_app_config, AppConfig, Overrides};
 use crate::infrastructure::claude_client::ClaudeClient;
 use crate::infrastructure::git_client::GitClient;
-use crate::infrastructure::process_runner::{ProcessRunner, SystemProcesses};
+use crate::infrastructure::process_runner::ProcessRunner;
 use crate::infrastructure::structured_log::StructuredLog;
 use crate::repositories::app_config::{AppConfigRepository, ProjectRepository};
 use crate::repositories::claude_transcripts::ClaudeTranscriptRepository;
@@ -147,6 +147,8 @@ pub struct App {
     pub action_locks: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
     pub specs_reset_lock: Mutex<()>,
     pub catalog_state: Mutex<repo_catalog::CatalogState>,
+    /// Ends the server (set by `serve`; the idle monitor and `POST /api/app/shutdown` call it).
+    pub shutdown: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -215,6 +217,7 @@ impl App {
             action_locks: Mutex::new(Default::default()),
             specs_reset_lock: Mutex::new(()),
             catalog_state: Mutex::new(Default::default()),
+            shutdown: std::sync::OnceLock::new(),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),
@@ -245,7 +248,7 @@ impl App {
     /// An app on a temporary data dir with the real process runner (unit tests).
     #[cfg(test)]
     pub fn for_tests(dir: &std::path::Path) -> Arc<App> {
-        Self::for_tests_with(dir, Arc::new(SystemProcesses))
+        Self::for_tests_with(dir, Arc::new(crate::infrastructure::process_runner::SystemProcesses))
     }
 
     #[cfg(test)]
