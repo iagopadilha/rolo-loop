@@ -35,12 +35,12 @@ const STEPS: [Step; 6] = [
     Step { key: "verify", agent: "verifier", role: "build · types · lint · tests" },
     Step { key: "commit", agent: "commit", role: "git checkpoint" },
 ];
-const STEP_SPEC: usize = 0;
-const STEP_REVIEW: usize = 1;
-const STEP_GATE: usize = 2;
-const STEP_EXEC: usize = 3;
-const STEP_VERIFY: usize = 4;
-const STEP_COMMIT: usize = 5;
+pub const STEP_SPEC: usize = 0;
+pub const STEP_REVIEW: usize = 1;
+pub const STEP_GATE: usize = 2;
+pub const STEP_EXEC: usize = 3;
+pub const STEP_VERIFY: usize = 4;
+pub const STEP_COMMIT: usize = 5;
 const STEP_LABELS: [&str; 6] = ["spec writing", "spec review", "gate", "execution", "verification", "commit"];
 const LABEL_STEP_ORDER: [usize; 4] = [STEP_SPEC, STEP_REVIEW, STEP_EXEC, STEP_VERIFY];
 const LABEL_MAX_PARTS: usize = 3;
@@ -53,7 +53,7 @@ const EVENT_OUT_LIMIT: usize = 300;
 const DECISION_LIMIT: usize = 6000;
 const FILES_PER_TURN_LIMIT: usize = 200;
 const SHORT_COMMIT_LENGTH: usize = 7;
-const GATE_NOTE_PREFIX: &str = "gate";
+pub const GATE_NOTE_PREFIX: &str = "gate";
 
 static COMMIT_IN_STATE: LazyLock<Re> = LazyLock::new(|| Re::new(r"commit\s+([0-9a-f]{7,40})"));
 
@@ -115,7 +115,7 @@ pub fn get_step_for_role(role: &str) -> Option<usize> {
 }
 
 /// RUNNING while it runs; FAIL when it failed or returned FAIL/BLOCKED (BLOCKED for the reviewer, which blocks a spec); else DONE.
-fn event_status_for_agent(agent: &Value, step: usize) -> &'static str {
+pub fn event_status_for_agent(agent: &Value, step: usize) -> &'static str {
     if agent["state"] == "running" {
         return EVENT_RUNNING;
     }

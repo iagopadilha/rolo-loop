@@ -34,6 +34,7 @@ pub mod turns;
 pub mod engine_script;
 pub mod error_center;
 pub mod error_event_sync;
+pub mod feature_detail;
 pub mod folder_picker;
 pub mod guard_events;
 pub mod loop_control;
