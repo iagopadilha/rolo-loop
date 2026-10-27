@@ -6,7 +6,28 @@ use crate::pyre::{escape, Re};
 use crate::state::integration_branch;
 use std::sync::LazyLock;
 
-pub const READ_ONLY_GIT: [&str; 10] = ["status", "diff", "log", "show", "rev-parse", "ls-files", "blame", "describe", "grep", "shortlog"];
+pub const READ_ONLY_GIT: [&str; 20] = [
+    "status",
+    "diff",
+    "log",
+    "show",
+    "rev-parse",
+    "ls-files",
+    "blame",
+    "describe",
+    "grep",
+    "shortlog",
+    "check-ignore",
+    "check-attr",
+    "ls-tree",
+    "cat-file",
+    "rev-list",
+    "merge-base",
+    "name-rev",
+    "show-ref",
+    "for-each-ref",
+    "diff-tree",
+];
 
 /// Rules that not even `PERMISSIONS.json` releases.
 pub const HARD: [&str; 14] = [
