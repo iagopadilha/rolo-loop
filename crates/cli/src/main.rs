@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 //! `harness`: command line of claude-maestro.
 
+mod access_cmd;
+mod doctor_cmd;
 mod forward;
+mod install_cmd;
 mod paths;
+mod serve_cmd;
 mod state_cmd;
 
 use clap::{Parser, Subcommand};
@@ -20,6 +24,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Starts the multi-project panel (or registers the project in the live app)
+    Serve(serve_cmd::Args),
+    /// `loop <repo> --check`: the pre-flight check of a loop
+    Check(forward::Forwarded),
+    /// Diagnostics: skill, guard, claude, toolkit, notify channels (--access: what a loop session can reach)
+    Doctor(doctor_cmd::Args),
+    /// Writes ~/.loop-harness/config.json so the skill finds the app
+    Install(install_cmd::Args),
     /// Where the Maestro plugin, the orchestrator skill and the dev toolkit are
     Paths(paths::Args),
     /// Typed graph state of the loop (validate, next, graph, migrate, disjoint, loop)
@@ -55,6 +67,10 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
     let code = match cli.command {
+        Command::Serve(args) => serve_cmd::run(args),
+        Command::Check(a) => forward::check(a),
+        Command::Doctor(args) => doctor_cmd::run(args),
+        Command::Install(args) => install_cmd::run(args),
         Command::Paths(args) => paths::run(args),
         Command::State(args) => state_cmd::run(args),
         Command::Tasks(a) => forward::tasks(a),

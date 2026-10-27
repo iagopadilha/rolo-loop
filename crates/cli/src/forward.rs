@@ -84,3 +84,14 @@ pub fn close_loop(f: Forwarded) -> i32 {
     let (code, out) = engine_state::close_loop::run_cli(&f.args, &env);
     emit(code, &out, "")
 }
+
+/// `check <repo> [flags...]` is `loop <repo> --check [flags...]`.
+pub fn check(f: Forwarded) -> i32 {
+    let Some((repo, rest)) = f.args.split_first() else {
+        eprintln!("usage: harness check <repo> [loop flags...]");
+        return 2;
+    };
+    let mut args = vec![repo.clone(), "--check".to_string()];
+    args.extend(rest.iter().cloned());
+    engine_state::run_loop::run_cli(&args)
+}

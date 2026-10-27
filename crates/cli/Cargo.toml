@@ -12,6 +12,8 @@ name = "harness"
 path = "src/main.rs"
 
 [dependencies]
+app = { path = "../app" }
+pycompat = { path = "../pycompat" }
 cfg = { path = "../cfg" }
 engine-state = { path = "../engine-state" }
 clap = { workspace = true }
