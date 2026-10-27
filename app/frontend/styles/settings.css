@@ -41,3 +41,17 @@
   .set-info-list dd{margin-bottom:6px;}
   .set-edit .set-input{flex-basis:100%;}
 }
+
+/* Section "Skills and tools" (components/skills_tools_section.js): square corners, tokens of base.css only. */
+.sk-group{display:flex;flex-direction:column;gap:8px;padding:10px 0;border-top:1px solid var(--line2);}
+.sk-group>*{flex-shrink:0;}
+.sk-title{margin:0;font-size:13px;font-weight:600;color:var(--text);}
+.sk-bar{align-items:center;}
+.sk-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;border:1px solid var(--line2);background:var(--panel0);}
+.sk-row{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border-bottom:1px solid var(--line2);}
+.sk-row:last-child{border-bottom:0;}
+.sk-src{font-size:11px;overflow-wrap:anywhere;}
+.sk-warn{font-size:12px;}
+ul.sk-tools{list-style:none;margin:0;padding:6px 0 0 22px;display:flex;flex-wrap:wrap;gap:4px 16px;flex-basis:100%;}
+.sk-notools{font-size:11px;flex-basis:100%;}
+.sk-group .mcp-row,.sk-group .dlg-input,.sk-group .btn{border-radius:0;}

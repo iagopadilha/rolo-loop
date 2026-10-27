@@ -6,8 +6,9 @@ import { html, useState, useEffect } from '../util/preact.js';
 import { appApi } from '../api/api_client.js';
 import { toast } from './toast.js';
 import { openDialog } from './dialog.js';
-import { McpServersSection } from './mcp_servers_section.js';
+import { SkillsToolsSection } from './skills_tools_section.js';
 
+const OWN_SECTION_KEYS = ['loop_extra_skills']; // edited in the "Skills and tools" section, not as a plain row
 const SAVE_TIMEOUT_MS = 15000;
 const RESTART_TEXT = 'Takes effect after restarting the app.';
 const NEXT_RUN_TEXT = 'Applies to the next claude run.';
@@ -119,8 +120,8 @@ export function SettingsBody() {
   if (!data) return html`<div class="nl-msg" role="status"><div class="spinner" aria-hidden="true" /><span>loading settings…</span></div>`;
   const replace = (saved) => setData((old) => Object.assign({}, old, { settings: old.settings.map((s) => (s.key === saved.key ? saved : s)) }));
   return html`<p class="dlg-text">Saved in <span class="mono">config.json</span> of the app data folder. A setting you never change stays out of the file and keeps its default.</p>
-    <div class="set-list">${data.settings.map((item) => html`<${SettingRow} key=${item.key} item=${item} caveman=${data.caveman} onSaved=${replace} />`)}</div>
-    <${McpServersSection} />
+    <div class="set-list">${data.settings.filter((item) => !OWN_SECTION_KEYS.includes(item.key)).map((item) => html`<${SettingRow} key=${item.key} item=${item} caveman=${data.caveman} onSaved=${replace} />`)}</div>
+    <${SkillsToolsSection} />
     <${InfoRows} info=${data.info} />`;
 }
 
