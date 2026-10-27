@@ -1,0 +1,79 @@
+name: release
+
+# Tag vX.Y.Z -> build the Windows binaries, publish them in two places:
+#   1. a GitHub Release with claude-maestro-X.Y.Z.zip attached
+#   2. the `dist` branch: the tagged tree plus plugin/bin, so the marketplace
+#      entry (git-subdir, ref dist) installs the plugin together with its binaries.
+# Run it by hand (workflow_dispatch) to build and inspect the zip without publishing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Read plugin version
+        id: version
+        run: |
+          version=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugin/.claude-plugin/plugin.json | head -1)
+          [ -n "$version" ] || { echo "no version in plugin.json"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match plugin.json version $version"; exit 1
+          fi
+
+      - name: Build
+        run: cargo build --release --locked -p cli -p guard
+
+      - name: Stage binaries into plugin/bin
+        run: |
+          mkdir -p plugin/bin
+          for exe in harness guard; do cp "target/release/$exe.exe" plugin/bin/; done
+          ls -l plugin/bin
+
+      - name: Zip the plugin
+        id: zip
+        shell: pwsh
+        run: |
+          $name = "claude-maestro-${{ steps.version.outputs.version }}.zip"
+          Compress-Archive -Path plugin/* -DestinationPath $name
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Host "$name sha256 $hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: ${{ steps.zip.outputs.name }}
+
+      - name: Publish dist branch
+        if: github.ref_type == 'tag'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B dist
+          git add -f plugin/bin
+          git commit -m "dist: ${GITHUB_REF_NAME} with Windows binaries"
+          git push --force origin dist
+
+      - name: GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" "${{ steps.zip.outputs.name }}"             --title "${GITHUB_REF_NAME}"             --notes "SHA-256 of ${{ steps.zip.outputs.name }}: ${{ steps.zip.outputs.sha256 }}"
