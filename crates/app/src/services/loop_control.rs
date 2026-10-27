@@ -25,7 +25,6 @@ const STATUSES_RESUMABLE_BY_INSTRUCTION: [&str; 3] = ["error", "stopped", "done"
 const LEFTOVER_CHOICES: [&str; 2] = ["commit", "discard"];
 /// The only keys of the start/check body; everything else is decided in the ROADMAP.
 const RUN_CHOICE_FIELDS: [&str; 2] = ["push", "remove_worktree_on_finish"];
-const MIN_WAVE: i64 = 1;
 /// `loop` defaults: not repeated in the argv.
 const ENGINE_DEFAULT_BUDGET_TURN: f64 = 5.0;
 const ENGINE_DEFAULT_MAX_COST: f64 = 50.0;
@@ -97,10 +96,8 @@ pub fn read_run_choices(body: &Value) -> Result<(Option<bool>, Option<bool>), St
 pub fn convert_settings_to_loop_flags(settings: &Map<String, Value>, wave: i64, push: bool, orchestrator_model: Option<&str>, base_branch: &str) -> Vec<String> {
     let mut flags: Vec<String> = Vec::new();
     let num = |key: &str| settings.get(key).and_then(Value::as_f64).unwrap_or(0.0);
-    if wave > MIN_WAVE || settings.get("dispatch") != Some(&json!("auto")) {
-        // an explicit `Dispatch: 1` must still be sent (the engine default is 3)
-        flags.extend(["--wave".to_string(), wave.to_string()]);
-    }
+    // always sent, also `1`: the engine default is 3, so leaving the flag out would run in parallel against a roadmap that asks for one at a time
+    flags.extend(["--wave".to_string(), wave.to_string()]);
     if settings.get("e2e") == Some(&Value::Bool(true)) {
         flags.push("--e2e".into());
     }
@@ -178,6 +175,20 @@ pub fn compute_default_dispatch() -> Value {
     const DEFAULT_WAVE: i64 = 3;
     let wave = DEFAULT_WAVE.clamp(MIN_WAVE_LIMIT, MAX_WAVE_LIMIT);
     json!({"wave": wave, "auto": true, "stage": "", "reason": format!("{wave} features per turn, always, each one with its own agents at every step; dependent features and features sharing files wait for the next turn")})
+}
+
+static SUGGESTED_WAVE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"--wave\s+(\d+)"));
+static SINGLE_CHAIN: LazyLock<Re> = LazyLock::new(|| Re::ci(r"single chain|one chain|cadeia [uú]nica|fully sequential|strictly sequential"));
+
+/// What the ROADMAP text itself recommends for the dispatch (G5), when its `Dispatch` line is missing or `auto`: a `--wave N` suggestion or a
+/// "single chain" remark means that many features at a time. Only the part outside the header settings is read. `None` = no recommendation.
+pub fn roadmap_suggested_wave(roadmap_text: &str) -> Option<i64> {
+    if let Some(found) = SUGGESTED_WAVE.search(roadmap_text) {
+        if let Ok(n) = found.group(1).unwrap_or("").parse::<i64>() {
+            return Some(n.clamp(1, 8));
+        }
+    }
+    SINGLE_CHAIN.search(roadmap_text).map(|_| 1)
 }
 
 pub struct LoopControlService<'a> {
@@ -348,7 +359,12 @@ impl LoopControlService<'_> {
         let (push_choice, _) = read_run_choices(body)?;
         let settings = self.read_loop_settings(context).settings;
         let dispatch = if settings.get("dispatch") == Some(&json!("auto")) {
-            compute_default_dispatch()
+            match roadmap_suggested_wave(&self.read_roadmap_text(context)) {
+                Some(wave) => {
+                    json!({"wave": wave, "auto": true, "stage": "", "reason": format!("the ROADMAP recommends {wave} feature(s) per turn; no Dispatch line overrides it")})
+                }
+                None => compute_default_dispatch(),
+            }
         } else {
             json!({"wave": settings.get("dispatch").cloned().unwrap_or(Value::Null), "auto": false, "reason": "set in the ROADMAP"})
         };
@@ -717,6 +733,10 @@ mod tests {
         assert_eq!(read_run_choices(&json!({"push": "yes"})).unwrap_err(), "push must be a boolean");
         assert_eq!(read_run_choices(&json!({"push": true, "x": 1})).unwrap(), (Some(true), None));
         assert_eq!(compute_default_dispatch()["wave"], 3);
+        assert_eq!(roadmap_suggested_wave("The order is a single chain; start with --wave 1."), Some(1));
+        assert_eq!(roadmap_suggested_wave("Use --wave 4 here"), Some(4));
+        assert_eq!(roadmap_suggested_wave("fully sequential plan"), Some(1));
+        assert_eq!(roadmap_suggested_wave("## Stage 1\n- [a] status=pending\n"), None);
     }
 
     #[test]

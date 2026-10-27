@@ -171,6 +171,28 @@ pub fn parse_answers(text: &str) -> Vec<Value> {
     answers[answers.len().saturating_sub(ANSWERS_LIMIT)..].to_vec()
 }
 
+/// "What is running now" at a glance (G1): the turn, each lane (feature, its name, its stage and step), the process that runs them and since
+/// when. `{"running": false}` when nothing the engine started is alive. Built only from the engine's process registry and the roadmap view.
+fn build_now(processes: &[Value], stages: &[Value], features: &[Value], turn: Option<u64>) -> Value {
+    let Some(process) = processes.first() else { return json!({"running": false, "turn": turn, "lanes": [], "label": null, "started_at": null}) };
+    let lanes: Vec<Value> = process["lanes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|lane| {
+            let slug = lane["feature"].as_str().unwrap_or("");
+            let feature = features.iter().find(|f| f["id"] == slug);
+            let stage_n = feature.map(|f| f["stage"].clone()).unwrap_or(Value::Null);
+            let stage_title = stages.iter().find(|s| s["n"] == stage_n && !stage_n.is_null()).map(|s| s["title"].clone()).unwrap_or(Value::Null);
+            json!({"feature": slug, "name": feature.map(|f| f["name"].clone()).unwrap_or(Value::Null), "step": lane["step"], "stage": stage_n, "stage_title": stage_title})
+        })
+        .collect();
+    json!({
+        "running": true, "turn": process["turn"], "lanes": lanes, "label": process["label"], "started_at": process["started_at"], "pid": process["pid"],
+        "claude": process["claude"], "claude_account": process["claude_account"],
+    })
+}
+
 fn epoch_now() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
@@ -228,6 +250,7 @@ impl LoopPanelService<'_> {
             ("claude", g("claude")),
             ("claude_account", g("claude_account")),
             ("claude_switches", g("claude_switches")),
+            ("claude_events", if g("claude_events").is_array() { g("claude_events") } else { json!([]) }),
             ("claude_account_info", self.app.accounts.build_current_account(&meta)),
             ("claude_totals", build_usage_totals(&turn_rows, &calls)),
             ("claude_usage_view", json!(self.app.accounts.build_usage_view(&meta, &turn_rows, &calls, false))),
@@ -246,7 +269,10 @@ impl LoopPanelService<'_> {
             .collect();
         let quarantine = Self::build_quarantine(&features);
         let shutdown = self.app.activity.get().and_then(|m| m.seconds_until_shutdown());
+        let processes = engine_state::process_registry::list(&work_dir, running);
+        let now_block = build_now(&processes, &stages, &features, running_turn);
         json!({
+            "processes": processes, "now": now_block,
             "now": now_iso(), "project": get_project_name(&meta, context), "repo": context.repo_path(), "work": work_dir, "branch": g("branch"),
             "project_ref": {"id": context.project.id, "name": context.project.name, "repo_path": context.project.repo_path},
             "loop": self.build_loop_block(&work_dir, &summary, turn.clone()),
@@ -452,6 +478,21 @@ impl LoopPanelService<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn now_strip_names_lanes_stage_and_process() {
+        assert_eq!(build_now(&[], &[], &[], Some(3))["running"], false);
+        let process = json!({"turn": 3, "pid": 99, "started_at": "2026-01-01T10:00:00", "label": "Loop turn 3 \u{b7} feature a", "claude": "claude", "claude_account": "",
+                             "lanes": [{"feature": "a", "step": "execute"}]});
+        let stages = vec![json!({"n": 1, "title": "Stage 1", "features": ["a"]})];
+        let features = vec![json!({"id": "a", "name": "Alpha", "stage": 1, "status": "building"})];
+        let now = build_now(&[process], &stages, &features, Some(3));
+        assert_eq!((now["running"].clone(), now["turn"].clone(), now["pid"].clone()), (json!(true), json!(3), json!(99)));
+        assert_eq!(
+            (now["lanes"][0]["name"].as_str(), now["lanes"][0]["step"].as_str(), now["lanes"][0]["stage_title"].as_str()),
+            (Some("Alpha"), Some("execute"), Some("Stage 1"))
+        );
+    }
 
     #[test]
     fn command_limits_cost_cap_and_answers() {

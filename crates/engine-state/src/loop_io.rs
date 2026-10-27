@@ -472,6 +472,18 @@ pub fn run_process(argv: &[String], cwd: &str, env: &[(String, String)], stdin_t
 
 /// [`run_process`] that tells a program that could not start (`Err`) from one that ran and failed.
 pub fn run_process_checked(argv: &[String], cwd: &str, env: &[(String, String)], stdin_text: &str, timeout_seconds: u64) -> std::io::Result<ProcessResult> {
+    run_process_notifying(argv, cwd, env, stdin_text, timeout_seconds, &mut |_| {})
+}
+
+/// [`run_process_checked`] that also calls `on_start` with the child's pid right after it started (for the "running now" registry).
+pub fn run_process_notifying(
+    argv: &[String],
+    cwd: &str,
+    env: &[(String, String)],
+    stdin_text: &str,
+    timeout_seconds: u64,
+    on_start: &mut dyn FnMut(i64),
+) -> std::io::Result<ProcessResult> {
     use std::io::Read;
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]).current_dir(cwd).env_clear().envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
@@ -483,6 +495,7 @@ pub fn run_process_checked(argv: &[String], cwd: &str, env: &[(String, String)],
     }
     let mut child = cmd.spawn()?;
     let pid = i64::from(child.id());
+    on_start(pid);
     let writer = child.stdin.take().map(|mut stdin| {
         let text = stdin_text.to_string();
         std::thread::spawn(move || {

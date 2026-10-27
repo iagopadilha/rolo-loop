@@ -108,6 +108,13 @@ pub fn create_gate(gate_id: &str, label: &str, ok: bool, detail: Option<String>,
     json!({"id": gate_id, "label": label, "ok": ok, "optional": optional, "detail": detail, "items": shown})
 }
 
+/// A gate that does not apply to this project (G4): optional, passing, marked `not_applicable` so the panel can show it as "n/a" instead of hiding it.
+pub fn build_not_applicable_gate(gate_id: &str, label: &str, detail: &str) -> Value {
+    let mut gate = create_gate(gate_id, label, true, Some(detail.to_string()), &[], true);
+    gate["not_applicable"] = json!(true);
+    gate
+}
+
 pub fn list_fill_in_lines(text: &str) -> Vec<String> {
     pycompat::splitlines(text).iter().filter(|l| l.contains(FILL_IN_MARK)).map(|l| l.trim().to_string()).collect()
 }
@@ -115,9 +122,19 @@ pub fn list_fill_in_lines(text: &str) -> Vec<String> {
 /// The planning gates in the contract order. `facts` = `read_project_facts(context)`.
 pub fn build_planning_gates(app: &App, facts: &Value) -> Vec<Value> {
     let mut gates = build_code_prerequisite_gates(facts);
-    gates.extend(build_repos_gates(facts)); // right after the map
+    let repos = build_repos_gates(facts); // right after the map
+    gates.extend(if repos.is_empty() {
+        vec![build_not_applicable_gate(GATE_REPOS, "Other repositories set up", "not applicable: no other repository needs setup")]
+    } else {
+        repos
+    });
     gates.extend(build_plan_gates(app, facts));
-    gates.extend(build_import_coverage_gates(facts)); // only after a spec import was sent
+    let coverage = build_import_coverage_gates(facts); // only after a spec import was sent
+    gates.extend(if coverage.is_empty() {
+        vec![build_not_applicable_gate(GATE_IMPORT_COVERAGE, "Import coverage (IMPORT-COVERAGE.md)", "not applicable: no spec import was sent")]
+    } else {
+        coverage
+    });
     gates.extend(build_readiness_gates(app, facts));
     gates
 }
@@ -476,8 +493,19 @@ pub fn build_readiness_gates(_app: &App, facts: &Value) -> Vec<Value> {
     let Some(readiness) = facts.get("readiness").filter(|r| !r.is_null()) else { return vec![] };
     let mut gate = create_readiness_gate(readiness);
     let mut items = strings(gate.get("items"));
-    items.extend(describe_loop_settings_problems(&read_roadmap_loop_settings(&text_of(facts.get("work_dir")))).into_iter().map(|i| format!("warning: {i}")));
+    let setting_warnings = describe_loop_settings_problems(&read_roadmap_loop_settings(&text_of(facts.get("work_dir"))));
+    items.extend(setting_warnings.iter().map(|i| format!("warning: {i}")));
+    let mut warnings = strings(gate.get("warnings"));
+    warnings.extend(setting_warnings);
     gate["items"] = json!(items);
+    gate["warnings"] = json!(warnings);
+    // G2: a loop is already running with the approved plan, so a stale readiness result is not a reason to show a red gate
+    let approval = facts.get("approval").cloned().unwrap_or(Value::Null);
+    if t(facts.get("loop_running")) && t(approval.get("approved")) && text_of(readiness.get("state")) == "stale" {
+        gate["ok"] = json!(true);
+        gate["detail"] = json!(format!("approved at {}; the loop is running with the approved plan", text_of(approval.get("at"))));
+        gate["approved_running"] = json!(true);
+    }
     vec![gate]
 }
 
@@ -606,9 +634,13 @@ pub fn create_readiness_gate(readiness: &Value) -> Value {
     } else {
         "stale: the readiness check has not run yet".to_string()
     };
-    let mut items = problems;
-    items.extend(warnings.into_iter().map(|w| format!("warning: {w}")));
-    create_gate(GATE_READY, "Ready to run the loop", state == "ready", Some(detail), &items, false)
+    let mut items = problems.clone();
+    items.extend(warnings.iter().map(|w| format!("warning: {w}")));
+    let mut gate = create_gate(GATE_READY, "Ready to run the loop", state == "ready", Some(detail), &items, false);
+    // G3: warnings are not failures; they come apart from `problems` so the panel can show them outside the red gate
+    gate["problems"] = json!(problems);
+    gate["warnings"] = json!(warnings);
+    gate
 }
 
 /// The engine preflight words its messages for the regression/e2e case; here the file may simply not exist yet.
@@ -821,11 +853,30 @@ mod tests {
         let app = App::for_tests(dir.path());
         let gates = build_planning_gates(&app, &base_facts());
         let ids: Vec<&str> = gates.iter().map(|g| g["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, ["git", "structure", "conformance", "map", "goal", "features", "fields", "open_questions", "flows", "test_environment"]);
+        assert_eq!(
+            ids,
+            ["git", "structure", "conformance", "map", "repos", "goal", "features", "fields", "open_questions", "flows", "test_environment", "import_coverage"]
+        );
         assert!(are_gates_ok(&gates) && are_prerequisites_ok(&gates));
         assert_eq!(gates[3]["detail"], "2 document(s) in docs/codebase, mapped at abc");
         assert_eq!(gates[3]["items"], json!(["STACK.md: languages, frameworks, versions and main dependencies", "X.md"]));
-        assert_eq!(gates[9]["optional"], true);
+        assert_eq!(gates[10]["optional"], true);
+        assert_eq!((gates[4]["not_applicable"].clone(), gates[11]["not_applicable"].clone()), (json!(true), json!(true)));
+    }
+
+    #[test]
+    fn warnings_come_apart_and_a_running_loop_is_not_stale() {
+        let gate = create_readiness_gate(&json!({"state": "problems", "problems": ["p1"], "warnings": ["w"], "at": "t"}));
+        assert_eq!((gate["problems"].clone(), gate["warnings"].clone()), (json!(["p1"]), json!(["w"])));
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::for_tests(dir.path());
+        let mut facts = base_facts();
+        facts["readiness"] = json!({"state": "stale", "at": "t", "problems": [], "warnings": []});
+        facts["approval"] = json!({"approved": true, "at": "10:00"});
+        assert_eq!(build_readiness_gates(&app, &facts)[0]["ok"], false);
+        facts["loop_running"] = json!(true);
+        let gate = &build_readiness_gates(&app, &facts)[0];
+        assert_eq!((gate["ok"].clone(), gate["detail"].as_str()), (json!(true), Some("approved at 10:00; the loop is running with the approved plan")));
     }
 
     #[test]
