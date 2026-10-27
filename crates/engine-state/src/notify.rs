@@ -545,7 +545,9 @@ fn channel_toast(subject: &str, body: &str, ctx: &Value) -> (bool, String) {
         safe(subject),
         safe(&first)
     );
-    match std::process::Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", &script]).stdin(std::process::Stdio::null()).output() {
+    let mut toast = std::process::Command::new("powershell");
+    toast.args(["-NoProfile", "-NonInteractive", "-Command", &script]).stdin(std::process::Stdio::null());
+    match crate::loop_io::hidden(&mut toast).output() {
         Ok(out) if out.status.success() => (true, "ok".into()),
         Ok(out) => (
             false,

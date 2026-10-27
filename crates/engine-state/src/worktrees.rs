@@ -422,7 +422,9 @@ fn run_shell(command: &str, cwd: &str) -> i32 {
     #[cfg(windows)]
     let status = {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd").arg("/C").raw_arg(command).current_dir(cwd).status()
+        let mut shell = std::process::Command::new("cmd");
+        shell.arg("/C").raw_arg(command).current_dir(cwd);
+        crate::loop_io::hidden(&mut shell).status()
     };
     #[cfg(not(windows))]
     let status = std::process::Command::new("sh").arg("-c").arg(command).current_dir(cwd).status();

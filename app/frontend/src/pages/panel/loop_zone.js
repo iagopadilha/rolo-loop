@@ -1,7 +1,6 @@
 /* LOOP zone (amber, main area): everything here depends on the selected turn. From top to bottom: the wrap-up (loop done or stopped
-   with a worktree), the Claude account chip (always visible), the pause banner, the turn
-   strip, the header of the selected turn, the tabs (Pipeline | Decision & events | Files | Errors) and a row with the tab
-   content plus the inspector. The zone scrolls vertically, so the pipeline gets height when the user scrolls down. */
+   with a worktree), the Claude account chip (always visible), the pause banner, the header of the selected turn, the tabs (Pipeline | Decision & events | Files | Errors) and a row with the tab
+   content plus the inspector, and the slim turn bar at the very bottom. The zone scrolls vertically, so the pipeline gets height when the user scrolls down. */
 import { html } from '../../util/preact.js';
 import { isNum, cost, dur, firstLine } from '../../util/format.js';
 import { inlineNodes } from '../../components/markdown.js';
@@ -77,7 +76,7 @@ export function LoopZone({ on, planning }) {
   const tabs = [['pipeline', 'Pipeline'], ['log', 'Decision & events'], ['files', 'Files'], ['errors', failed ? `Errors (${failed})` : 'Errors']];
   return html`<main class="z-loop loop" id="loop-zone" aria-label="Loop" hidden=${planning}>
     ${on && wrapUpVisible() ? html`<${WrapUp} />` : null}
-    ${on ? html`<${ClaudeAccountChip} /><${PauseBanner} /><${TurnStrip} />
+    ${on ? html`<${ClaudeAccountChip} /><${PauseBanner} />
       <div class="z-loop-head"><${TurnHeader} turn=${turn} />
         <div class="z-loop-tabs">
           <${TabBar} tabs=${tabs} current=${tab} label="Loop views" className="z-ltabs" onPick=${pickTab} />
@@ -92,5 +91,6 @@ export function LoopZone({ on, planning }) {
       <div class="z-content" role="tabpanel">${on ? html`<${TabContent} />` : null}</div>
       <${Inspector} on=${on} />
     </div>
+    ${on ? html`<${TurnStrip} />` : null}
   </main>`;
 }

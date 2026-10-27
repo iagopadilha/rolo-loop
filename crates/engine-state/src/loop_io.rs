@@ -7,10 +7,25 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+/// Keeps a child from opening its own console window (Windows; a no-op elsewhere). Every process the engine starts goes through it, so
+/// nothing flashes on the user's screen when a loop runs.
+pub fn hidden(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+/// Windows process creation flag: no console window for the child.
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// `(exit code, stdout stripped, stderr stripped)`; a spawn failure is `(1, "", message)`.
 pub fn run(program: &str, args: &[&str], cwd: Option<&str>) -> (i32, String, String) {
     let mut cmd = Command::new(program);
     cmd.args(args).stdin(Stdio::null());
+    hidden(&mut cmd);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -31,7 +46,9 @@ pub fn git(cwd: &str, args: &[&str]) -> (i32, String, String) {
 pub fn git_raw(cwd: &str, args: &[&str]) -> (i32, String, String) {
     let mut full: Vec<&str> = vec!["-C", cwd];
     full.extend_from_slice(args);
-    match Command::new("git").args(&full).stdin(Stdio::null()).output() {
+    let mut git_command = Command::new("git");
+    hidden(git_command.args(&full).stdin(Stdio::null()));
+    match git_command.output() {
         Ok(out) => (out.status.code().unwrap_or(1), String::from_utf8_lossy(&out.stdout).into_owned(), String::from_utf8_lossy(&out.stderr).trim().to_string()),
         Err(error) => (1, String::new(), error.to_string()),
     }
@@ -203,6 +220,7 @@ pub fn run_timeout_env(program: &str, args: &[&str], cwd: Option<&str>, env: &[(
     use std::io::Read;
     let mut cmd = Command::new(program);
     cmd.args(args).envs(env.iter().copied()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    hidden(&mut cmd);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -461,7 +479,7 @@ pub fn run_process_checked(argv: &[String], cwd: &str, env: &[(String, String)],
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0000_0200); // CREATE_NEW_PROCESS_GROUP
+        cmd.creation_flags(0x0000_0200 | CREATE_NO_WINDOW); // CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
     }
     let mut child = cmd.spawn()?;
     let pid = i64::from(child.id());
