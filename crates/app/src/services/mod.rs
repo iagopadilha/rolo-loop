@@ -35,6 +35,7 @@ pub mod engine_script;
 pub mod folder_picker;
 pub mod guard_events;
 pub mod loop_control;
+pub mod loop_panel;
 pub mod loop_parsers;
 pub mod map_job;
 pub mod mcp_servers;
@@ -119,6 +120,8 @@ pub struct App {
     pub readiness: readiness::ReadinessState,
     /// `MONITOR.json` path -> project id, and project id -> work dir where it was written.
     pub monitors: Mutex<(Vec<(String, String)>, BTreeMap<String, String>)>,
+    /// Idle-shutdown monitor, set by `serve` once it exists (tests have none).
+    pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
 
@@ -180,6 +183,7 @@ impl App {
             map_queue_lock: Mutex::new(()),
             map_active_folders: Mutex::new(BTreeSet::new()),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
+            activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),
         })
