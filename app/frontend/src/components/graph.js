@@ -198,7 +198,7 @@ export function GraphContent({ host, view, ctl, features, stages, selected = nul
     const end = (e) => { if (drag && drag.id === e.pointerId) { drag = null; if (el) el.classList.remove('dragging'); } };
     const wheel = (e) => {
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) api.zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+      if (!e.shiftKey) api.zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
       else { st.view = { s: st.view.s, x: st.view.x - e.deltaX, y: st.view.y - e.deltaY }; st.manual = true; api.apply(); }
     };
     svg.addEventListener('pointerdown', down); svg.addEventListener('pointermove', move);

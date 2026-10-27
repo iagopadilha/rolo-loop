@@ -74,8 +74,8 @@ function RoadmapGraph({ data }) {
   const stages = list(data.stages).map((s) => ({ n: stageNumber(s.n), title: s.title }));
   return html`<div class="plan-rm-graph">
     <div class="plan-rm-bar" role="group" aria-label="Roadmap graph zoom">
-      <button type="button" class="btn btn-sm btn-ghost" title="zoom out (Ctrl + scroll)" aria-label="zoom out" onClick=${() => rmCtl.zoom && rmCtl.zoom(1 / 1.2)}>−</button>
-      <button type="button" class="btn btn-sm btn-ghost" title="zoom in (Ctrl + scroll)" aria-label="zoom in" onClick=${() => rmCtl.zoom && rmCtl.zoom(1.2)}>+</button>
+      <button type="button" class="btn btn-sm btn-ghost" title="zoom out (scroll)" aria-label="zoom out" onClick=${() => rmCtl.zoom && rmCtl.zoom(1 / 1.2)}>−</button>
+      <button type="button" class="btn btn-sm btn-ghost" title="zoom in (scroll)" aria-label="zoom in" onClick=${() => rmCtl.zoom && rmCtl.zoom(1.2)}>+</button>
       <button type="button" class="btn btn-sm btn-ghost" title="fits and centers the graph" onClick=${() => rmCtl.fit && rmCtl.fit()}>Center</button>
     </div>
     <div class="dep-graph plan-rm-box" style="flex:none;height:420px;position:relative;inset:auto">

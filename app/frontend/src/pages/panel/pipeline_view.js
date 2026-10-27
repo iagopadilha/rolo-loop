@@ -1,6 +1,6 @@
 /* Pipeline view of the LOOP zone: orchestrator at the left, one lane per dispatched feature grouped by WAVE, the
    fixed 6 steps per lane. Shows the state accumulated up to the selected turn (see pipeline_model.js).
-   Free canvas: background drag = pan, wheel = scroll (Shift = horizontal), Ctrl/Cmd + wheel or pinch = zoom at the
+   Free canvas: background drag = pan, wheel or pinch = zoom at the
    cursor; dragging a node or lane moves the whole feature, the wave header moves every feature of the wave.
    Camera and offsets live in this module (not in the component), so switching tabs keeps them.
    The canvas is not infinite: the camera is clamped so the content can never leave the viewport (content smaller than the
@@ -68,13 +68,13 @@ function fitToViewport({ user = false } = {}) {
 }
 function resetLayout() { view.offsets = {}; view.auto = true; if (!fitToViewport({ user: true })) repaintNow(); }
 
-/** Wheel scrolls (Shift = horizontal); Ctrl/Cmd + wheel (a trackpad pinch arrives with ctrlKey) zooms at the cursor. */
+/** Wheel zooms at the cursor (a trackpad pinch too); Shift + wheel pans sideways. */
 function onWheel(event) {
   event.preventDefault();
   const element = view.viewport;
   if (!element) return;
-  if (!event.ctrlKey && !event.metaKey) {
-    const deltaX = event.shiftKey ? event.deltaY : event.deltaX, deltaY = event.shiftKey ? 0 : event.deltaY;
+  if (event.shiftKey) { // Shift + wheel pans sideways; a plain wheel zooms
+    const deltaX = event.deltaY, deltaY = 0;
     takeControl();
     setCamera({ ...view.camera, x: view.camera.x - deltaX, y: view.camera.y - deltaY });
     return;
@@ -285,7 +285,7 @@ function Diagram({ graph }) {
 
 function Toolbar() {
   return html`<div class="pl-toolbar" onPointerDown=${stopPropagation}>
-    <div class="pl-hints"><kbd>wheel</kbd>scroll<kbd>Ctrl + wheel</kbd>zoom<kbd>drag</kbd>move</div>
+    <div class="pl-hints"><kbd>wheel</kbd>zoom<kbd>Shift + wheel</kbd>pan<kbd>drag</kbd>move</div>
     <button type="button" class="pl-tool" title="Zoom out" onClick=${() => zoomFromCenter(1 / ZOOM_BUTTON_FACTOR)}>−</button>
     <span class="pl-zoom">${Math.round(view.camera.z * 100)}%</span>
     <button type="button" class="pl-tool" title="Zoom in" onClick=${() => zoomFromCenter(ZOOM_BUTTON_FACTOR)}>+</button>

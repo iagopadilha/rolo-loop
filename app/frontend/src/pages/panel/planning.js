@@ -822,7 +822,7 @@ function RoadmapPreviewBlock() {
   return html`<div class="plan-rm-sec">
     ${e2e == null ? null : html`<p class="plan-rm-cap"><b>E2E: ${e2e ? 'yes' : 'no'}</b>. ${e2e ? 'The loop runs the real app to validate the flows.' : 'The loop validates by build and tests only.'} Set in the ROADMAP: ask the chat to change it.</p>`}
     <${RoadmapPreview} rm=${rm} />
-    <p class="plan-rm-cap">Preview: how the loop will see this roadmap (features by stage, arrows = dependencies). Drag to move, Ctrl + scroll to zoom, click a feature for its details. The real graph appears when the loop runs.</p>
+    <p class="plan-rm-cap">Preview: how the loop will see this roadmap (features by stage, arrows = dependencies). Drag to move, scroll to zoom, click a feature for its details. The real graph appears when the loop runs.</p>
     <p class="plan-rm-note">Refactoring features can ask for a regression proof: the loop captures how the flow behaves before the change and compares after. Mark the feature <code>regression=yes</code> in the ROADMAP (only for slugs that start with <code>refactor-</code>). It needs a flow in FLOWS.md and a test environment (credential names; values in <code>.specs/project/.env.test</code> or the machine's <code>~/.loop-harness/.env</code>). Without them the loop stops and sends an e-mail saying it cannot test.</p>
   </div>`;
 }

@@ -85,7 +85,7 @@ function useDependencyCanvas(dataSignature) {
       stopAuto();
       if (!e.target.closest || !e.target.closest('.dep-life')) return; // over the graph svg its own handler pans/zooms
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) dp.ctl.zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+      if (!e.shiftKey) dp.ctl.zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
       else { const v = dp.view.view; dp.view.view = { s: v.s, x: v.x - e.deltaX, y: v.y - e.deltaY }; dp.view.manual = true; dp.ctl.apply(); }
     };
     const refit = (e) => { if (e.target.closest && e.target.closest('.gf-node, .me-node, .dep-mermaid')) return; dp.auto = true; fitDependencyCanvas(); };

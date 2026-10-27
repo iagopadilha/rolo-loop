@@ -190,7 +190,7 @@ function bindPanZoom(wrap) {
   wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', end);
   wrap.addEventListener('wheel', (e) => {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+    if (!e.shiftKey) zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
     else { dg.view = { s: dg.view.s, x: dg.view.x - e.deltaX, y: dg.view.y - e.deltaY }; dg.manual = true; dgApply(); }
   }, { passive: false });
 }

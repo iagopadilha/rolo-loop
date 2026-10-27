@@ -1,7 +1,7 @@
 /* Dependencies dialog: UML component diagram of the whole roadmap (a global view, no chat).
    «wave» packages group the features of a wave in a column; each «feature» box shows stage, wave and status at the selected
    turn (dashed border = not dispatched yet); a dashed «use» arrow with an open head goes from the dependent feature to the
-   feature it depends on. Mouse wheel scrolls, Ctrl + wheel zooms at the cursor, dragging the background pans, dragging a
+   feature it depends on. Mouse wheel zooms at the cursor (Shift + wheel pans), dragging the background pans, dragging a
    box moves the feature and dragging a «wave» tab moves the whole package. The camera is clamped so the diagram can never be
    panned out of view (smaller than the viewport on an axis = centered there); the default view is fitted and centered, also
    when the dialog is resized, until the user pans or zooms ("Fit" goes back to it). */
@@ -102,8 +102,8 @@ function DepsBody() {
     if (!viewport) return undefined;
     const onWheel = (event) => {
       event.preventDefault();
-      if (!event.ctrlKey && !event.metaKey) { // plain wheel scrolls (Shift = horizontal)
-        const deltaX = event.shiftKey ? event.deltaY : event.deltaX, deltaY = event.shiftKey ? 0 : event.deltaY;
+      if (event.shiftKey) { // Shift + wheel scrolls sideways; a plain wheel zooms
+        const deltaX = event.deltaY, deltaY = 0;
         moveCamera((current) => ({ ...current, x: current.x - deltaX, y: current.y - deltaY }));
         return;
       }
@@ -161,7 +161,7 @@ function DepsBody() {
 
   if (!features.length) return html`<div class="bd-empty">No features in the roadmap yet.</div>`;
   return html`<div class="bd-deps">
-    <p class="bd-deps-text">${turn != null ? html`State at <span class="bd-turn">${'T' + turn}</span>. ` : 'State at the latest turn. '}${'The dashed «use» arrow points to the feature it depends on. The wheel scrolls and Ctrl + wheel zooms. Drag a «feature» or a «wave» tab to rearrange.'}</p>
+    <p class="bd-deps-text">${turn != null ? html`State at <span class="bd-turn">${'T' + turn}</span>. ` : 'State at the latest turn. '}${'The dashed «use» arrow points to the feature it depends on. The wheel zooms and Shift + wheel pans. Drag a «feature» or a «wave» tab to rearrange.'}</p>
     <div class="bd-deps-viewport" ref=${viewportRef} style=${{ cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown=${onViewportMouseDown}>
       <div class="bd-deps-canvas" style=${{ transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.z})` }}>
         ${layout.packages.map((pack) => html`<div key=${pack.wave}>
@@ -188,7 +188,7 @@ function DepsBody() {
         })}
       </div>
       <div class="bd-deps-toolbar" onMouseDown=${(event) => event.stopPropagation()}>
-        <span class="bd-deps-hints"><kbd>wheel</kbd>scroll<kbd>Ctrl + wheel</kbd>zoom<kbd>drag</kbd>move</span>
+        <span class="bd-deps-hints"><kbd>wheel</kbd>zoom<kbd>Shift + wheel</kbd>pan<kbd>drag</kbd>move</span>
         <button type="button" class="bd-icon-button" aria-label="Zoom out" onClick=${() => zoomAroundCenter(1 / BUTTON_ZOOM_STEP)}>−</button>
         <span class="bd-zoom-value">${Math.round(camera.z * 100) + '%'}</span>
         <button type="button" class="bd-icon-button" aria-label="Zoom in" onClick=${() => zoomAroundCenter(BUTTON_ZOOM_STEP)}>+</button>
