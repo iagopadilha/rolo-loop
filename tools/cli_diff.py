@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-ORACLE = os.environ.get("ORACLE_MAESTRO", r"C:\Users\someone\work\reference\claude-maestro-old")
+ORACLE = os.environ.get("ORACLE_MAESTRO", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "claude-maestro-legacy"))
 PY_HARNESS = os.path.join(ORACLE, "app", "harness.py")
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RUST = os.path.join(os.path.dirname(HERE), "target", "debug", "harness.exe")

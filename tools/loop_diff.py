@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-ORACLE = os.environ.get("ORACLE_MAESTRO", r"C:\Users\someone\work\reference\claude-maestro-old")
+ORACLE = os.environ.get("ORACLE_MAESTRO", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "claude-maestro-legacy"))
 BACKEND = os.path.join(ORACLE, "app", "backend")
 ENGINE = os.path.join(BACKEND, "harness_backend", "engine")
 FAKE = os.path.join(BACKEND, "tests", "engine", "fake_claude.py")
