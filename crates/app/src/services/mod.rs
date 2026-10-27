@@ -66,6 +66,7 @@ pub mod repo_registry;
 pub mod roadmap;
 pub mod standards;
 pub mod subproject_map;
+pub mod subproject_validation;
 pub mod subprojects;
 pub mod system_map;
 pub mod test_environment;
