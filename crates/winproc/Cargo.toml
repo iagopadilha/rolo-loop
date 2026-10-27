@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "winproc"
 description = "The only place with unsafe code: process queries (start time, liveness) through the Windows API"
 version.workspace = true

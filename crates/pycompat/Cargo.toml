@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "pycompat"
 description = "Emulations of the Python standard library behaviours the reference implementation's contracts depend on"
 version.workspace = true

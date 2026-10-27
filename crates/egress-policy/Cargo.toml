@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "egress-policy"
 description = "Network list grammar and judgement shared by the claude-maestro guard, engine and the claude-craft-kit testenv"
 version.workspace = true

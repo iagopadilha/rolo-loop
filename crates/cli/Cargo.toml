@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "cli"
 description = "The `harness` command line"
 version.workspace = true
