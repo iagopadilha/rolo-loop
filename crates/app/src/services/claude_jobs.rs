@@ -461,6 +461,10 @@ impl ClaudeJobService<'_> {
     }
 
     fn read_corrected_record(&self, path: &Path) -> Option<Value> {
+        // The registry is asked BEFORE the file is read: a job writes its final record and only then leaves the registry, so a job that is already out
+        // of the registry has its final record on disk. Asking after the read could pair a stale "running" record with a finished job.
+        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let alive_before = self.app.job_tables.lock().unwrap_or_else(|e| e.into_inner()).running.iter().any(|(i, _)| *i == stem);
         let mut record = self.app.specs.read_json(path);
         for _ in 0..RECORD_READ_RETRIES {
             // Windows: a read can fail while the job thread replaces the file (progress updates)
@@ -474,7 +478,7 @@ impl ClaudeJobService<'_> {
             return None;
         }
         let id = text_of(record.get("id"));
-        let alive = self.app.job_tables.lock().unwrap_or_else(|e| e.into_inner()).running.iter().any(|(i, _)| *i == id);
+        let alive = alive_before || (id != stem && self.app.job_tables.lock().unwrap_or_else(|e| e.into_inner()).running.iter().any(|(i, _)| *i == id));
         if record.get("state").and_then(Value::as_str) == Some(JOB_STATE_RUNNING) && !alive {
             record.insert("state".into(), json!(JOB_STATE_ERROR));
             record.insert("error".into(), json!(INTERRUPTED_JOB_MESSAGE));
