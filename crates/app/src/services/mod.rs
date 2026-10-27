@@ -32,6 +32,8 @@ pub mod roadmap_view;
 pub mod spec_file;
 pub mod turns;
 pub mod engine_script;
+pub mod error_center;
+pub mod error_event_sync;
 pub mod folder_picker;
 pub mod guard_events;
 pub mod loop_control;
@@ -124,6 +126,7 @@ pub struct App {
     /// Idle-shutdown monitor, set by `serve` once it exists (tests have none).
     /// Pipeline body per work dir, keyed by the files it was derived from.
     pub pipeline_cache: Mutex<std::collections::HashMap<String, (String, Value)>>,
+    pub duration_cache: Mutex<std::collections::HashMap<std::path::PathBuf, (f64, Option<f64>)>>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -187,6 +190,7 @@ impl App {
             map_active_folders: Mutex::new(BTreeSet::new()),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
             pipeline_cache: Mutex::new(Default::default()),
+            duration_cache: Mutex::new(Default::default()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),

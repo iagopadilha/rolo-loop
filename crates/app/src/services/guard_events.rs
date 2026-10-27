@@ -13,7 +13,7 @@ use super::App;
 use crate::repositories::loop_read_formatting::clip_redacted_text;
 use serde_json::{json, Map, Value};
 
-const BLOCK_DECISIONS: [&str; 2] = ["blocked", "block"];
+pub const BLOCK_DECISIONS: [&str; 2] = ["blocked", "block"];
 pub const GUARD_EVENTS_LIMIT: usize = 20;
 const GUARD_DETAIL_LIMIT: usize = 200;
 const GUARD_FIELD_LIMIT: usize = 60;
