@@ -109,7 +109,7 @@ Ceiling: one agent per lane, except a `building` lane, which runs up to `Max par
 
 - **Verification (its own phase, `verifier`):** `craft verify` finds the `.sln`/`.slnx`/`.csproj` closest to the root (up to 3 folders down, ignoring bin/obj) and runs `dotnet build <target>`; `dotnet test` if there is a test project; `dotnet format --verify-no-changes` only when an `.editorconfig` exists (without it, format would fight legacy code). A compile error becomes `FAIL` with the first `CSxxxx` line.
 - **Executor:** may run `dotnet build <csproj of what it touched>` (the build does an implicit restore). `dotnet restore` and `dotnet add package` stay blocked by the guard (rule `install`): a new dependency only if the spec asks for it.
-- **Starting the app (E2E, `verifier-flow`):** `dotnet run --launch-profile https`, or `dotnet build` and `dotnet run --no-build --project <csproj> --urls http://127.0.0.1:<port>`. See `<TOOLKIT>/skills/flow-validator/references/ENVIRONMENT.md`.
+- **Starting the app (E2E, `verifier-flow`):** `dotnet run --launch-profile https`, or `dotnet build` and `dotnet run --no-build --project <csproj> --urls http://127.0.0.1:<port>`. See `<TOOLKIT>/skills/flow-validator/references/environment.md`.
 - **Loop worktree:** born without `bin/obj`. The repo needs a `.gitignore` with `bin/` and `obj/` (the preflight warns), otherwise the build dirties the tree and the loop stops.
 
 ## `verifier-flow` dispatch: the browser filter and the credentials
