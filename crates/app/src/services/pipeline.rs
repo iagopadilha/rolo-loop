@@ -41,6 +41,16 @@ pub const STEP_GATE: usize = 2;
 pub const STEP_EXEC: usize = 3;
 pub const STEP_VERIFY: usize = 4;
 pub const STEP_COMMIT: usize = 5;
+/// The `key` of a pipeline step (`spec`, `review`, `gate`, `exec`, `verify`, `commit`).
+pub fn step_key(step: usize) -> &'static str {
+    STEPS[step].key
+}
+
+/// The agent that runs a pipeline step.
+pub fn step_agent(step: usize) -> &'static str {
+    STEPS[step].agent
+}
+
 const STEP_LABELS: [&str; 6] = ["spec writing", "spec review", "gate", "execution", "verification", "commit"];
 const LABEL_STEP_ORDER: [usize; 4] = [STEP_SPEC, STEP_REVIEW, STEP_EXEC, STEP_VERIFY];
 const LABEL_MAX_PARTS: usize = 3;

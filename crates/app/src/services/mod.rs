@@ -20,6 +20,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 
+pub mod chat;
+pub mod chat_scope_context;
 pub mod claude_accounts;
 pub mod claude_call_log;
 pub mod claude_jobs;
@@ -45,6 +47,7 @@ pub mod mcp_servers;
 pub mod network;
 pub mod loop_status;
 pub mod pipeline;
+pub mod quarantine;
 pub mod planning_repos;
 pub mod project_capabilities;
 pub mod project_progress;
@@ -128,6 +131,7 @@ pub struct App {
     /// Pipeline body per work dir, keyed by the files it was derived from.
     pub pipeline_cache: Mutex<std::collections::HashMap<String, (String, Value)>>,
     pub duration_cache: Mutex<std::collections::HashMap<std::path::PathBuf, (f64, Option<f64>)>>,
+    pub chat_send_lock: Mutex<()>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -192,6 +196,7 @@ impl App {
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
             pipeline_cache: Mutex::new(Default::default()),
             duration_cache: Mutex::new(Default::default()),
+            chat_send_lock: Mutex::new(()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),

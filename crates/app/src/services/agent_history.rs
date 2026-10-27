@@ -15,7 +15,7 @@ use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-static HISTORY_ID: LazyLock<Re> = LazyLock::new(|| Re::new(r"^v(\d{1,6}):([A-Za-z0-9_-]{1,80})\z"));
+pub static HISTORY_ID: LazyLock<Re> = LazyLock::new(|| Re::new(r"^v(\d{1,6}):([A-Za-z0-9_-]{1,80})\z"));
 pub const ORCHESTRATOR_ID: &str = "orch";
 pub const ORCHESTRATOR_ROLE: &str = "orchestrator";
 const CLOSED_STATUSES: [&str; 2] = ["verified", "blocked"];
