@@ -177,6 +177,7 @@ impl SpecsStructureService<'_> {
         }
         changed.extend(self.ensure_specs_in_gitignore(project_dir));
         changed.extend(self.ensure_env_files_in_gitignore(project_dir));
+        changed.extend(engine_state::setup_files::ensure_line_endings(project_dir).into_iter().map(|name| format!("{name} (line endings)")));
         changed.extend(self.ensure_rules_in_claude_md(project_dir, &name));
         if !monorepo_root {
             // the root of a monorepo is not a project: each subproject has its own run facts

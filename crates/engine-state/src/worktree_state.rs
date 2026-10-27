@@ -153,7 +153,7 @@ pub fn dirty_outside_specs(work: &str, ignore: &BTreeSet<String>) -> Vec<StatusR
         }
         rows.push(row);
     }
-    rows
+    crate::loop_io::drop_line_ending_only(work, rows) // a CRLF-only change is not a dirty tree
 }
 
 fn git_escape(c: char) -> Option<u8> {
