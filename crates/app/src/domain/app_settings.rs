@@ -69,7 +69,7 @@ pub fn setting_catalog() -> Vec<SettingDefinition> {
             d
         },
         restart(def("claude_binary", "Claude command", "The command that starts Claude Code. Empty uses claude from your PATH. Change it to run a wrapper (for example cc) signed in with another account.", TEXT, json!(""))),
-        restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped.", LIST, json!([]))),
+        restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped. A loop that is already running reads the list again before each turn.", LIST, json!([]))),
         min(restart(def("max_parallel_maps", "Parallel subproject maps", "How many subproject map jobs of a monorepo run at the same time; the rest wait in a queue. Lower it if your machine or account limit struggles.", INT, json!(6))), 1.0),
         min(restart(def("idle_hours", "Idle shutdown (hours)", "The app shuts itself down after this many hours without activity or a running loop. 0 means it never shuts down.", NUMBER, json!(2))), 0.0),
         min(restart(def("inventory_giant_lines", "Giant file (lines)", "A code file with more lines than this counts as giant: the readiness check warns when a feature touches one without a refactor feature before it.", INT, json!(1500))), 1.0),

@@ -36,6 +36,7 @@ pub mod notify;
 pub mod permission_denials;
 pub mod planning_env_validation;
 pub mod preflight_checks;
+pub mod process_registry;
 pub mod prod_database_script;
 pub mod project_repos;
 pub mod readiness_checks;

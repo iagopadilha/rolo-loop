@@ -38,7 +38,7 @@
 use crate::app_ctx::AppCtx;
 use crate::auto_answers::{try_auto_answer, try_gate_tiebreak, write_answer, AutoOpts, AutoState};
 use crate::claude_accounts::*;
-use crate::claude_turn::{claude_command, is_caveman_on, loop_json_correction_prompt, parse_result, py_float, run_turn, unrecognized_output};
+use crate::claude_turn::{claude_command, is_caveman_on, loop_json_correction_prompt, parse_result, py_float, run_turn, run_turn_notifying, unrecognized_output};
 use crate::limit_waits::{limit_wait_seconds, main_reset_moment, pause_requested, sleep_unless_paused, wait_text};
 use crate::loop_io::{git, load_json, local_now, now_iso, read, save_json, save_meta, worktree_of};
 use crate::loop_opts::{parse, LoopOpts, Parsed};
@@ -48,7 +48,9 @@ use crate::preflight_checks::*;
 use crate::turn_gates::*;
 use crate::worktree_state::{acquire_lock, count_new_commits, fingerprint, heads_of, release_lock, rewind, roadmap_score, settle_dirty_worktrees, LeftoverOpts};
 use crate::worktrees::{ensure_worktrees, Ctx, WtOpts};
-use crate::{claude_binaries, cli_output, decisions, delivery, egress_proxy, graph_view, loop_summary, monitor_proc, notify, project_repos, usage_windows};
+use crate::{
+    claude_binaries, cli_output, decisions, delivery, egress_proxy, graph_view, loop_summary, monitor_proc, notify, process_registry, project_repos, usage_windows,
+};
 use cfg::env::{app_env_value, load_all};
 use cfg::Env;
 use pycompat::json::py_json_dumps;
@@ -214,6 +216,29 @@ impl Runner {
         results.into_iter().map(|(n, v)| (n, json!(v))).collect()
     }
 
+    /// Notice after a turn that verified a feature or closed a stage (the loop goes on; informative only). One notice per turn, naming the
+    /// features and the stage. Off with `LOOP_NOTIFY_MILESTONES=off`. Never fails.
+    fn notify_milestones(&self, work: &str, meta: &Value, opts: &LoopOpts, repo: &str, before_roadmap: &str, turn: i64) {
+        if !self.notify || !notify::milestones_enabled(&self.env()) {
+            return;
+        }
+        let after = read(&Path::new(work).join(".specs").join("project").join("ROADMAP.md"));
+        let (verified, stages) = notify::milestones(before_roadmap, &after);
+        if verified.is_empty() && stages.is_empty() {
+            return;
+        }
+        let event = if stages.is_empty() { "feature_verified" } else { "stage_closed" };
+        let mut context = self.build_context(work, meta, event, "", opts, repo, "");
+        if let Some(map) = context.as_object_mut() {
+            map.insert("verified_now".into(), json!(verified));
+            map.insert("stage_closed".into(), json!(stages));
+            map.insert("turn".into(), json!(turn));
+            map.insert("running".into(), json!([]));
+        }
+        println!("[loop] milestone notice: {}", verified.join(", "));
+        self.deliver(&context, work, None);
+    }
+
     /// Stop notice that does not go through `finish` (preflight, worktree, lock, unhandled failure): the user is always notified.
     pub fn notify_early(&self, reason: &str, opts: &LoopOpts) {
         if !self.notify {
@@ -284,7 +309,15 @@ impl Runner {
             if base.is_empty() { "-8".to_string() } else { format!("{base}..{}", if truthy(meta.get("branch")) { text(meta.get("branch")) } else { "HEAD".into() }) };
         let log = git(work, &["log", "--oneline", "--no-decorate", &range]).1;
         let graph = graph_view::load(work);
+        // features in progress now (LOOP.json `feature`, else the ones being specced or built) and the stage the loop is working on
+        let running: Vec<String> = match state.get("feature") {
+            Some(Value::String(f)) if !f.is_empty() => f.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+            Some(Value::Array(list)) => list.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+            _ => graph.iter().filter(|(_, f)| ["building", "speccing"].contains(&f.status())).map(|(slug, _)| slug.clone()).collect(),
+        };
+        let stage = graph.iter().find(|(_, f)| !["verified", "blocked"].contains(&f.status())).map(|(_, f)| f.text("stage").to_string()).unwrap_or_default();
         json!({
+            "running": running, "stage": stage,
             "event": status, "project": pycompat::last_segment(repo), "branch": meta.get("branch"), "turn": meta.get("turns"), "cost": meta.get("cost_usd"), "reason": reason,
             "next": state.get("next"), "options": if state.get("options").is_some_and(Value::is_array) { state["options"].clone() } else { json!([]) },
             "to_check": if state.get("to_check").is_some_and(Value::is_array) { state["to_check"].clone() } else { json!([]) },
@@ -359,11 +392,11 @@ impl Runner {
 
     /// Notice (every configured channel) when a turn ran on another command or account than the previous turn: `claude` -> `cc`, back to
     /// `claude`, or the `cc` picker on another account. The first turn of the first run only records it.
-    fn notify_claude_change(&self, opts: &mut LoopOpts, turn: i64, name: &str, account: &str) {
+    fn notify_claude_change(&self, opts: &mut LoopOpts, turn: i64, name: &str, account: &str) -> Option<Value> {
         let used = (name.to_string(), account.to_string());
         let previous = opts.last_claude_used.replace(used.clone());
         let unusable = opts.unusable_notice.take(); // set when the change came from an account that cannot be used
-        let Some(previous) = previous.filter(|p| *p != used) else { return };
+        let previous = previous.filter(|p| *p != used)?;
         let main_name = command_base_name(&if opts.claude.is_empty() { claude_binaries::DEFAULT_BINARY_NAME.to_string() } else { opts.claude.clone() });
         let is_main = command_base_name(name) == main_name;
         let phrase_of = |key: &str| opts.limit_phrases.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default(); // which window ran out on each command
@@ -378,7 +411,7 @@ impl Runner {
             // it needs a human (log in again, ask the admin): always every channel
             unusable_subject = format!("{} account unusable", if command_base_name(u["command"].as_str().unwrap_or("")) == main_name { "main" } else { "backup" });
             let why = u["reason"].as_str().filter(|r| !r.is_empty()).unwrap_or("no reason in the output");
-            reason = format!("The previous account is unusable ({why}), so the loop moved to the backup command. Waiting does not fix a login: sign in again (`claude` then /login, or `claude setup-token`) or ask the admin to enable access.");
+            reason = format!("The previous account is unusable ({why}); this is not a usage limit, so there is no reset time and it does not come back by itself. The loop moved to the backup command. Waiting does not fix a login: sign in again (`claude` then /login, or `claude setup-token`) or ask the admin to enable access.");
         } else if same_command {
             reason = format!(
                 "The `{}` account picker moved to another account because the previous one hit its usage limit{}.",
@@ -393,11 +426,26 @@ impl Runner {
                 limit_suffix(&phrase_of(&command_base_name(&previous.0)))
             );
         }
+        let kind = if unusable.is_some() {
+            "account_unusable"
+        } else if same_command {
+            "picker_switch"
+        } else if is_main {
+            "back_to_main"
+        } else {
+            "usage_limit_switch"
+        };
+        let event = json!({
+            "kind": kind, "turn": turn, "at": now_iso(), "to_main": is_main,
+            "from": {"command": command_base_name(&previous.0), "account": previous.1}, "to": {"command": command_base_name(name), "account": account},
+            "reason": reason, "unusable": unusable.as_ref().map(|u| u["reason"].clone()).unwrap_or(Value::Null),
+        });
         self.notify_wait(
             &claude_change_subject(name, account, is_main, same_command, &unusable_subject),
             &format!("Turn {turn} now runs on {now}.\nBefore it the loop ran on {before}.\n{reason} The loop goes on by itself."),
             only,
         );
+        Some(event)
     }
 
     /// One alert per run, on every channel, when the MAIN command's weekly window ran out: until when it is unusable, where the loop goes on,
@@ -437,6 +485,7 @@ impl Runner {
 
     // ---------------------------------------------------------------- end
     fn finish(&self, work: &str, meta: &mut Value, status: &str, reason: &str, opts: &LoopOpts) -> i32 {
+        process_registry::clear(work);
         set(meta, "stopped", json!(status));
         set(meta, "reason", json!(reason));
         if status == "paused" {
@@ -734,9 +783,20 @@ impl Runner {
             let clock = local_now();
             println!("[loop] turn {turn} | {:02}:{:02}:{:02}", clock.hour(), clock.minute(), clock.second());
             return_to_main_command(opts);
+            if refresh_fallbacks(opts, &self.env()) {
+                println!("[loop] the fallback commands changed in the settings: now {}", claude_names(opts).join(", "));
+            }
             let claude_name = current_claude(opts);
             let command = claude_command(&self.ctx, opts, &prompt);
-            let (code, out, err, timed_out) = run_turn(&self.ctx, &command, work, opts.timeout, &mut self.env_reported);
+            let lanes = process_registry::lanes_of_prompt(&prompt);
+            let known_account = opts.last_claude_used.as_ref().filter(|(n, _)| *n == claude_name).map(|(_, a)| a.clone()).unwrap_or_default();
+            let mut process_id = String::new();
+            let (code, out, err, timed_out) = run_turn_notifying(&self.ctx, &command, work, opts.timeout, &mut self.env_reported, &mut |pid| {
+                process_id = process_registry::register(work, "claude_turn", turn, &lanes, pid, &command_base_name(&claude_name), &known_account);
+            });
+            if !process_id.is_empty() {
+                process_registry::unregister(work, &process_id);
+            }
             if winproc::interrupted() {
                 return self.finish(work, meta, "error", "interrupted by the user (Ctrl+C)", opts);
             }
@@ -943,7 +1003,17 @@ impl Runner {
                 };
                 return self.finish(work, meta, "error", &format!("claude exited with code {code} on turn {turn}: {}", head(&why, 300)), opts);
             }
-            self.notify_claude_change(opts, turn, &claude_name, &account);
+            if let Some(event) = self.notify_claude_change(opts, turn, &claude_name, &account) {
+                // a silent switch to another account is kept as an event the panel can list (newest 30)
+                if let Some(map) = meta.as_object_mut() {
+                    if let Some(list) = map.entry("claude_events").or_insert_with(|| json!([])).as_array_mut() {
+                        list.push(event);
+                        let extra = list.len().saturating_sub(30);
+                        list.drain(..extra);
+                    }
+                }
+                let _ = save_meta(&meta_path(work), meta);
+            }
             let denials: Vec<Value> = data.get("permission_denials").and_then(Value::as_array).cloned().unwrap_or_default();
             let env_now = self.env();
             let risky: Vec<&Value> = denials.iter().filter(|d| is_risky_denial(&env_now, d, work)).collect();
@@ -1098,6 +1168,7 @@ impl Runner {
                     return self.finish(work, meta, "error", &format!("{stall} consecutive turns without ROADMAP progress"), opts);
                 }
             }
+            self.notify_milestones(work, meta, opts, repo, &prev_text, turn);
             last_score = score; // baseline always follows the score (a blocked feature lowers the score without stopping the others' progress)
             println!(
                 "[loop] turn {turn} ok in {:.0}s | progress {score} ({done}/{total} closed) | no progress: {stall}/{} | cost US$ {cost:.2}",

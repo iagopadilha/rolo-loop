@@ -148,3 +148,20 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/api/app/settings/mcp-servers` | yes | yes |
 
 The response shapes are the ones the panel front end in `app/frontend/` reads; they are pinned by `tools/api_diff.py`, which compares every route with the reference implementation.
+
+## `GET /p/{project_id}/api/state`: live status fields
+
+These fields are added to the state payload (feature `live-status-and-notices`). None of them carries a command line, an environment value or a credential path.
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `processes` | `[{id, kind, turn, pid, started_at, label, feature, step, lanes: [{feature, step}], claude, claude_account}]` | What the engine started and is running now (`kind` is `claude_turn`). Empty when the loop is not alive. `label` is a one-line title such as `Loop turn 7 · feature a, b · step execute`. |
+| `now` | `{running, turn, label, started_at, pid, claude, claude_account, lanes: [{feature, name, step, stage, stage_title}]}` | The "running now" strip built from `processes` and the roadmap view. `{running: false, lanes: []}` when idle. |
+| `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `picker_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
+
+Planning gates (`/api/pipeline` and the readiness routes) also change:
+
+- The `ready` gate carries `problems` and `warnings` as separate lists; `items` keeps both, as before. When a loop is running with an approved plan, a stale readiness result no longer turns the gate red (`approved_running: true`).
+- The `repos` and `import_coverage` gates are always present; when they do not apply they are `ok`, `optional` and `not_applicable: true`.
+
+Notices (message, e-mail, `NOTICE.txt`) name the features and the stage, use one vocabulary ("verificadas" until the branch is pushed, then "entregues"), and also fire when a turn verifies a feature or closes a stage (`LOOP_NOTIFY_MILESTONES=off` turns that off).

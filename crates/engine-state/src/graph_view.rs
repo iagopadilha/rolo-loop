@@ -78,7 +78,9 @@ pub fn ascii_graph(features: &Features) -> String {
     let mut out: Vec<String> = Vec::new();
     for (stage, slugs) in stages(features) {
         let closed = slugs.iter().filter(|s| ["verified", "blocked"].contains(&features.get(s).expect("exists").status())).count();
-        out.push(format!("Stage {}  ({closed}/{} closed)", if stage.is_empty() { "?" } else { &stage }, slugs.len()));
+        // a roadmap whose headings cannot be read has no stage: show the group without a question mark
+        let heading = if stage.is_empty() { "Features".to_string() } else { format!("Stage {stage}") };
+        out.push(format!("{heading}  ({closed}/{} closed)", slugs.len()));
         for slug in &slugs {
             let f = features.get(slug).expect("exists");
             let status = f.status();
@@ -115,7 +117,11 @@ pub fn short(features: &Features, limit: usize) -> String {
         .iter()
         .map(|(stage, slugs)| {
             let items = slugs.iter().map(|s| format!("{s} {}", word(features.get(s).expect("exists").status()))).collect::<Vec<_>>().join(", ");
-            format!("S{}: {items}", if stage.is_empty() { "?" } else { stage })
+            if stage.is_empty() {
+                items
+            } else {
+                format!("S{stage}: {items}")
+            }
         })
         .collect();
     let text = parts.join(" | ");
@@ -142,7 +148,7 @@ pub fn mermaid(features: &Features) -> String {
     let mut lines = vec!["flowchart LR".to_string()];
     for (stage, slugs) in stages(features) {
         let id = NON_WORD.replace_lit(if stage.is_empty() { "x" } else { &stage }, "_");
-        lines.push(format!("  subgraph S{id}[\"Stage {}\"]", if stage.is_empty() { "?" } else { &stage }));
+        lines.push(format!("  subgraph S{id}[\"{}\"]", if stage.is_empty() { "Features".to_string() } else { format!("Stage {stage}") }));
         for slug in &slugs {
             let status = features.get(slug).expect("exists").status();
             lines.push(format!("    {}[\"{slug}<br/>{}\"]:::{status}", node_id(slug), word_or_q(Some(status))));

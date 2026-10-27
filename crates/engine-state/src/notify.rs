@@ -41,27 +41,44 @@ static DIRTY_TREE: LazyLock<Re> =
 static TURN_TIMEOUT: LazyLock<Re> = LazyLock::new(|| Re::new(r"turn (\d+) exceeded (\d+) min"));
 static COST_CAP: LazyLock<Re> = LazyLock::new(|| Re::new(r"total cost cap exceeded: US\$ ([\d.]+) > ([\d.]+)"));
 static COST_CAP_PAUSE: LazyLock<Re> = LazyLock::new(|| Re::new(r"cost cap reached: US\$ ([\d.]+) of ([\d.]+)"));
+static TURN_FAILED: LazyLock<Re> = LazyLock::new(|| Re::new(r"claude exited with code (-?\d+) on turn (\d+)"));
+static STALL: LazyLock<Re> = LazyLock::new(|| Re::new(r"^(\d+) consecutive turns without ROADMAP progress"));
 static PORCELAIN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*[A-Z?!]{1,2}\s+(.*)\z"));
 
 fn title_of(event: &str) -> Option<&'static str> {
     Some(match event {
         "awaiting_user" => "Aguardando sua decisão",
         "error" => "Execução interrompida com erro",
-        "paused" => "Execução pausada: limite de custo",
+        "paused" => "Execução pausada",
         "done" => "Execução concluída",
+        "feature_verified" => "Feature verificada",
+        "stage_closed" => "Etapa concluída",
         "test" => "Teste de notificação",
         "custom" => "Aviso",
         _ => return None,
     })
 }
 
+/// Cuts `text` to `size` characters at a sentence end when one falls in the second half, else at a word boundary (never in the middle of a
+/// word), and marks the cut with `...`.
 fn clip(text: &str, size: usize) -> String {
     let text = text.trim();
     if text.chars().count() <= size {
-        text.to_string()
-    } else {
-        format!("{}...", text.chars().take(size.saturating_sub(3)).collect::<String>())
+        return text.to_string();
     }
+    let room = size.saturating_sub(3);
+    let head: String = text.chars().take(room).collect();
+    let next_is_break = text.chars().nth(room).is_none_or(char::is_whitespace);
+    let sentence = head.rfind(['.', '!', '?', '\n']).filter(|i| head[..*i].chars().count() >= room / 2);
+    let cut = match sentence {
+        Some(i) => head[..=i].to_string(),
+        None if next_is_break => head,
+        None => match head.rfind(char::is_whitespace) {
+            Some(i) if head[..i].chars().count() >= room / 2 => head[..i].to_string(),
+            _ => head,
+        },
+    };
+    format!("{}...", cut.trim_end())
 }
 
 fn s<'a>(ctx: &'a Value, key: &str) -> &'a str {
@@ -137,7 +154,24 @@ fn subject_of(ctx: &Value) -> String {
     if ev == "custom" {
         return if s(ctx, "subject").is_empty() { "[loop] aviso".into() } else { s(ctx, "subject").to_string() };
     }
-    format!("[Claude-Maestro] {}", title_of(ev).unwrap_or(ev))
+    let title = title_of(ev).unwrap_or(ev);
+    let mut named = string_list(ctx, "verified_now");
+    if named.is_empty() && !["feature_verified", "stage_closed"].contains(&ev) {
+        named = string_list(ctx, "running"); // a stop names the feature that was running
+    }
+    let stage = s(ctx, "stage").trim();
+    let mut parts: Vec<String> = Vec::new();
+    if !named.is_empty() {
+        parts.push(named.iter().take(3).cloned().collect::<Vec<_>>().join(", ") + if named.len() > 3 { " e outras" } else { "" });
+    }
+    if !stage.is_empty() {
+        parts.push(format!("etapa {stage}"));
+    }
+    if parts.is_empty() || ev == "test" {
+        format!("[Claude-Maestro] {title}")
+    } else {
+        format!("[Claude-Maestro] {title}: {}", parts.join(" | "))
+    }
 }
 
 fn loop_id(ctx: &Value) -> String {
@@ -150,8 +184,10 @@ fn loop_id(ctx: &Value) -> String {
     }
 }
 
+/// The one vocabulary of every channel (N8): "verificada" is a feature that passed its checks and sits in the loop branch; it is
+/// "entregue" only after the branch was pushed (and the PR opened). The word "concluída/finalizada/done" is not used for a feature.
 const FEATURE_GROUPS: [(&str, &[&str]); 6] = [
-    ("finalizadas", &["verified"]),
+    ("verificadas", &["verified"]),
     ("com especificação aprovada", &["specced", "approved"]),
     ("em execução", &["building"]),
     ("em especificação", &["speccing"]),
@@ -168,8 +204,103 @@ fn feature_counts(ctx: &Value) -> (usize, usize, Vec<(&'static str, usize)>) {
     (statuses.iter().filter(|s| *s == "verified").count(), statuses.len(), groups)
 }
 
+/// Status word of one feature in the notice.
+fn status_label(status: &str) -> &'static str {
+    match status {
+        "verified" => "verificada",
+        "building" => "em execução",
+        "speccing" => "em especificação",
+        "specced" | "approved" => "especificação aprovada",
+        "pending" => "pendente",
+        "blocked" => "bloqueada",
+        _ => "sem status",
+    }
+}
+
+/// Whether the work was delivered (branch pushed): only then the count says "entregues".
+fn delivered(ctx: &Value) -> bool {
+    let push = s(ctx, "push");
+    ctx.get("push").is_some() && truthy(ctx.get("push")) && push.starts_with("done")
+}
+
+/// Lines `slug: status`, the running feature marked, for the notice body.
+fn feature_lines(ctx: &Value) -> Vec<String> {
+    let running = string_list(ctx, "running");
+    ctx.get("features")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| Some((p.get(0)?.as_str()?, p.get(1)?.as_str()?)))
+                .map(|(slug, status)| {
+                    let now = if running.iter().any(|r| r == slug) { " (rodando agora)" } else { "" };
+                    format!("{slug}: {}{now}", status_label(status))
+                })
+                .take(40)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A stop reason that has no translation yet: no command-line flags, no raw engine tone, and a pointer to the panel.
+fn plain_fallback(text: &str) -> String {
+    let kept: Vec<&str> = text.split_whitespace().filter(|w| !w.starts_with("--")).collect();
+    format!("O loop parou e o motivo técnico ainda não tem tradução: {} Abra o painel para ver os detalhes e a ação sugerida.", clip(&kept.join(" "), 700))
+}
+
 fn explain_reason(reason: &str) -> (String, Vec<String>) {
     let text = reason.trim();
+    if let Some(r) = TURN_FAILED.search(text) {
+        return (
+            format!(
+                "O assistente (Claude) encerrou com erro no turno {} (código {}). Veja o detalhe no painel e retome o loop quando o problema for resolvido.",
+                r.group(2).unwrap_or(""),
+                r.group(1).unwrap_or("")
+            ),
+            vec![],
+        );
+    }
+    if text.contains("no account can be used") {
+        return ("Nenhuma conta do Claude pode ser usada agora (login expirado, acesso desativado pela organização ou token revogado). Esperar não resolve: entre de novo na conta, peça ao administrador para liberar o acesso, ou configure outra conta de reserva nas configurações do painel.".to_string(), vec![]);
+    }
+    if text.starts_with("account usage limit persisted") {
+        return ("O limite de uso de todas as contas continuou esgotado depois de várias esperas. Aguarde a renovação do limite ou configure outra conta de reserva no painel, e retome o loop.".to_string(), vec![]);
+    }
+    if text.starts_with("interrupted by the user") {
+        return ("O loop foi interrompido por você (Ctrl+C). Nada foi perdido; retome pelo painel quando quiser.".to_string(), vec![]);
+    }
+    if text.starts_with("LOOP.json missing, stale or invalid") {
+        return ("O turno terminou sem registrar corretamente o estado do loop (arquivo LOOP.json ausente ou inválido). No painel, volte ao turno anterior ou retome para tentar de novo.".to_string(), vec![]);
+    }
+    if text.starts_with("identical state") {
+        return ("O loop parou porque dois turnos seguidos terminaram sem nenhuma mudança (roadmap, estado e commits iguais). Veja no painel o que está travando e responda ou ajuste a feature.".to_string(), vec![]);
+    }
+    if let Some(n) = STALL.search(text) {
+        return (
+            format!(
+                "O loop parou depois de {} turnos seguidos sem avanço no roadmap. Veja no painel qual feature está travada e decida o que fazer com ela.",
+                n.group(1).unwrap_or("")
+            ),
+            vec![],
+        );
+    }
+    if text.starts_with("permission denied on turn") {
+        return (
+            "O assistente tentou um comando perigoso que o guarda bloqueou, então o loop parou por segurança. Confira o comando no painel antes de retomar.".to_string(),
+            vec![],
+        );
+    }
+    if text.starts_with("worktree is off the loop branch") {
+        return (
+            "A pasta de trabalho do loop saiu da branch do loop e não foi possível voltar. Confira no painel o estado do repositório antes de retomar.".to_string(),
+            vec![],
+        );
+    }
+    if text.starts_with("claude output on turn") {
+        return ("A resposta do Claude não foi reconhecida (o formato da ferramenta pode ter mudado). Rode o diagnóstico do painel para comparar a versão instalada com a testada.".to_string(), vec![]);
+    }
+    if text.starts_with("all features verified or blocked") {
+        return ("Todas as features foram verificadas ou bloqueadas.".to_string(), vec![]);
+    }
     if let Some(d) = DIRTY_TREE.search(text) {
         let files: Vec<String> = d
             .group(3)
@@ -217,7 +348,7 @@ fn explain_reason(reason: &str) -> (String, Vec<String>) {
             vec![],
         );
     }
-    (clip(text, 1500), vec![])
+    (plain_fallback(text), vec![])
 }
 
 type Section = (String, Option<String>, Vec<String>);
@@ -250,12 +381,18 @@ fn compose_notice(ctx: &Value) -> Notice {
     if let Some(cost) = ctx.get("cost").and_then(Value::as_f64) {
         session.push(("Custo atual".into(), format!("US$ {cost:.2}")));
     }
+    if !s(ctx, "stage").trim().is_empty() {
+        session.push(("Etapa".into(), s(ctx, "stage").trim().to_string()));
+    }
     session.push(("Quando".into(), now_br()));
     if truthy(ctx.get("monitor_url")) && !needs_continue_block(ctx) {
         session.push(("Painel".into(), s(ctx, "monitor_url").to_string()));
     }
     let progress = if total > 0 && ev != "test" {
-        Some((format!("Status das features ({closed} de {total} concluídas)"), groups.iter().map(|(l, n)| format!("{n} {l}")).collect()))
+        let word = if delivered(ctx) { "entregues" } else { "verificadas, ainda não entregues" };
+        let mut lines: Vec<String> = groups.iter().map(|(l, n)| format!("{n} {l}")).collect();
+        lines.extend(feature_lines(ctx));
+        Some((format!("Status das features ({closed} de {total} {word})"), lines))
     } else {
         None
     };
@@ -274,6 +411,22 @@ fn compose_notice(ctx: &Value) -> Notice {
             let text = if reason.is_empty() { "(sem texto: veja o resumo)".to_string() } else { clip(reason, 1500) };
             notice.sections.push(("Decisão necessária".into(), Some(text), options_lines(ctx)));
         }
+        "feature_verified" | "stage_closed" => {
+            let names = string_list(ctx, "verified_now");
+            let mut lines: Vec<String> = names.iter().map(|n| format!("{n}: verificada (ainda não entregue)")).collect();
+            let stages = string_list(ctx, "stage_closed");
+            if !stages.is_empty() {
+                lines.push(format!("Etapa concluída: {}", stages.join(", ")));
+            }
+            notice.sections.push((
+                "O que mudou neste turno".into(),
+                Some("O loop segue sozinho; este aviso é só informativo. Nada foi enviado ao repositório remoto ainda.".into()),
+                lines,
+            ));
+            if truthy(ctx.get("commits")) {
+                notice.sections.push(("Commits recentes".into(), None, string_list(ctx, "commits").iter().take(5).map(|i| clip(i, 120)).collect()));
+            }
+        }
         "done" => {
             let mut lines = Vec::new();
             if truthy(ctx.get("push")) {
@@ -283,7 +436,12 @@ fn compose_notice(ctx: &Value) -> Notice {
                 let status = if truthy(ctx.get("pr_status")) { format!(" ({})", s(ctx, "pr_status")) } else { String::new() };
                 lines.push(format!("PR: {}{status}", clip(s(ctx, "pr"), 300)));
             }
-            notice.sections.push(("Resultado".into(), Some("Todas as features foram concluídas ou bloqueadas.".into()), lines));
+            let result = if delivered(ctx) {
+                "Todas as features foram verificadas ou bloqueadas e a branch foi enviada (entregue)."
+            } else {
+                "Todas as features foram verificadas ou bloqueadas, mas nada foi entregue ainda (sem push)."
+            };
+            notice.sections.push(("Resultado".into(), Some(result.into()), lines));
             if truthy(ctx.get("validate")) {
                 notice.sections.push((
                     "Para você validar (decidido sem parar você)".into(),
@@ -296,6 +454,9 @@ fn compose_notice(ctx: &Value) -> Notice {
             }
         }
         _ => {}
+    }
+    if truthy(ctx.get("commits")) && ["awaiting_user", "error", "paused"].contains(&ev) {
+        notice.sections.push(("Commits recentes".into(), None, string_list(ctx, "commits").iter().take(5).map(|i| clip(i, 120)).collect()));
     }
     if truthy(ctx.get("to_check")) && ["awaiting_user", "error", "paused"].contains(&ev) {
         notice.sections.push(("Conferir antes de responder".into(), None, string_list(ctx, "to_check").iter().take(8).map(|i| clip(i, 200)).collect()));
@@ -329,7 +490,8 @@ pub fn build(env: &Env, ctx: &Value) -> (String, String) {
         return (subject, clip(&format!("{}\n\nCOMO CONTINUAR\nOrigem: conversa normal. {CHAT_NOTE}", s(ctx, "extra_body")), MAX_BODY));
     }
     let n = compose_notice(ctx);
-    let mut out: Vec<String> = vec![subject.clone(), String::new(), "Detalhes da sessão".into()];
+    // the channel adds the subject (file: header line; console: banner), so the body does not repeat it
+    let mut out: Vec<String> = vec!["Detalhes da sessão".into()];
     out.extend(n.session.iter().map(|(k, v)| format!("- {k}: {v}")));
     if let Some((title, lines)) = &n.progress {
         out.push(String::new());
@@ -461,7 +623,11 @@ pub fn build_short(env: &Env, ctx: &Value) -> (String, String) {
         let mut lines: Vec<String> =
             vec![format!("*{title}*"), n.session.iter().filter(|p| p.0 != "Quando").map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" | ")];
         if total > 0 && ev != "test" {
-            lines.push(format!("Features: {closed} de {total} concluídas"));
+            lines.push(format!("Features: {closed} de {total} {}", if delivered(ctx) { "entregues" } else { "verificadas (não entregues)" }));
+            let running = string_list(ctx, "running");
+            if !running.is_empty() {
+                lines.push(format!("Rodando agora: {}", running.join(", ")));
+            }
         }
         for (heading, paragraph, items) in &n.sections {
             lines.push(String::new());
@@ -505,7 +671,15 @@ pub fn build_short(env: &Env, ctx: &Value) -> (String, String) {
     if body.chars().count() > MAX_SHORT {
         body = compose(40, false);
     }
-    (title, body.chars().take(1000).collect())
+    if body.chars().count() > MAX_SHORT {
+        // never cut the text in the middle: keep the title and the link whole and send the reader to the full summary
+        let link = if truthy(ctx.get("summary")) { format!("Resumo completo: {}", s(ctx, "summary")) } else { format!("Acesse o painel: {}", panel_value(ctx)) };
+        body = format!(
+            "*{title}*\n{}\n\nO texto não cabe aqui.\n{link}",
+            clip(&n.session.iter().filter(|p| p.0 != "Quando").map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" | "), 300)
+        );
+    }
+    (title, body)
 }
 
 // ---- channels -----------------------------------------------------------------------------------------------------------------
@@ -536,7 +710,8 @@ fn channel_toast(subject: &str, body: &str, ctx: &Value) -> (bool, String) {
         return (false, "toast is Windows-only".into());
     }
     let safe = |t: &str| -> String { t.replace('\'', "").replace('\n', " ").chars().take(200).collect() };
-    let mut first = body.lines().next().unwrap_or("").to_string();
+    // the first line of the short body is the title again: the toast shows the first line that is not
+    let mut first = body.lines().find(|l| !l.trim().is_empty() && l.trim().trim_matches('*') != subject).unwrap_or("").to_string();
     if truthy(ctx.get("monitor_url")) {
         first = format!("Panel: {}", s(ctx, "monitor_url"));
     }
@@ -583,6 +758,37 @@ fn channel_webhook(env: &Env, subject: &str, body: &str, ctx: &Value) -> (bool, 
         }
     }
     (false, format!("no response from the webhook: {last}"))
+}
+
+/// What a turn closed, from the ROADMAP text before and after it: `(features that became verified, stages that became fully closed)`.
+/// A stage is closed when every feature in it is verified or blocked.
+pub fn milestones(before: &str, after: &str) -> (Vec<String>, Vec<String>) {
+    use crate::loop_state::parse_roadmap;
+    let (old, _) = parse_roadmap(before);
+    let (new, _) = parse_roadmap(after);
+    let verified: Vec<String> =
+        new.iter().filter(|(slug, f)| f.status() == "verified" && old.get(slug).is_some_and(|o| o.status() != "verified")).map(|(slug, _)| slug.clone()).collect();
+    let closed_in = |features: &crate::loop_state::Features, stage: &str| {
+        let mut any = false;
+        let all = features.iter().filter(|(_, f)| f.text("stage") == stage).all(|(_, f)| {
+            any = true;
+            ["verified", "blocked"].contains(&f.status())
+        });
+        any && all
+    };
+    let mut stages: Vec<String> = Vec::new();
+    for (_, f) in new.iter() {
+        let stage = f.text("stage").to_string();
+        if !stage.is_empty() && !stages.contains(&stage) && closed_in(&new, &stage) && !closed_in(&old, &stage) {
+            stages.push(stage);
+        }
+    }
+    (verified, stages)
+}
+
+/// Milestone notices (a feature verified, a stage closed) are on unless `LOOP_NOTIFY_MILESTONES=off`.
+pub fn milestones_enabled(env: &Env) -> bool {
+    !matches!(env.text("LOOP_NOTIFY_MILESTONES").trim().to_lowercase().as_str(), "off" | "no" | "false" | "0")
 }
 
 /// The channels the notices can use.
@@ -695,7 +901,81 @@ mod tests {
         assert!(explain_reason("turn 3 exceeded 60 min").0.starts_with("O turno 3 passou do limite de 60 minutos"));
         let (p, b) = explain_reason("dirty tree outside .specs/ in repo api before turn 2 (x): M a.txt; ?? b.txt. In the panel use commit");
         assert!(p.contains("no repositório api") && b == vec!["Arquivos com alterações não commitadas:", "a.txt", "b.txt"]);
-        assert_eq!(explain_reason("something odd").0, "something odd");
+        let odd = explain_reason("something odd, use --rewind 5 to go back").0;
+        assert!(odd.contains("something odd") && !odd.contains("--rewind") && odd.contains("painel"));
+        assert!(explain_reason("claude exited with code 1 on turn 4: boom").0.contains("turno 4"));
+        assert!(explain_reason("5 consecutive turns without ROADMAP progress").0.contains("5 turnos seguidos"));
+    }
+
+    #[test]
+    fn clip_never_cuts_a_word() {
+        let text = "Primeira frase completa aqui. Segunda frase bem longa que passa do limite configurado para o corte";
+        assert_eq!(clip(text, 60), "Primeira frase completa aqui....");
+        let words = "alpha beta gamma delta epsilon zeta eta theta";
+        let cut = clip(words, 30);
+        assert!(cut.ends_with("...") && words.starts_with(cut.trim_end_matches("...")), "{cut}");
+        assert!(words.split(' ').any(|w| cut.trim_end_matches("...").ends_with(w)), "{cut}");
+        assert_eq!(clip("short", 30), "short");
+    }
+
+    fn named_ctx() -> Value {
+        json!({"event": "error", "reason": "5 consecutive turns without ROADMAP progress", "branch": "loop/x", "turn": 3, "stage": "2",
+               "running": ["b-ui"], "features": [["a-api", "verified"], ["b-ui", "building"], ["c-doc", "pending"]], "commits": ["abc1234 feat: api"],
+               "monitor_url": "http://localhost:47801/p/x/"})
+    }
+
+    #[test]
+    fn notice_names_features_stage_and_does_not_repeat_the_title() {
+        let (subject, body) = build(&env(), &named_ctx());
+        assert_eq!(subject, "[Claude-Maestro] Execução interrompida com erro: b-ui | etapa 2");
+        assert!(!body.contains("Execução interrompida"), "{body}");
+        assert!(
+            body.contains("- Etapa: 2")
+                && body.contains("- a-api: verificada")
+                && body.contains("- b-ui: em execução (rodando agora)")
+                && body.contains("c-doc: pendente")
+        );
+        assert!(body.contains("1 de 3 verificadas, ainda não entregues") && !body.contains("Stage ?") && !body.contains("concluídas"));
+        assert!(body.contains("Commits recentes\n- abc1234 feat: api"));
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().display().to_string();
+        let mut e = env();
+        dispatch(&mut e, &named_ctx(), &work, Some(vec!["file".into()]));
+        let file = std::fs::read_to_string(loop_path(&work, "NOTICE.txt")).unwrap();
+        assert_eq!(file.matches("Execução interrompida com erro").count(), 1, "{file}");
+    }
+
+    #[test]
+    fn delivered_and_verified_use_distinct_words() {
+        let mut ctx = named_ctx();
+        ctx["event"] = json!("done");
+        ctx["push"] = json!("done: origin loop/x");
+        let (_, body) = build(&env(), &ctx);
+        assert!(body.contains("1 de 3 entregues") && body.contains("a branch foi enviada (entregue)"));
+        ctx["push"] = json!("not done");
+        let (_, body) = build(&env(), &ctx);
+        assert!(body.contains("nada foi entregue ainda"));
+    }
+
+    #[test]
+    fn short_format_keeps_the_panel_link_whole() {
+        let mut ctx = named_ctx();
+        ctx["reason"] = json!("x".repeat(3000) + " tail");
+        let (_, short) = build_short(&env(), &ctx);
+        assert!(short.chars().count() <= 1000 && short.contains("http://localhost:47801/p/x/"), "{short}");
+    }
+
+    #[test]
+    fn milestones_name_new_verified_features_and_closed_stages() {
+        let before = "## Stage 1\n- [a] status=building paths=x\n- [b] status=verified paths=y\n## Etapa 2\n- [c] status=pending paths=z\n";
+        let after = "## Stage 1\n- [a] status=verified paths=x\n- [b] status=verified paths=y\n## Etapa 2\n- [c] status=pending paths=z\n";
+        assert_eq!(milestones(before, after), (vec!["a".to_string()], vec!["1".to_string()]));
+        assert_eq!(milestones(after, after), (vec![], vec![]));
+        let ctx = json!({"event": "stage_closed", "verified_now": ["a"], "stage_closed": ["1"], "features": [["a", "verified"]]});
+        let (subject, body) = build(&env(), &ctx);
+        assert_eq!(subject, "[Claude-Maestro] Etapa concluída: a");
+        assert!(body.contains("a: verificada (ainda não entregue)") && body.contains("Etapa concluída: 1"));
+        assert!(!milestones_enabled(&Env::from_pairs([("LOOP_NOTIFY_MILESTONES", "off")])));
     }
 
     #[test]
