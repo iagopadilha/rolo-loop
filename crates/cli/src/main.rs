@@ -2,6 +2,7 @@
 //! `harness`: command line of claude-maestro.
 
 mod access_cmd;
+mod demo_cmd;
 mod doctor_cmd;
 mod forward;
 mod install_cmd;
@@ -32,6 +33,11 @@ enum Command {
     Doctor(doctor_cmd::Args),
     /// Writes ~/.loop-harness/config.json so the skill finds the app
     Install(install_cmd::Args),
+    /// The panel on a fake project with mocked, moving loop data (never calls claude)
+    Demo(demo_cmd::Args),
+    /// Stand-in for the engine commands inside `demo` (not for direct use)
+    #[command(name = "demo-engine", hide = true)]
+    DemoEngine(forward::Forwarded),
     /// Where the Maestro plugin, the orchestrator skill and the dev toolkit are
     Paths(paths::Args),
     /// Typed graph state of the loop (validate, next, graph, migrate, disjoint, loop)
@@ -65,10 +71,17 @@ enum Command {
 }
 
 fn main() {
+    let exe_stem = std::env::current_exe().ok().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned())).unwrap_or_default();
+    if app::demo::stubs::is_claude_stub(&exe_stem) {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        std::process::exit(app::demo::stubs::claude_stub(&args));
+    }
     let cli = Cli::parse();
     let code = match cli.command {
         Command::Serve(args) => serve_cmd::run(args),
         Command::Check(a) => forward::check(a),
+        Command::Demo(args) => demo_cmd::run(args),
+        Command::DemoEngine(a) => app::demo::stubs::engine_stub(&a.args),
         Command::Doctor(args) => doctor_cmd::run(args),
         Command::Install(args) => install_cmd::run(args),
         Command::Paths(args) => paths::run(args),

@@ -4,6 +4,7 @@
 pub mod api;
 pub mod composition;
 pub mod config;
+pub mod demo;
 pub mod domain;
 pub mod infrastructure;
 pub mod repositories;

@@ -97,6 +97,8 @@ pub struct Overrides {
     pub fixed_port: u16,
     pub idle_hours: Option<f64>,
     pub open_browser: Option<bool>,
+    /// Where the Claude Code transcripts are read from (the demo points it at its own fake ones).
+    pub claude_transcripts_dir: String,
 }
 
 impl AppConfig {
@@ -171,6 +173,9 @@ pub fn from_ctx(ctx: AppCtx, overrides: &Overrides) -> AppConfig {
     }
     if let Some(hours) = overrides.idle_hours {
         config.idle_hours = hours;
+    }
+    if !overrides.claude_transcripts_dir.is_empty() {
+        config.claude_transcripts_dir = overrides.claude_transcripts_dir.clone();
     }
     if let Some(open) = overrides.open_browser {
         config.open_browser = open;
