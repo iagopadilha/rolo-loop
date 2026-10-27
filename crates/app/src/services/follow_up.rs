@@ -166,7 +166,8 @@ impl FollowUpService<'_> {
 
     fn decide_can_continue(&self, context: &ProjectContext, stage: Option<&Value>, finished: bool) -> Value {
         let mut reason = self.decide_busy_reason(context, finished);
-        let has_open = stage.is_some_and(|s| s["features"].as_array().into_iter().flatten().any(|f| f["status"].as_str().is_some_and(|st| OPEN_FEATURE_STATUSES.contains(&st))));
+        let has_open =
+            stage.is_some_and(|s| s["features"].as_array().into_iter().flatten().any(|f| f["status"].as_str().is_some_and(|st| OPEN_FEATURE_STATUSES.contains(&st))));
         if reason.is_empty() && !has_open {
             reason = FOLLOW_UP_NO_STAGE_REASON;
         }
@@ -220,7 +221,8 @@ impl FollowUpService<'_> {
             thread["baseline"] = json!({"roadmap": before[0], "flows": before[1]});
         }
         let (baseline_roadmap, baseline_flows) = (text_or_empty(thread["baseline"].get("roadmap")), text_or_empty(thread["baseline"].get("flows")));
-        let marked_ids: Vec<String> = self.read_draft(&work_dir).get("decisions").and_then(Value::as_array).into_iter().flatten().map(|i| text_or_empty(Some(i))).collect();
+        let marked_ids: Vec<String> =
+            self.read_draft(&work_dir).get("decisions").and_then(Value::as_array).into_iter().flatten().map(|i| text_or_empty(Some(i))).collect();
         let mut all_ids = decision_ids.clone();
         for id in marked_ids {
             if !all_ids.contains(&id) {
@@ -231,7 +233,11 @@ impl FollowUpService<'_> {
         let context_block = self.compose_context_block(context, round_number, &before[0], &baseline_roadmap, &decisions_text);
         let session_id = text_or_empty(thread.get("session_id"));
         let resumed = !session_id.is_empty();
-        let prompt = if resumed { Self::compose_resumed_prompt(round_number, &text, &context_block) } else { Self::compose_fresh_prompt(round_number, &text, &context_block, &[], "") };
+        let prompt = if resumed {
+            Self::compose_resumed_prompt(round_number, &text, &context_block)
+        } else {
+            Self::compose_fresh_prompt(round_number, &text, &context_block, &[], "")
+        };
         if let Some(Value::Array(messages)) = thread.get_mut("messages") {
             messages.push(json!({"role": "user", "text": text, "decisions": decision_ids, "at": now_iso()}));
         }
@@ -257,7 +263,8 @@ impl FollowUpService<'_> {
             // the safety snapshot is taken in the job thread, never in the request
             before_start: Some(Box::new(move |_update_progress| -> Result<Option<super::claude_jobs::Prepared>, ClaudeJobError> {
                 let ignored: Vec<&str> = GUARD_IGNORED_PATHS.to_vec();
-                *snapshot_turn.snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(WorkspaceFileGuard::default().take_snapshot(&snapshot_dir, &ignored, &DEFAULT_IGNORED_NAMES));
+                *snapshot_turn.snapshot.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(WorkspaceFileGuard::default().take_snapshot(&snapshot_dir, &ignored, &DEFAULT_IGNORED_NAMES));
                 Ok(None)
             })),
             finalize: Some(Box::new(move |result| finish_app.follow_up().finish_job(&finish_context, &finish_turn, result))),
@@ -266,7 +273,16 @@ impl FollowUpService<'_> {
         self.write_draft_text(&work_dir, &text); // kept if the job fails, so the user does not retype it
         let job = self.app.jobs().start_job(context.repo_path(), JOB_TYPE_FOLLOW_UP, command)?;
         *turn.job_id.lock().unwrap_or_else(|e| e.into_inner()) = job["id"].as_str().unwrap_or("").to_string();
-        self.app.log.info("follow_up_sent", &[("project", json!(context.project.id)), ("job", job["id"].clone()), ("number", json!(round_number)), ("resumed", json!(resumed)), ("decisions", json!(decision_ids.len()))]);
+        self.app.log.info(
+            "follow_up_sent",
+            &[
+                ("project", json!(context.project.id)),
+                ("job", job["id"].clone()),
+                ("number", json!(round_number)),
+                ("resumed", json!(resumed)),
+                ("decisions", json!(decision_ids.len())),
+            ],
+        );
         Ok(json!({"ok": true, "job": job}))
     }
 
@@ -328,7 +344,8 @@ impl FollowUpService<'_> {
                 return Err(invalid(format!("unknown decision id: {unknown}")));
             }
         }
-        let lines: Vec<String> = decision_ids.iter().filter_map(|id| find(id)).map(|item| format!("- {}", item["raw"].as_str().unwrap_or("").trim_start_matches(['-', ' ']).trim())).collect();
+        let lines: Vec<String> =
+            decision_ids.iter().filter_map(|id| find(id)).map(|item| format!("- {}", item["raw"].as_str().unwrap_or("").trim_start_matches(['-', ' ']).trim())).collect();
         Ok(lines.join("\n"))
     }
 
@@ -342,7 +359,8 @@ impl FollowUpService<'_> {
         let (features, _) = loop_state::parse_roadmap(&normalize_newlines(baseline_roadmap));
         let executed: Vec<String> = features.iter().map(|(slug, fields)| format!("{slug} ({})", fields.get("status").unwrap_or("None"))).collect();
         let stage = Self::find_round_stage(roadmap_before, round_number);
-        let lines: Vec<String> = stage.as_ref().and_then(|s| s["lines"].as_object()).map(|m| m.values().map(|l| format!("- {}", l.as_str().unwrap_or(""))).collect()).unwrap_or_default();
+        let lines: Vec<String> =
+            stage.as_ref().and_then(|s| s["lines"].as_object()).map(|m| m.values().map(|l| format!("- {}", l.as_str().unwrap_or(""))).collect()).unwrap_or_default();
         let current = if lines.is_empty() { "(none yet)".to_string() } else { lines.join("\n") };
         let summary = self.app.loop_status().get_loop_summary(context);
         let py = |v: Option<&Value>| match v {
@@ -360,7 +378,9 @@ impl FollowUpService<'_> {
             format!("Loop: status={} turns={turns}", py(summary.get("status"))),
         ];
         if !decisions_text.is_empty() {
-            parts.push(format!("Decisions the user asked to CHANGE (from .specs/project/loop/VALIDATE.md; each line: doubt | what was chosen | how to revert):\n{decisions_text}"));
+            parts.push(format!(
+                "Decisions the user asked to CHANGE (from .specs/project/loop/VALIDATE.md; each line: doubt | what was chosen | how to revert):\n{decisions_text}"
+            ));
         }
         parts.join("\n\n")
     }
@@ -368,7 +388,8 @@ impl FollowUpService<'_> {
     fn compose_fresh_prompt(number: i64, text: &str, context_block: &str, history: &[Value], summary_note: &str) -> String {
         let mut parts = vec![FOLLOW_UP_RULES.replace("%(n)s", &number.to_string()), context_block.to_string()];
         if !history.is_empty() {
-            let lines: Vec<String> = history.iter().map(|m| format!("{}: {}", text_or_none(m.get("role")), text_or_empty(m.get("text")).chars().take(1000).collect::<String>())).collect();
+            let lines: Vec<String> =
+                history.iter().map(|m| format!("{}: {}", text_or_none(m.get("role")), text_or_empty(m.get("text")).chars().take(1000).collect::<String>())).collect();
             parts.push(format!("{summary_note}. Last messages of this conversation:\n{}", lines.join("\n")));
         }
         parts.push(format!("FOLLOW-UP-NUMBER: {number}\n\nUser request:\n{}", if text.is_empty() { NO_EXTRA_TEXT } else { text }));
@@ -407,7 +428,14 @@ impl FollowUpService<'_> {
             let report = WorkspaceFileGuard::default().revert_unexpected_changes(snapshot, &EDITABLE_PATHS);
             let list = |key: &str| report[key].as_array().cloned().unwrap_or_default();
             if !list("reverted").is_empty() || !list("removed").is_empty() || !list("unrestorable").is_empty() {
-                self.app.log.warn("follow_up_guard_reverted", &[("project", json!(context.project.id)), ("reverted", json!(list("reverted").into_iter().take(50).collect::<Vec<_>>())), ("removed", json!(list("removed").into_iter().take(50).collect::<Vec<_>>()))]);
+                self.app.log.warn(
+                    "follow_up_guard_reverted",
+                    &[
+                        ("project", json!(context.project.id)),
+                        ("reverted", json!(list("reverted").into_iter().take(50).collect::<Vec<_>>())),
+                        ("removed", json!(list("removed").into_iter().take(50).collect::<Vec<_>>())),
+                    ],
+                );
             }
         }
         let after = [self.read_text(&work_dir, ROADMAP_PATH), self.read_text(&work_dir, FLOWS_PATH)];
@@ -427,7 +455,10 @@ impl FollowUpService<'_> {
         match &problem {
             None => {
                 self.write_draft_text(&work_dir, "");
-                let changed = describe_stage_change(Self::find_round_stage(&turn.before[0], turn.round_number).as_ref(), Self::find_round_stage(&after[0], turn.round_number).as_ref());
+                let changed = describe_stage_change(
+                    Self::find_round_stage(&turn.before[0], turn.round_number).as_ref(),
+                    Self::find_round_stage(&after[0], turn.round_number).as_ref(),
+                );
                 message.insert("state".into(), json!("ok"));
                 message.insert("error".into(), json!(""));
                 message.insert("changed".into(), changed);
@@ -474,7 +505,10 @@ impl FollowUpService<'_> {
         let prompt = Self::compose_fresh_prompt(turn.round_number, text, context_block, history, SUMMARIZED_NOTE);
         thread["summary_note"] = json!(SUMMARIZED_NOTE);
         thread["session_id"] = Value::Null;
-        self.app.log.warn("follow_up_resume_failed", &[("project", json!(context.project.id)), ("error", json!(text_or_empty(failed.get("error")).chars().take(200).collect::<String>()))]);
+        self.app.log.warn(
+            "follow_up_resume_failed",
+            &[("project", json!(context.project.id)), ("error", json!(text_or_empty(failed.get("error")).chars().take(200).collect::<String>()))],
+        );
         let _kind = call_kind("follow_up");
         self.app.claude.run_prompt(&self.build_argv(""), &context.work_dir(), &prompt, FOLLOW_UP_TIMEOUT_SECONDS, &[])
     }
@@ -488,7 +522,9 @@ impl FollowUpService<'_> {
         let work_dir = context.work_dir();
         let roadmap_text = self.read_text(&work_dir, ROADMAP_PATH);
         let stages = list_follow_up_stages(&roadmap_text);
-        let has_open = stages.last().is_some_and(|s| s["features"].as_array().into_iter().flatten().any(|f| f["status"].as_str().is_some_and(|st| OPEN_FEATURE_STATUSES.contains(&st))));
+        let has_open = stages
+            .last()
+            .is_some_and(|s| s["features"].as_array().into_iter().flatten().any(|f| f["status"].as_str().is_some_and(|st| OPEN_FEATURE_STATUSES.contains(&st))));
         let Some(last_stage) = stages.last().filter(|_| has_open) else {
             return Err(repo_conflict("there is no Follow-up stage with open features: send a follow-up first", NO_STAGE_CODE));
         };
@@ -530,7 +566,8 @@ mod tests {
         if worktree {
             std::fs::create_dir_all(dir.path().join("proj-worktree-loop/.specs/project/loop")).unwrap();
             std::fs::write(dir.path().join("proj-worktree-loop/.specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=verified\n").unwrap();
-            std::fs::write(dir.path().join("proj-worktree-loop/.specs/project/loop/VALIDATE.md"), "- [a] turn=1 level=important Which? | chose: x | revert: y\n").unwrap();
+            std::fs::write(dir.path().join("proj-worktree-loop/.specs/project/loop/VALIDATE.md"), "- [a] turn=1 level=important Which? | chose: x | revert: y\n")
+                .unwrap();
             std::fs::create_dir_all(dir.path().join("proj-worktree-loop/.specs/project/loop/json")).unwrap();
             std::fs::write(dir.path().join("proj-worktree-loop/.specs/project/loop/json/LOOP.json"), r#"{"status": "done"}"#).unwrap();
         }
@@ -543,7 +580,11 @@ mod tests {
         let rules = FOLLOW_UP_RULES.replace("%(n)s", "2");
         assert!(rules.contains("`## Stage Follow-up-2 - Follow-up 2`") && !rules.contains("%(n)s"));
         let fresh = FollowUpService::compose_fresh_prompt(2, "", "CTX", &[json!({"role": "user", "text": "hi"})], SUMMARIZED_NOTE);
-        assert!(fresh.contains("CTX") && fresh.contains("Earlier messages were summarized. Last messages of this conversation:\nuser: hi") && fresh.ends_with(&format!("FOLLOW-UP-NUMBER: 2\n\nUser request:\n{NO_EXTRA_TEXT}")));
+        assert!(
+            fresh.contains("CTX")
+                && fresh.contains("Earlier messages were summarized. Last messages of this conversation:\nuser: hi")
+                && fresh.ends_with(&format!("FOLLOW-UP-NUMBER: 2\n\nUser request:\n{NO_EXTRA_TEXT}"))
+        );
         assert!(FollowUpService::compose_resumed_prompt(3, "more", "CTX").starts_with("Status before this message:\nCTX\n\nFOLLOW-UP-NUMBER: 3"));
     }
 
@@ -554,7 +595,10 @@ mod tests {
         assert!(FollowUpService::validate_text(Some(&json!("x".repeat(8001)))).unwrap_err().message.starts_with("text is too long"));
         assert_eq!(FollowUpService::validate_decision_ids(Some(&json!([" a ", "a", "b"]))).unwrap(), ["a", "b"]);
         assert_eq!(FollowUpService::validate_decision_ids(Some(&json!(["a", ""]))).unwrap_err().message, "decisions must be a list of decision ids");
-        assert!(FollowUpService::is_resume_failure(&json!({"error": "No conversation found with session ID"})) && !FollowUpService::is_resume_failure(&json!({"error": "timeout"})));
+        assert!(
+            FollowUpService::is_resume_failure(&json!({"error": "No conversation found with session ID"}))
+                && !FollowUpService::is_resume_failure(&json!({"error": "timeout"}))
+        );
     }
 
     #[test]
@@ -575,12 +619,17 @@ mod tests {
         let (_dir, app, context) = setup(true);
         let service = app.follow_up();
         let view = service.get_follow_up(&context);
-        assert_eq!((view["finished"].clone(), view["can_send"]["ok"].clone(), view["can_continue"]["reason"].clone()), (json!(false), json!(true), json!(FOLLOW_UP_NO_STAGE_REASON)));
+        assert_eq!(
+            (view["finished"].clone(), view["can_send"]["ok"].clone(), view["can_continue"]["reason"].clone()),
+            (json!(false), json!(true), json!(FOLLOW_UP_NO_STAGE_REASON))
+        );
         assert_eq!(service.run_follow_up(&context).unwrap_err().code.as_deref(), Some("no_follow_up_stage"));
         let id = app.decisions().read_decisions(&context).0[0]["id"].as_str().unwrap().to_string();
         let text = FollowUpService::describe_decisions(&context.work_dir(), &[id], true).unwrap();
         assert_eq!(text, "- [a] turn=1 level=important Which? | chose: x | revert: y");
         let block = service.compose_context_block(&context, 1, "", "- [a] status=verified\n", &text);
-        assert!(block.starts_with("Features of earlier stages (already executed, read-only): a (verified)\n\nCurrent stage Follow-up-1 (you may edit it):\n(none yet)\n\nLoop: status="));
+        assert!(block.starts_with(
+            "Features of earlier stages (already executed, read-only): a (verified)\n\nCurrent stage Follow-up-1 (you may edit it):\n(none yet)\n\nLoop: status="
+        ));
     }
 }

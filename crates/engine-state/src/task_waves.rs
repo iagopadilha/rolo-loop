@@ -284,7 +284,8 @@ pub fn load_feature_tasks(root: &str, slug: &str) -> (Vec<Task>, Vec<String>) {
         return parse_tasks(&read(&path));
     }
     let (features, _) = parse_roadmap(&read(&Path::new(root).join(".specs").join("project").join("ROADMAP.md")));
-    let paths: Vec<String> = features.get(slug).map(|f| f.text("paths").to_string()).unwrap_or_default().split(',').filter(|p| !p.trim().is_empty()).map(String::from).collect();
+    let paths: Vec<String> =
+        features.get(slug).map(|f| f.text("paths").to_string()).unwrap_or_default().split(',').filter(|p| !p.trim().is_empty()).map(String::from).collect();
     let synthetic = Task {
         id: SYNTHETIC_TASK_ID.into(),
         title: "Build the whole feature".into(),
@@ -345,7 +346,13 @@ pub fn run_cli(args: &[String], cwd: &str) -> (i32, String, String) {
             "--max" if index + 1 < rest.len() => {
                 match rest[index + 1].parse::<i64>() {
                     Ok(n) => max = Some(n),
-                    Err(_) => return (2, String::new(), format!("{usage}harness.py tasks: error: argument --max: invalid int value: {}\n", pycompat::py_repr_str(&rest[index + 1]))),
+                    Err(_) => {
+                        return (
+                            2,
+                            String::new(),
+                            format!("{usage}harness.py tasks: error: argument --max: invalid int value: {}\n", pycompat::py_repr_str(&rest[index + 1])),
+                        )
+                    }
                 }
                 index += 2;
             }

@@ -72,7 +72,11 @@ impl ProjectContext {
             return self.fixed_work_dir.clone();
         }
         let worktree = self.project.loop_worktree_path();
-        if Path::new(&worktree).is_dir() && has_loop_started(&worktree) { worktree } else { self.project.repo_path.clone() }
+        if Path::new(&worktree).is_dir() && has_loop_started(&worktree) {
+            worktree
+        } else {
+            self.project.repo_path.clone()
+        }
     }
 
     pub fn specs_dir(&self) -> String {
@@ -89,7 +93,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("app");
         std::fs::create_dir_all(&repo).unwrap();
-        let project = Project { id: "x".into(), name: "app".into(), repo_path: repo.display().to_string(), opened_at: String::new(), last_opened_at: String::new(), favorite: false };
+        let project = Project {
+            id: "x".into(),
+            name: "app".into(),
+            repo_path: repo.display().to_string(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        };
         let context = ProjectContext::new(project.clone());
         assert_eq!(context.work_dir(), project.repo_path);
         let worktree = dir.path().join("app-worktree-loop");

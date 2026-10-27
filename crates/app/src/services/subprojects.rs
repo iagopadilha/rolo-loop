@@ -129,7 +129,8 @@ impl SubprojectsService<'_> {
         if let Some(Value::Array(rows)) = description.get_mut("projects") {
             for row in rows {
                 let path = text_of(row.get("path"));
-                let item_running = items.as_ref().and_then(|i| i.get(&path)).is_some_and(|item| item.is_object() && item.get("state").and_then(Value::as_str) == Some("running"));
+                let item_running =
+                    items.as_ref().and_then(|i| i.get(&path)).is_some_and(|item| item.is_object() && item.get("state").and_then(Value::as_str) == Some("running"));
                 if item_running || legacy_current.as_ref().is_some_and(|c| c.as_str() == Some(path.as_str())) {
                     row["map"]["running"] = json!(true);
                     row["map"]["job"] = json!({"path": path, "state": "running", "queue_state": queue.get("state").cloned().unwrap_or(Value::Null)});
@@ -258,9 +259,15 @@ impl SubprojectsService<'_> {
             return entry; // a read never creates .specs/: that is the structure step's job
         }
         if let Err(failure) = self.app.subprojects_files().write_repo_entry(&context.work_dir(), key, &Value::Object(entry.clone())) {
-            self.app.log.warn("subprojects_store_failed", &[("repo", json!(key)), ("type", json!("OSError")), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))]);
+            self.app.log.warn(
+                "subprojects_store_failed",
+                &[("repo", json!(key)), ("type", json!("OSError")), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))],
+            );
         }
-        self.app.log.info("subprojects_detected", &[("repo", json!(key)), ("monorepo", entry["monorepo"].clone()), ("projects", json!(entry["projects"].as_array().map(Vec::len).unwrap_or(0)))]);
+        self.app.log.info(
+            "subprojects_detected",
+            &[("repo", json!(key)), ("monorepo", entry["monorepo"].clone()), ("projects", json!(entry["projects"].as_array().map(Vec::len).unwrap_or(0)))],
+        );
         entry
     }
 
@@ -342,7 +349,12 @@ impl SubprojectsService<'_> {
         let _ = self.app.subprojects_files().write_repo_entry(&context.work_dir(), key, &Value::Object(entry.clone()));
         self.app.log.info(
             "subprojects_list_updated",
-            &[("repo", json!(key)), ("monorepo", entry.get("monorepo").cloned().unwrap_or(Value::Null)), ("confirmed", entry.get("confirmed").cloned().unwrap_or(Value::Null)), ("projects", json!(subprojects::entry_projects(Some(entry)).len()))],
+            &[
+                ("repo", json!(key)),
+                ("monorepo", entry.get("monorepo").cloned().unwrap_or(Value::Null)),
+                ("confirmed", entry.get("confirmed").cloned().unwrap_or(Value::Null)),
+                ("projects", json!(subprojects::entry_projects(Some(entry)).len())),
+            ],
         );
         if is_true(entry.get("monorepo")) && is_true(entry.get("confirmed")) {
             // after Confirm list: the capabilities block of PROJECT.md, then the `maestro:context` block of every subproject
@@ -415,7 +427,9 @@ impl SubprojectsService<'_> {
             project.insert("name".into(), json!(text));
         }
         if let Some(stack) = item.get("stack") {
-            let Some(stack) = stack.as_str().filter(|s| ALLOWED_STACKS.contains(s)) else { return Err(AppError::invalid_request(format!("stack must be one of: {}", ALLOWED_STACKS.join(", ")))) };
+            let Some(stack) = stack.as_str().filter(|s| ALLOWED_STACKS.contains(s)) else {
+                return Err(AppError::invalid_request(format!("stack must be one of: {}", ALLOWED_STACKS.join(", "))));
+            };
             project.insert("stack".into(), json!(stack));
             project.insert("skill".into(), json!(subprojects::skill_by_stack(stack)));
         }

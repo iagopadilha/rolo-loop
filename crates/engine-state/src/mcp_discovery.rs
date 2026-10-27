@@ -208,22 +208,41 @@ mod tests {
         let home = dir.path().join("claude-home");
         let plugin_root = dir.path().join("plug");
         let project = dir.path().join("proj");
-        write(dir.path(), "claude.json", &format!(r#"{{"mcpServers": {{"Db": {{"command": "npx"}}, "empty": {{}}}}, "projects": {{"{}": {{"mcpServers": {{"local": {{"url": "http://x"}}}}}}}}}}"#, project.display().to_string().replace('\\', "\\\\")));
+        write(
+            dir.path(),
+            "claude.json",
+            &format!(
+                r#"{{"mcpServers": {{"Db": {{"command": "npx"}}, "empty": {{}}}}, "projects": {{"{}": {{"mcpServers": {{"local": {{"url": "http://x"}}}}}}}}}}"#,
+                project.display().to_string().replace('\\', "\\\\")
+            ),
+        );
         write(&project, ".mcp.json", r#"{"mcpServers": {"db": {"command": "other"}, "fileonly": {"command": "f"}}}"#);
         write(&home, "settings.json", r#"{"enabledPlugins": {"p@m": true, "off@m": false}, "permissions": {"allow": ["mcp__db__query(x)", "mcp__ghost", "Bash(ls)"]}}"#);
         write(&plugin_root, ".mcp.json", r#"{"mcpServers": {"srv": {"command": "${CLAUDE_PLUGIN_ROOT}/run"}}}"#);
-        write(&home, "plugins/installed_plugins.json", &format!(r#"{{"plugins": {{"p@m": [{{"installPath": "{}"}}], "off@m": [{{"installPath": "{}"}}]}}}}"#, plugin_root.display().to_string().replace('\\', "\\\\"), plugin_root.display().to_string().replace('\\', "\\\\")));
+        write(
+            &home,
+            "plugins/installed_plugins.json",
+            &format!(
+                r#"{{"plugins": {{"p@m": [{{"installPath": "{}"}}], "off@m": [{{"installPath": "{}"}}]}}}}"#,
+                plugin_root.display().to_string().replace('\\', "\\\\"),
+                plugin_root.display().to_string().replace('\\', "\\\\")
+            ),
+        );
         let env = Env::from_pairs([(CLAUDE_HOME_VARIABLE, home.display().to_string()), (CLAUDE_CONFIG_VARIABLE, dir.path().join("claude.json").display().to_string())]);
         let rows = collect(&env, &project.display().to_string(), None);
-        let names: Vec<(&str, Vec<&str>, bool)> = rows.iter().map(|r| (r.name.as_str(), r.sources.iter().map(String::as_str).collect(), r.definition.is_some())).collect();
-        assert_eq!(names, vec![
-            ("Db", vec!["user", ".mcp.json", "permissions"], true),
-            ("empty", vec!["user"], false),
-            ("local", vec!["project"], true),
-            ("fileonly", vec![".mcp.json"], true),
-            ("plugin:p:srv", vec!["plugin"], true),
-            ("ghost", vec!["permissions"], false),
-        ]);
+        let names: Vec<(&str, Vec<&str>, bool)> =
+            rows.iter().map(|r| (r.name.as_str(), r.sources.iter().map(String::as_str).collect(), r.definition.is_some())).collect();
+        assert_eq!(
+            names,
+            vec![
+                ("Db", vec!["user", ".mcp.json", "permissions"], true),
+                ("empty", vec!["user"], false),
+                ("local", vec!["project"], true),
+                ("fileonly", vec![".mcp.json"], true),
+                ("plugin:p:srv", vec!["plugin"], true),
+                ("ghost", vec!["permissions"], false),
+            ]
+        );
         let plugin_def = definition(&env, "plugin:p:srv", "", None).unwrap();
         assert!(plugin_def["command"].as_str().unwrap().ends_with("/run") && !plugin_def["command"].as_str().unwrap().contains("${"));
         assert_eq!(definition(&env, "DB", &project.display().to_string(), None).unwrap()["command"], "npx");

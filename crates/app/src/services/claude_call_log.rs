@@ -102,7 +102,10 @@ mod tests {
         let calls = service.list_calls(&[folder.clone(), folder.clone()], PUBLIC_CALL_LIMIT);
         assert_eq!(calls.len(), 2);
         let chat = calls.iter().find(|c| c["kind"] == "chat").unwrap();
-        assert_eq!((chat["auth_method"].clone(), chat["auth_email"].clone(), chat["cost_usd"].clone(), chat["limit_status"].clone()), (json!("login"), json!("a@b.c"), json!(0.5), json!("allowed")));
+        assert_eq!(
+            (chat["auth_method"].clone(), chat["auth_email"].clone(), chat["cost_usd"].clone(), chat["limit_status"].clone()),
+            (json!("login"), json!("a@b.c"), json!(0.5), json!("allowed"))
+        );
         assert_eq!(chat["usage_windows"]["five_hour"]["pct"], 10.0);
         let panel = calls.iter().find(|c| c["kind"] == "panel").unwrap();
         assert_eq!((panel["ok"].clone(), panel["cost_usd"].clone(), panel["claude"].clone()), (json!(false), Value::Null, json!("claude")));

@@ -79,10 +79,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(".env");
         std::fs::write(&file, "SMTP_PASSWORD=secret1\nLOOP_WEBHOOK_URL=http://x\nGUARD_SECRET_PATHS=a;b\nPLAIN=1\nREAL_TOKEN=fromfile\n").unwrap();
-        let environ: Vec<(String, String)> = [("SMTP_PASSWORD", "secret1"), ("LOOP_WEBHOOK_URL", "http://x"), ("GUARD_SECRET_PATHS", "a;b"), ("PLAIN", "1"), ("REAL_TOKEN", "mine"), ("PATH", "p")]
-            .iter()
-            .map(|(a, b)| (a.to_string(), b.to_string()))
-            .collect();
+        let environ: Vec<(String, String)> =
+            [("SMTP_PASSWORD", "secret1"), ("LOOP_WEBHOOK_URL", "http://x"), ("GUARD_SECRET_PATHS", "a;b"), ("PLAIN", "1"), ("REAL_TOKEN", "mine"), ("PATH", "p")]
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect();
         let built = build(&environ, &[file]);
         assert_eq!(built.removed, vec!["LOOP_WEBHOOK_URL", "SMTP_PASSWORD"]);
         assert_eq!(built.env.len(), 4);

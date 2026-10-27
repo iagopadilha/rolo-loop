@@ -6,7 +6,9 @@
 //! Time is virtual: each action moves a story clock forward so turn durations and transcript timestamps look like a real loop (minutes per turn)
 //! while the animator plays a whole turn in a few seconds. Nothing here calls `claude`.
 
-use super::catalog::{feature, spec_file_path, Action, TurnPlan, FEATURES, GOAL, INTEGRATION_BRANCH, LOOP_BRANCH, PROJECT_NAME, STAGES, STATE_HEADER, TURN_COSTS_USD, WAVE};
+use super::catalog::{
+    feature, spec_file_path, Action, TurnPlan, FEATURES, GOAL, INTEGRATION_BRANCH, LOOP_BRANCH, PROJECT_NAME, STAGES, STATE_HEADER, TURN_COSTS_USD, WAVE,
+};
 use super::transcripts::{AgentRecord, DemoTranscriptWriter, Moment, OrchestratorRecord, Recorded, RecordedAction};
 use super::workspace::{append_json_line, remove_file, write_json_atomically, write_text_atomically, DemoGitRepository, DemoWorkspace};
 use crate::repositories::claude_transcripts::summarize_tool_call;
@@ -95,7 +97,8 @@ pub fn render_roadmap(features: &[FeatureState]) -> String {
                 ("commit", current.commit.clone().unwrap_or_default()),
                 ("note", current.note.clone().unwrap_or_default()),
             ];
-            let fields: Vec<String> = FIELD_ORDER.iter().filter_map(|key| values.iter().find(|(k, _)| k == key)).filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}={v}")).collect();
+            let fields: Vec<String> =
+                FIELD_ORDER.iter().filter_map(|key| values.iter().find(|(k, _)| k == key)).filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}={v}")).collect();
             lines.push(format!("- [{}] {}", item.slug, fields.join(" ")));
         }
         lines.push(String::new());
@@ -106,7 +109,20 @@ pub fn render_roadmap(features: &[FeatureState]) -> String {
 fn render_spec(slug: &str) -> String {
     let item = feature(slug);
     let rows: Vec<String> = item.requirements.iter().enumerate().map(|(i, text)| format!("| {}-{:02} | {text} | Must |", item.prefix, i + 1)).collect();
-    let mut lines = vec![format!("# {}", item.title), String::new(), format!("SCOPE: {}", item.scope), String::new(), "## Goal".into(), String::new(), item.goal.to_string(), String::new(), "## Requirements".into(), String::new(), "| ID | Requirement | Priority |".into(), "|---|---|---|".into()];
+    let mut lines = vec![
+        format!("# {}", item.title),
+        String::new(),
+        format!("SCOPE: {}", item.scope),
+        String::new(),
+        "## Goal".into(),
+        String::new(),
+        item.goal.to_string(),
+        String::new(),
+        "## Requirements".into(),
+        String::new(),
+        "| ID | Requirement | Priority |".into(),
+        "|---|---|---|".into(),
+    ];
     lines.extend(rows);
     lines.extend([String::new(), "## Paths".into(), String::new(), format!("- `{}`", item.paths), String::new()]);
     lines.join("\n")
@@ -281,7 +297,11 @@ impl DemoStoryPlayer {
             return position;
         }
         let agent_id = format!("a{}", &sha1_hex(&format!("{}:{}:{key}", self.generation, self.turn().number))[..16]);
-        let prompt = format!("Role: {role}\nSCOPE_FEATURE: {slug}\nPATHS: {}\nSpec: {}\n\nWork only inside the PATHS; end with STATUS or VERDICT and a SUMMARY line.", item.paths, spec_file_path(slug));
+        let prompt = format!(
+            "Role: {role}\nSCOPE_FEATURE: {slug}\nPATHS: {}\nSpec: {}\n\nWork only inside the PATHS; end with STATUS or VERDICT and a SUMMARY line.",
+            item.paths,
+            spec_file_path(slug)
+        );
         let record = AgentRecord { agent_id, role, slug: slug.to_string(), prompt, started_at: self.virtual_now, actions: vec![] };
         let turn = self.turn.as_mut().unwrap();
         turn.agents.push((key, record));
@@ -321,7 +341,11 @@ impl DemoStoryPlayer {
             }
             Action::OrchestratorTool { tool, input, result } => {
                 let (moment, tokens) = (self.tick(), self.count_tokens(&["orch".into(), (*tool).into(), py_repr_json(input)]));
-                self.turn.as_mut().unwrap().orchestrator_actions.push(RecordedAction { at: moment, tokens, what: Recorded::Tool { tool: (*tool).into(), input: input.clone(), result: result.clone() } });
+                self.turn.as_mut().unwrap().orchestrator_actions.push(RecordedAction {
+                    at: moment,
+                    tokens,
+                    what: Recorded::Tool { tool: (*tool).into(), input: input.clone(), result: result.clone() },
+                });
                 self.record_event(ORCHESTRATOR_EVENT_AGENT, "tool", &summarize_tool_call(tool, input), result, moment, tokens, &[]);
             }
             Action::Status { slug, status, note } => {
@@ -335,7 +359,11 @@ impl DemoStoryPlayer {
                 let position = self.agent_index(slug);
                 let key = self.turn().agents[position].0.clone();
                 let (moment, tokens) = (self.tick(), self.count_tokens(&[key.clone(), (*tool).into(), py_repr_json(input)]));
-                self.turn.as_mut().unwrap().agents[position].1.actions.push(RecordedAction { at: moment, tokens, what: Recorded::Tool { tool: (*tool).into(), input: input.clone(), result: result.clone() } });
+                self.turn.as_mut().unwrap().agents[position].1.actions.push(RecordedAction {
+                    at: moment,
+                    tokens,
+                    what: Recorded::Tool { tool: (*tool).into(), input: input.clone(), result: result.clone() },
+                });
                 self.record_event(&key, "tool", &summarize_tool_call(tool, input), result, moment, tokens, &[]);
             }
             Action::AgentText { slug, text } => {
@@ -376,8 +404,19 @@ impl DemoStoryPlayer {
             tokens,
             what: Recorded::Guard { tool: tool.into(), input: input.clone(), rule: rule.into(), reason: reason.into() },
         });
-        self.record_event(&key, "guard", &summarize_tool_call(tool, input), &format!("exit 2 · [{rule}] {reason}"), moment, tokens, &[("rule", json!(rule)), ("reason", json!(reason))]);
-        let _ = append_json_line(&self.loop_file("guard.log"), &json!({"t": to_local_iso(moment), "profile": profile, "rule": rule, "decision": "blocked", "detail": reason.chars().take(200).collect::<String>()}));
+        self.record_event(
+            &key,
+            "guard",
+            &summarize_tool_call(tool, input),
+            &format!("exit 2 · [{rule}] {reason}"),
+            moment,
+            tokens,
+            &[("rule", json!(rule)), ("reason", json!(reason))],
+        );
+        let _ = append_json_line(
+            &self.loop_file("guard.log"),
+            &json!({"t": to_local_iso(moment), "profile": profile, "rule": rule, "decision": "blocked", "detail": reason.chars().take(200).collect::<String>()}),
+        );
     }
 
     fn apply_commit(&mut self, slug: &'static str) {
@@ -393,7 +432,11 @@ impl DemoStoryPlayer {
     /// The user answers the loop's question (the animator may hold here); the next turn reads it from ANSWERS.md.
     fn apply_wait_for_answer(&mut self, question: &str, answer: &str, hold_seconds: f64) {
         let given = (self.answer_provider)(question, hold_seconds, answer);
-        let block = format!("\n## Answer {} {ANSWER_PENDING_MARK}\nQuestion: {}\nUser answer: {given}\n", to_local_iso(self.virtual_now), if question.is_empty() { "the loop's question" } else { question });
+        let block = format!(
+            "\n## Answer {} {ANSWER_PENDING_MARK}\nQuestion: {}\nUser answer: {given}\n",
+            to_local_iso(self.virtual_now),
+            if question.is_empty() { "the loop's question" } else { question }
+        );
         let path = loop_state::state_file(&self.work_dir, "ANSWERS.md");
         let _ = write_text_atomically(&path, &format!("{}{block}", loop_state::read(&path)));
         if self.keeps_lock {

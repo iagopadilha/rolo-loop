@@ -33,24 +33,13 @@ impl Env {
         K: Into<String>,
         V: Into<String>,
     {
-        Env {
-            map: Some(
-                pairs
-                    .into_iter()
-                    .map(|(k, v)| (k.into(), v.into()))
-                    .collect(),
-            ),
-            loaded: Vec::new(),
-        }
+        Env { map: Some(pairs.into_iter().map(|(k, v)| (k.into(), v.into())).collect()), loaded: Vec::new() }
     }
 
     pub fn get(&self, name: &str) -> Option<String> {
         match &self.map {
             None => std::env::var(name).ok(),
-            Some(map) => map
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(name))
-                .map(|(_, v)| v.clone()),
+            Some(map) => map.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.clone()),
         }
     }
 
@@ -101,11 +90,7 @@ impl Env {
 
     /// `~/.loop-harness` or `LOOP_DATA_DIR`, made absolute.
     pub fn user_data_dir(&self) -> PathBuf {
-        let chosen = self
-            .get(DATA_DIR_VARIABLE)
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.home_dir().join(DEFAULT_DATA_DIR_NAME));
+        let chosen = self.get(DATA_DIR_VARIABLE).filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| self.home_dir().join(DEFAULT_DATA_DIR_NAME));
         abspath(&chosen)
     }
 
@@ -140,10 +125,7 @@ pub fn parse_env(text: &str) -> Vec<(String, String)> {
         let key = key.trim();
         let mut value = value.trim();
         let bytes = value.as_bytes();
-        if bytes.len() >= 2
-            && bytes[0] == bytes[bytes.len() - 1]
-            && (bytes[0] == b'\'' || bytes[0] == b'"')
-        {
+        if bytes.len() >= 2 && bytes[0] == bytes[bytes.len() - 1] && (bytes[0] == b'\'' || bytes[0] == b'"') {
             value = &value[1..value.len() - 1];
         }
         if !key.is_empty() {
@@ -225,27 +207,15 @@ mod tests {
 
     #[test]
     fn parses_pairs_quotes_comments_and_export() {
-        let got =
-            parse_env("# c\nA=1\nexport B = \"two words\"\nC='x'\nnoequals\n=novalue\nD=a=b\n");
-        assert_eq!(
-            got,
-            vec![
-                ("A".into(), "1".into()),
-                ("B".into(), "two words".into()),
-                ("C".into(), "x".into()),
-                ("D".into(), "a=b".into())
-            ]
-        );
+        let got = parse_env("# c\nA=1\nexport B = \"two words\"\nC='x'\nnoequals\n=novalue\nD=a=b\n");
+        assert_eq!(got, vec![("A".into(), "1".into()), ("B".into(), "two words".into()), ("C".into(), "x".into()), ("D".into(), "a=b".into())]);
     }
 
     #[test]
     fn real_variable_beats_the_file() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".env"), "\u{feff}X=file\nY=file\n").unwrap();
-        let mut env = Env::from_pairs([
-            ("LOOP_DATA_DIR", dir.path().to_str().unwrap()),
-            ("X", "real"),
-        ]);
+        let mut env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().to_str().unwrap()), ("X", "real")]);
         let used = load_all(&mut env);
         assert_eq!(used.len(), 1);
         assert_eq!(env.get("X").as_deref(), Some("real"));
@@ -258,10 +228,7 @@ mod tests {
         std::fs::write(dir.path().join(".env"), "A=data\n").unwrap();
         let explicit = dir.path().join("other.env");
         std::fs::write(&explicit, "B=explicit\n").unwrap();
-        let mut env = Env::from_pairs([
-            ("LOOP_DATA_DIR", dir.path().to_str().unwrap()),
-            ("LOOP_ENV_FILE", explicit.to_str().unwrap()),
-        ]);
+        let mut env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().to_str().unwrap()), ("LOOP_ENV_FILE", explicit.to_str().unwrap())]);
         load_all(&mut env);
         assert_eq!(env.get("A"), None);
         assert_eq!(env.get("B").as_deref(), Some("explicit"));

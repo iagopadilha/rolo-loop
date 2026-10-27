@@ -87,13 +87,21 @@ pub fn user_shared_dir(env: &Env) -> String {
 /// The user-level shared `.env` path, or empty when no folder is configured.
 pub fn user_shared_env_path(env: &Env) -> String {
     let folder = user_shared_dir(env);
-    if folder.is_empty() { folder } else { Path::new(&folder).join(".env").display().to_string() }
+    if folder.is_empty() {
+        folder
+    } else {
+        Path::new(&folder).join(".env").display().to_string()
+    }
 }
 
 /// Label of the user-level shared layer: `user shared .env (<folder>)`, or the bare base when no folder is configured.
 pub fn user_shared_label(env: &Env) -> String {
     let folder = user_shared_dir(env);
-    if folder.is_empty() { USER_SHARED_LABEL.to_string() } else { format!("{USER_SHARED_LABEL} ({folder})") }
+    if folder.is_empty() {
+        USER_SHARED_LABEL.to_string()
+    } else {
+        format!("{USER_SHARED_LABEL} ({folder})")
+    }
 }
 
 /// One `.env` file of the stack. `shared` layers are the user's generic account; they always count (lowest priority).
@@ -126,8 +134,13 @@ pub fn file_layers(root: &str) -> Vec<Layer> {
 /// `.env` (when configured). For the access report only.
 pub fn unused_file_layers(env: &Env) -> Vec<Value> {
     let candidates = env.env_file_candidates();
-    let items = [(MACHINE_LABEL.to_string(), candidates.first().map(|p| p.display().to_string()).unwrap_or_default()), (user_shared_label(env), user_shared_env_path(env))];
-    items.into_iter().filter(|(_, path)| !path.is_empty()).map(|(label, path)| json!({"label": label, "exists": Path::new(&path).is_file(), "path": path, "note": NOT_USED_LABEL})).collect()
+    let items =
+        [(MACHINE_LABEL.to_string(), candidates.first().map(|p| p.display().to_string()).unwrap_or_default()), (user_shared_label(env), user_shared_env_path(env))];
+    items
+        .into_iter()
+        .filter(|(_, path)| !path.is_empty())
+        .map(|(label, path)| json!({"label": label, "exists": Path::new(&path).is_file(), "path": path, "note": NOT_USED_LABEL}))
+        .collect()
 }
 
 /// `~/.loop-harness/.env` (the app data folder's `.env`: LOOP_DATA_DIR when set).
@@ -168,7 +181,8 @@ type Origin = (String, String);
 
 /// TEST_USER_<n>_EMAIL/PASSWORD/ROLE and TEST_USER_COUNT derived from the `;` lists (origin = the list's origin).
 pub fn add_test_users(values: &mut BTreeMap<String, String>, origins: &mut BTreeMap<String, Option<Origin>>) {
-    let columns: Vec<(&str, Vec<String>)> = USER_COLUMNS.iter().map(|(plural, single)| (*single, split_values(values.get(&format!("TEST_USER_{plural}")).map(String::as_str).unwrap_or("")))).collect();
+    let columns: Vec<(&str, Vec<String>)> =
+        USER_COLUMNS.iter().map(|(plural, single)| (*single, split_values(values.get(&format!("TEST_USER_{plural}")).map(String::as_str).unwrap_or("")))).collect();
     let count = columns.iter().map(|(_, items)| items.len()).max().unwrap_or(0);
     for number in 1..=count {
         for (plural, single) in USER_COLUMNS {
@@ -190,7 +204,10 @@ pub fn add_test_users(values: &mut BTreeMap<String, String>, origins: &mut BTree
 /// is not a variable the user set, and neither is one identical to a FILE layer's: both are left out.
 pub fn real_environment(env: &Env, layers: &[Layer]) -> BTreeMap<String, String> {
     let file_values: Vec<&BTreeMap<String, String>> = layers.iter().filter(|l| l.source != "project").map(|l| &l.values).collect();
-    env.vars().into_iter().filter(|(name, value)| !value.is_empty() && !env.is_loaded_value(name, value) && !file_values.iter().any(|v| v.get(name) == Some(value))).collect()
+    env.vars()
+        .into_iter()
+        .filter(|(name, value)| !value.is_empty() && !env.is_loaded_value(name, value) && !file_values.iter().any(|v| v.get(name) == Some(value)))
+        .collect()
 }
 
 /// `(values, origins)` of a stack of layers (highest priority first) under the real environment. Origin = `(source, label)`.
@@ -340,7 +357,10 @@ pub fn credential_warnings(root: &str, document_text: &str) -> Vec<String> {
     if optional.is_empty() {
         return vec![];
     }
-    vec![format!("TEST-ENVIRONMENT.md mentions sample data no .env defines: {} (the checks that use them cannot run; add them to .specs/project/.env.test)", names_text(&optional))]
+    vec![format!(
+        "TEST-ENVIRONMENT.md mentions sample data no .env defines: {} (the checks that use them cannot run; add them to .specs/project/.env.test)",
+        names_text(&optional)
+    )]
 }
 
 #[cfg(test)]
@@ -381,7 +401,10 @@ mod tests {
         assert_eq!(problems.len(), 2);
         assert!(problems[0].contains("plaintext secret on line(s) 2:"));
         assert!(problems[1].starts_with("TEST-ENVIRONMENT.md mentions names no .env defines: $MISSING_ONE, $TOKEN_VAR. Action: add NAME=value"));
-        assert_eq!(credential_warnings(&root, doc), vec!["TEST-ENVIRONMENT.md mentions sample data no .env defines: $SAMPLE_ROW (the checks that use them cannot run; add them to .specs/project/.env.test)"]);
+        assert_eq!(
+            credential_warnings(&root, doc),
+            vec!["TEST-ENVIRONMENT.md mentions sample data no .env defines: $SAMPLE_ROW (the checks that use them cannot run; add them to .specs/project/.env.test)"]
+        );
         assert!(credential_problems(&root, "").is_empty() && plaintext_secret_lines("Bearer abcdefghijklmnop1").contains(&1));
     }
 

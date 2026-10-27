@@ -104,12 +104,20 @@ impl ContextBlockService<'_> {
     /// `STANDARD`, `LEGACY` or '' (the Conformance of the folder as the project context shows it).
     pub fn read_conformance_text(work_folder: &str, relative_path: &str) -> String {
         let found = subprojects::read_conformance(work_folder, relative_path);
-        if matches!(found.as_str(), "STANDARD" | "LEGACY") { found } else { String::new() }
+        if matches!(found.as_str(), "STANDARD" | "LEGACY") {
+            found
+        } else {
+            String::new()
+        }
     }
 
     fn read_conformance(work_folder: &str, relative_path: &str) -> Value {
         let found = subprojects::read_conformance(work_folder, relative_path);
-        if matches!(found.as_str(), "STANDARD" | "LEGACY") { json!(found) } else { Value::Null }
+        if matches!(found.as_str(), "STANDARD" | "LEGACY") {
+            json!(found)
+        } else {
+            Value::Null
+        }
     }
 
     /// Relative path from the subproject to the root `SYSTEM.md` ("" for a root or when the file does not exist).
@@ -151,7 +159,11 @@ mod tests {
         assert!(service.refresh_repo(&folder, None, None).is_empty());
         write(&root, ".specs/project/SUBPROJECTS.json", r#"{"version": 1, "repos": {"app": {"monorepo": true, "confirmed": false, "projects": []}}}"#);
         assert!(service.target_paths(&folder, None, None).is_empty());
-        write(&root, ".specs/project/SUBPROJECTS.json", r#"{"version": 1, "repos": {"app": {"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web", "skip": true}, {"path": "gone"}]}}}"#);
+        write(
+            &root,
+            ".specs/project/SUBPROJECTS.json",
+            r#"{"version": 1, "repos": {"app": {"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web", "skip": true}, {"path": "gone"}]}}}"#,
+        );
         std::fs::create_dir_all(root.join("api")).unwrap();
         std::fs::create_dir_all(root.join("web")).unwrap();
         assert_eq!(service.target_paths(&folder, None, None), vec!["api".to_string()]);

@@ -96,12 +96,23 @@ impl SubprojectValidationService<'_> {
         let entry = match prepared {
             Ok(entry) => entry,
             Err(refusal) => {
-                self.app.log.info("subprojects_validation_refused", &[("repo", json!(key)), ("reason", json!(format!("{:?}", refusal.kind))), ("message", json!(refusal.message.chars().take(200).collect::<String>()))]);
+                self.app.log.info(
+                    "subprojects_validation_refused",
+                    &[("repo", json!(key)), ("reason", json!(format!("{:?}", refusal.kind))), ("message", json!(refusal.message.chars().take(200).collect::<String>()))],
+                );
                 return Err(refusal);
             }
         };
         self.app.subprojects_files().delete_suggested(&context.work_dir()); // a stale suggestion must never be applied
-        let options = CommandOptions { model: JOB_MODEL_CEILING.into(), budget_usd: None, no_mcp: true, prompt_argument: Self::build_prompt(&entry), permission_mode: JOB_PERMISSION_MODE.into(), hook_profile: HOOK_PROFILE.into(), ..CommandOptions::default() };
+        let options = CommandOptions {
+            model: JOB_MODEL_CEILING.into(),
+            budget_usd: None,
+            no_mcp: true,
+            prompt_argument: Self::build_prompt(&entry),
+            permission_mode: JOB_PERMISSION_MODE.into(),
+            hook_profile: HOOK_PROFILE.into(),
+            ..CommandOptions::default()
+        };
         let mut command = ClaudeJobCommand::new(self.app.claude.build_command(&options), "");
         command.work_dir = Some(context.work_dir());
         let (app, finish_context, finish_key, finish_folder) = (self.app.shared(), context.clone(), key, folder);
@@ -184,7 +195,15 @@ impl SubprojectValidationService<'_> {
         };
         let merged = self.merge_suggestion(folder, &stored, &suggestion);
         let _ = files.write_repo_entry(&work_dir, key, &Value::Object(merged.clone()));
-        self.app.log.info("subprojects_validated", &[("repo", json!(key)), ("projects", json!(merged["projects"].as_array().map_or(0, Vec::len))), ("rejected", json!(merged["rejected"].as_array().map_or(0, Vec::len))), ("differences", json!(merged["differences"].as_array().map_or(0, Vec::len)))]);
+        self.app.log.info(
+            "subprojects_validated",
+            &[
+                ("repo", json!(key)),
+                ("projects", json!(merged["projects"].as_array().map_or(0, Vec::len))),
+                ("rejected", json!(merged["rejected"].as_array().map_or(0, Vec::len))),
+                ("differences", json!(merged["differences"].as_array().map_or(0, Vec::len))),
+            ],
+        );
         result
     }
 
@@ -249,7 +268,16 @@ impl SubprojectValidationService<'_> {
         let previous = project.clone();
         let name = short_text(raw.get("name"), REASON_LIMIT);
         let old_name = crate::repositories::loop_read_formatting::text_or_empty(previous.get("name"));
-        project.insert("name".into(), json!(if !name.is_empty() { name } else if !old_name.is_empty() { old_name.clone() } else { path.replace('/', "-") }));
+        project.insert(
+            "name".into(),
+            json!(if !name.is_empty() {
+                name
+            } else if !old_name.is_empty() {
+                old_name.clone()
+            } else {
+                path.replace('/', "-")
+            }),
+        );
         project.insert("stack".into(), raw["stack"].clone());
         project.insert("skill".into(), json!(crate::repositories::loop_read_formatting::text_or_empty(raw.get("skill"))));
         project.insert("skip".into(), json!(engine_state::notify_truthy(raw.get("skip"))));
@@ -266,7 +294,9 @@ impl SubprojectValidationService<'_> {
             differences.push(json!({"path": path, "change": format!("stack changed: {old_stack} -> {}", crate::repositories::loop_read_formatting::text_or_empty(project.get("stack")))}));
         }
         if !old_name.is_empty() && Some(&json!(old_name)) != project.get("name") {
-            differences.push(json!({"path": path, "change": format!("renamed: {old_name} -> {}", crate::repositories::loop_read_formatting::text_or_empty(project.get("name")))}));
+            differences.push(
+                json!({"path": path, "change": format!("renamed: {old_name} -> {}", crate::repositories::loop_read_formatting::text_or_empty(project.get("name")))}),
+            );
         }
     }
 
@@ -344,7 +374,10 @@ mod tests {
         assert_eq!(check(json!({"path": "C:/x"}), &[]), "the path is outside the repository");
         assert_eq!(check(json!({"path": "nope", "stack": "node"}), &[]), "the folder does not exist");
         assert_eq!(check(json!({"path": "tools", "stack": "node"}), &["tools".into()]), "the path is listed twice");
-        assert_eq!(check(json!({"path": "tools", "stack": "cobol"}), &[]), "the stack 'cobol' is not one of: dotnet, nestjs, react, node, python, go, java, rust, php, ruby, unknown");
+        assert_eq!(
+            check(json!({"path": "tools", "stack": "cobol"}), &[]),
+            "the stack 'cobol' is not one of: dotnet, nestjs, react, node, python, go, java, rust, php, ruby, unknown"
+        );
         assert_eq!(check(json!({"path": "tools", "stack": "react", "skill": ""}), &[]), "the skill '' does not match the stack react");
         assert_eq!(check(json!({"path": "tools", "stack": "node", "skip": "yes"}), &[]), "`skip` is not true or false");
         assert_eq!(check(json!({"path": "web/inner", "stack": "node"}), &[]), "nested inside the listed project web");

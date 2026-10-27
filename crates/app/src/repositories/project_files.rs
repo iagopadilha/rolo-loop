@@ -88,7 +88,9 @@ impl SubprojectsFileRepository {
     pub fn read_subprojects(&self, work_dir: &str) -> Read {
         let path = Self::subprojects_path(work_dir);
         match self.read_json_object(&path) {
-            Read::Data(data) if !data.get("repos").is_some_and(Value::is_object) => Read::Error(SubprojectsFileError { path: path.display().to_string(), error: "the file has no `repos` object".into() }),
+            Read::Data(data) if !data.get("repos").is_some_and(Value::is_object) => {
+                Read::Error(SubprojectsFileError { path: path.display().to_string(), error: "the file has no `repos` object".into() })
+            }
             other => other,
         }
     }
@@ -229,7 +231,11 @@ pub fn write_env_values(path: &Path, values: &[(String, String)]) -> Result<(), 
     let text = replace_env_lines(&current, &lines);
     let folder = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(folder).map_err(|e| AppError::invalid_request(format!("the env file cannot be written: {e}")))?;
-    let temporary = tempfile::Builder::new().prefix(".env.").suffix(".tmp").tempfile_in(folder).map_err(|e| AppError::invalid_request(format!("the env file cannot be written: {e}")))?;
+    let temporary = tempfile::Builder::new()
+        .prefix(".env.")
+        .suffix(".tmp")
+        .tempfile_in(folder)
+        .map_err(|e| AppError::invalid_request(format!("the env file cannot be written: {e}")))?;
     std::fs::write(temporary.path(), text.as_bytes()).map_err(|e| AppError::invalid_request(format!("the env file cannot be written: {e}")))?;
     let (_, temp_path) = temporary.keep().map_err(|e| AppError::invalid_request(format!("the env file cannot be written: {e}")))?;
     engine_state::loop_io::replace_file(&temp_path, path).map_err(|e| {
@@ -335,7 +341,13 @@ impl ChatJobRepository {
     }
 
     /// Checks the limits and records the job as `running` in one step. `Ok(job_id)` or `Err(reason)`.
-    pub fn reserve_job(&self, project_id: &str, thread_id: Option<&str>, total_limit: usize, initial_fields: Option<&Map<String, Value>>) -> Result<String, &'static str> {
+    pub fn reserve_job(
+        &self,
+        project_id: &str,
+        thread_id: Option<&str>,
+        total_limit: usize,
+        initial_fields: Option<&Map<String, Value>>,
+    ) -> Result<String, &'static str> {
         let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
         let running = |job: &Map<String, Value>| job.get("state").and_then(Value::as_str) == Some(JOB_STATE_RUNNING);
         if let Some(thread) = thread_id {
@@ -396,7 +408,11 @@ impl ChatJobRepository {
     }
 
     pub fn has_running_job_in_thread(&self, thread_id: &str) -> bool {
-        self.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(_, j)| j.get("state").and_then(Value::as_str) == Some(JOB_STATE_RUNNING) && j.get("thread").and_then(Value::as_str) == Some(thread_id))
+        self.jobs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|(_, j)| j.get("state").and_then(Value::as_str) == Some(JOB_STATE_RUNNING) && j.get("thread").and_then(Value::as_str) == Some(thread_id))
     }
 }
 

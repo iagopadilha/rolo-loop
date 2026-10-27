@@ -59,7 +59,14 @@ fn feature_path_list(fields: &Fields) -> Vec<String> {
 /// True when `<folder>/docs/codebase/` holds at least one markdown document.
 fn folder_has_map(folder: &str) -> bool {
     let dir = CODEBASE_FOLDER.split('/').fold(PathBuf::from(folder), |acc, p| acc.join(p));
-    std::fs::read_dir(dir).map(|d| d.flatten().any(|e| { let n = e.file_name().to_string_lossy().to_lowercase(); !n.starts_with('.') && n.ends_with(".md") })).unwrap_or(false)
+    std::fs::read_dir(dir)
+        .map(|d| {
+            d.flatten().any(|e| {
+                let n = e.file_name().to_string_lossy().to_lowercase();
+                !n.starts_with('.') && n.ends_with(".md")
+            })
+        })
+        .unwrap_or(false)
 }
 
 /// `{repo name: folder}` for the repos of the project; the primary (and the single-project case) is `root`.
@@ -245,7 +252,17 @@ pub fn system_map_warning(root: &str, features: &Features, repos: &[RepoRef]) ->
 /// `{file path relative to root: lines}` from every inventory of the project.
 fn giant_files_of(root: &str) -> Vec<(String, Value)> {
     let folder = [".specs", "project", "loop", "internal", "inventory"].iter().fold(PathBuf::from(root), |acc, p| acc.join(p));
-    let mut files: Vec<PathBuf> = std::fs::read_dir(folder).map(|d| d.flatten().map(|e| e.path()).filter(|p| { let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default(); !n.starts_with('.') && n.ends_with(".json") }).collect()).unwrap_or_default();
+    let mut files: Vec<PathBuf> = std::fs::read_dir(folder)
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                    !n.starts_with('.') && n.ends_with(".json")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     files.sort();
     let mut giants: Vec<(String, Value)> = Vec::new();
     for path in files {
@@ -353,7 +370,11 @@ pub fn giant_preflight(root: &str, features: &Features, repos: &[RepoRef]) -> Ve
         .iter()
         .map(|(giant, _)| {
             let lines = lines_of(giant);
-            if crate::notify_truthy(Some(&lines)) { format!("{giant} ({} lines)", lines.as_str().map(String::from).unwrap_or_else(|| lines.to_string())) } else { giant.clone() }
+            if crate::notify_truthy(Some(&lines)) {
+                format!("{giant} ({} lines)", lines.as_str().map(String::from).unwrap_or_else(|| lines.to_string()))
+            } else {
+                giant.clone()
+            }
         })
         .collect();
     let slugs: BTreeSet<String> = offenders.iter().flat_map(|(_, s)| s.iter().cloned()).collect();
@@ -448,7 +469,11 @@ fn has_python_test(dir: &Path) -> bool {
         if name.starts_with('.') {
             return false;
         }
-        if e.path().is_dir() { has_python_test(&e.path()) } else { name.starts_with("test_") && name.ends_with(".py") }
+        if e.path().is_dir() {
+            has_python_test(&e.path())
+        } else {
+            name.starts_with("test_") && name.ends_with(".py")
+        }
     })
 }
 
@@ -474,7 +499,15 @@ pub fn known_commands(folder: &str) -> Map<String, Value> {
         fill(&mut commands, "test", "dotnet test");
         fill(&mut commands, "run", "dotnet run");
     }
-    for (name, test_command) in [("pytest.ini", "pytest"), ("tox.ini", "tox"), ("go.mod", "go test ./..."), ("pom.xml", "mvn test"), ("Cargo.toml", "cargo test"), ("Makefile", "make test"), ("setup.cfg", "pytest")] {
+    for (name, test_command) in [
+        ("pytest.ini", "pytest"),
+        ("tox.ini", "tox"),
+        ("go.mod", "go test ./..."),
+        ("pom.xml", "mvn test"),
+        ("Cargo.toml", "cargo test"),
+        ("Makefile", "make test"),
+        ("setup.cfg", "pytest"),
+    ] {
         if root.join(name).is_file() {
             fill(&mut commands, "test", test_command);
         }
@@ -508,7 +541,11 @@ mod tests {
     }
 
     fn monorepo(root: &Path) -> String {
-        write(root, ".specs/project/SUBPROJECTS.json", r#"{"repos": {"main": {"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web"}, {"path": "old", "skip": true}]}}}"#);
+        write(
+            root,
+            ".specs/project/SUBPROJECTS.json",
+            r#"{"repos": {"main": {"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web"}, {"path": "old", "skip": true}]}}}"#,
+        );
         write(root, "api/CLAUDE.md", "Conformance: STANDARD\n");
         write(root, "api/docs/codebase/STACK.md", "map");
         root.display().to_string()
@@ -523,14 +560,20 @@ mod tests {
         let features = parse_roadmap("## Stage 1\n- [a] status=pending paths=api/x,web/y\n- [b] status=pending paths=old/z,elsewhere/q\n").0;
         let (problems, warns) = subprojects_preflight(&root, &features, &[]);
         assert_eq!(problems, vec!["subproject `web` is touched by the roadmap but has no `Conformance: STANDARD|LEGACY` line in web/CLAUDE.md (set it in the Subprojects table) and no map in web/docs/codebase (run Map codebase for it) (features: a)"]);
-        assert_eq!(warns, vec![
-            "feature b: paths outside any subproject (elsewhere/q): the agents use the root rules only",
-            "feature b: subproject `old` skipped: no map, no Conformance for its agents",
-        ]);
+        assert_eq!(
+            warns,
+            vec![
+                "feature b: paths outside any subproject (elsewhere/q): the agents use the root rules only",
+                "feature b: subproject `old` skipped: no map, no Conformance for its agents",
+            ]
+        );
         let single = parse_roadmap("## Stage 1\n- [a] status=pending paths=api/x\n").0;
         assert!(system_map_warning(&root, &single, &[]).is_empty());
         let two = parse_roadmap("## Stage 1\n- [a] status=pending paths=api/x,web/y\n").0;
-        assert_eq!(system_map_warning(&root, &two, &[]), vec!["no system map: the agents have no description of how the subprojects talk (features touch api, web; Map the system in the Subprojects table)"]);
+        assert_eq!(
+            system_map_warning(&root, &two, &[]),
+            vec!["no system map: the agents have no description of how the subprojects talk (features touch api, web; Map the system in the Subprojects table)"]
+        );
     }
 
     #[test]
@@ -552,7 +595,10 @@ mod tests {
         write(dir.path(), "go.mod", "");
         write(dir.path(), "docs/codebase/TESTING.md", "How to test");
         let c = known_commands(&root);
-        assert_eq!((c["build"].as_str(), c["run"].as_str(), c["test"].as_str(), c["summary"].as_str()), (Some("npm run build"), Some("npm run dev"), Some("npm test"), Some("docs/codebase/TESTING.md")));
+        assert_eq!(
+            (c["build"].as_str(), c["run"].as_str(), c["test"].as_str(), c["summary"].as_str()),
+            (Some("npm run build"), Some("npm run dev"), Some("npm test"), Some("docs/codebase/TESTING.md"))
+        );
         assert_eq!(find_dotnet(&root, 3), "src/App.csproj");
         let empty = tempfile::tempdir().unwrap();
         let c = known_commands(&empty.path().display().to_string());

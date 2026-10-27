@@ -77,7 +77,13 @@ impl RepoReadinessService<'_> {
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|repo| repo["role"] == project_repos::ROLE_REFERENCE && repo["primary"] != true && repo["exists"] == true && repo["has_code"] == true && repo["map"]["files"].as_array().is_none_or(Vec::is_empty))
+            .filter(|repo| {
+                repo["role"] == project_repos::ROLE_REFERENCE
+                    && repo["primary"] != true
+                    && repo["exists"] == true
+                    && repo["has_code"] == true
+                    && repo["map"]["files"].as_array().is_none_or(Vec::is_empty)
+            })
             .map(|repo| format!("{} is a reference repository without a codebase map: optional, but a map helps the agents understand it", text_of(repo.get("name"))))
             .collect()
     }
@@ -163,12 +169,20 @@ impl RepoReadinessService<'_> {
         if map_running {
             parts.push("mapping now");
         }
-        if parts.is_empty() { format!("{}: ready", repo.name) } else { format!("{}: {}", repo.name, parts.join(", ")) }
+        if parts.is_empty() {
+            format!("{}: ready", repo.name)
+        } else {
+            format!("{}: {}", repo.name, parts.join(", "))
+        }
     }
 
     fn work_folder(repo: &RepoRef) -> String {
         let worktree = repo.loop_worktree_path();
-        if Path::new(&worktree).is_dir() { worktree } else { repo.path.clone() }
+        if Path::new(&worktree).is_dir() {
+            worktree
+        } else {
+            repo.path.clone()
+        }
     }
 
     // ------------------------------------------------ actions
@@ -203,10 +217,21 @@ impl RepoReadinessService<'_> {
             return Err(AppError::new(Kind::InvalidRepo, format!("the repo folder does not exist: {}", repo.path)).with_code(FOLDER_MISSING_CODE));
         }
         if Path::new(&repo.loop_worktree_path()).is_dir() {
-            return Err(AppError::new(Kind::RepoConflict, format!("the worktree of {} already exists: map it from the loop worktree or remove the worktree first", repo.name)).with_code("worktree_exists"));
+            return Err(AppError::new(
+                Kind::RepoConflict,
+                format!("the worktree of {} already exists: map it from the loop worktree or remove the worktree first", repo.name),
+            )
+            .with_code("worktree_exists"));
         }
         self.app.specs_structure().ensure_specs_in_gitignore(&repo.path); // the job record lives in the repo's .specs: keep git clean of it
-        let repo_context = ProjectContext::new(Project { id: format!("{}/{}", context.project.id, repo.name), name: repo.name.clone(), repo_path: repo.path.clone(), opened_at: String::new(), last_opened_at: String::new(), favorite: false });
+        let repo_context = ProjectContext::new(Project {
+            id: format!("{}/{}", context.project.id, repo.name),
+            name: repo.name.clone(),
+            repo_path: repo.path.clone(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        });
         let job = self.app.roadmap().map_codebase(&repo_context)?;
         self.app.log.info("repo_map_started", &[("project", json!(context.project.id)), ("repo", json!(repo.name)), ("job", job["id"].clone())]);
         Ok(json!({"ok": true, "name": repo.name, "job": job["id"], "detail": job}))

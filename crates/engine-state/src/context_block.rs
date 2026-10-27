@@ -93,8 +93,18 @@ pub fn remove_codebase_blocks(text: &str) -> (String, bool) {
 }
 
 pub fn render_command_lines(commands: Option<&Value>, map_documents: &[String]) -> Vec<String> {
-    let text_of = |slot: &str| commands.and_then(|c| c.get(slot)).map(|v| match v { Value::String(s) => s.trim().to_string(), Value::Null => String::new(), other => pycompat::json::py_json_dumps(other, false) }).unwrap_or_default();
-    let known: Vec<(&str, String)> = [("Build", "build"), ("Run", "run"), ("Test", "test")].iter().map(|(label, slot)| (*label, text_of(slot))).filter(|(_, text)| !text.is_empty()).collect();
+    let text_of = |slot: &str| {
+        commands
+            .and_then(|c| c.get(slot))
+            .map(|v| match v {
+                Value::String(s) => s.trim().to_string(),
+                Value::Null => String::new(),
+                other => pycompat::json::py_json_dumps(other, false),
+            })
+            .unwrap_or_default()
+    };
+    let known: Vec<(&str, String)> =
+        [("Build", "build"), ("Run", "run"), ("Test", "test")].iter().map(|(label, slot)| (*label, text_of(slot))).filter(|(_, text)| !text.is_empty()).collect();
     if known.is_empty() {
         if map_documents.iter().any(|d| d == TESTING_DOCUMENT) {
             return vec![format!("Build/test command not known: see `{MAP_RELATIVE_FOLDER}/{TESTING_DOCUMENT}`.")];
@@ -106,7 +116,8 @@ pub fn render_command_lines(commands: Option<&Value>, map_documents: &[String]) 
 
 /// The block (markers included). `folder` is only the project the block describes (kept for callers and future facts).
 pub fn render(_folder: &str, facts: &Value) -> String {
-    let map_documents: Vec<String> = facts.get("map_documents").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
+    let map_documents: Vec<String> =
+        facts.get("map_documents").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
     let giant_lines = match facts.get("giant_lines") {
         Some(Value::Number(n)) if n.as_f64().is_some_and(|f| f != 0.0) => n.as_f64().map(|f| f as i64).unwrap_or(DEFAULT_GIANT_LINES),
         Some(Value::String(s)) => s.trim().parse::<i64>().ok().filter(|v| *v != 0).unwrap_or(DEFAULT_GIANT_LINES),
@@ -128,7 +139,9 @@ pub fn render(_folder: &str, facts: &Value) -> String {
     lines.push(String::new());
     lines.extend(render_command_lines(facts.get("commands"), &map_documents));
     lines.push(String::new());
-    lines.push(format!("Files above {giant_lines} lines: read them by signatures (Grep, then small ranges), never whole; never make a file cross {giant_lines} lines: split it instead."));
+    lines.push(format!(
+        "Files above {giant_lines} lines: read them by signatures (Grep, then small ranges), never whole; never make a file cross {giant_lines} lines: split it instead."
+    ));
     lines.push(END_MARKER.to_string());
     lines.join("\n")
 }
@@ -179,7 +192,13 @@ pub fn write(folder: &str, facts: &Value, title: Option<&str>) -> Value {
     } else if let Some((start, end)) = found {
         format!("{}{block}{}", &text[..start], &text[end..])
     } else {
-        let separator = if text.is_empty() { "" } else if text.ends_with('\n') { line_ending } else { &line_ending.repeat(2) };
+        let separator = if text.is_empty() {
+            ""
+        } else if text.ends_with('\n') {
+            line_ending
+        } else {
+            &line_ending.repeat(2)
+        };
         text.push_str(separator);
         text.push_str(&block);
         text.push_str(line_ending);

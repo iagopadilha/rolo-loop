@@ -3,7 +3,7 @@
 //! section. The POSTs require the token (router default). `info` never returns a variable value: only channel names and whether they are configured.
 
 use super::route;
-use crate::api::responses::{response_of, respond_json};
+use crate::api::responses::{respond_json, response_of};
 use crate::api::router::{Request, Response, Router};
 use crate::services::App;
 use serde_json::{json, Value};

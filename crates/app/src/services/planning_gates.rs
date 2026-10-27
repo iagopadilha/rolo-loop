@@ -91,7 +91,11 @@ fn len_of(value: Option<&Value>) -> usize {
 pub fn describe_map_documents(facts: &Value) -> String {
     let folder = Some(text_of(facts.get("map_folder"))).filter(|f| !f.is_empty()).unwrap_or_else(|| "docs/codebase".into());
     let detail = format!("{} document(s) in {folder}", len_of(facts.get("map_files")));
-    if t(facts.get("map_commit")) { format!("{detail}, mapped at {}", text_of(facts.get("map_commit"))) } else { detail }
+    if t(facts.get("map_commit")) {
+        format!("{detail}, mapped at {}", text_of(facts.get("map_commit")))
+    } else {
+        detail
+    }
 }
 
 /// One line per written map document: `NAME.md: what it is for`.
@@ -151,13 +155,18 @@ pub fn build_subprojects_gates(facts: &Value) -> Vec<Value> {
     if !detected {
         return vec![];
     }
-    let skipped: Vec<Value> = facts["subprojects"].get("projects").and_then(Value::as_array).map(|p| p.iter().filter(|project| t(project.get("skip"))).cloned().collect()).unwrap_or_default();
+    let skipped: Vec<Value> =
+        facts["subprojects"].get("projects").and_then(Value::as_array).map(|p| p.iter().filter(|project| t(project.get("skip"))).cloned().collect()).unwrap_or_default();
     let mut items: Vec<String> = active.iter().map(describe_subproject_line).collect();
     for project in &skipped {
         let reason = if t(project.get("reason")) { format!(" ({})", text_of(project.get("reason"))) } else { String::new() };
         items.push(format!("{}: skipped{reason}", text_of(project.get("path"))));
     }
-    let detail = if confirmed { format!("{} subproject(s) confirmed", active.len()) } else { format!("confirm the list of {} subproject(s) before Conformance and the map", active.len()) };
+    let detail = if confirmed {
+        format!("{} subproject(s) confirmed", active.len())
+    } else {
+        format!("confirm the list of {} subproject(s) before Conformance and the map", active.len())
+    };
     vec![create_gate(GATE_SUBPROJECTS, "Subprojects", confirmed, Some(detail), &items, false)]
 }
 
@@ -167,9 +176,16 @@ pub fn build_subproject_conformance_gate(facts: &Value) -> Value {
     if !confirmed {
         return create_gate(GATE_CONFORMANCE, "Conformance per subproject", false, Some(SUBPROJECTS_BLOCKED.into()), &[], false);
     }
-    let items: Vec<String> = active.iter().map(|p| format!("{}: {}", text_of(p.get("path")), if t(p.get("conformance")) { text_of(p.get("conformance")) } else { "missing".into() })).collect();
+    let items: Vec<String> = active
+        .iter()
+        .map(|p| format!("{}: {}", text_of(p.get("path")), if t(p.get("conformance")) { text_of(p.get("conformance")) } else { "missing".into() }))
+        .collect();
     let missing: Vec<&Value> = active.iter().filter(|p| !t(p.get("conformance"))).collect();
-    let detail = if missing.is_empty() { "every subproject has a Conformance line".to_string() } else { format!("{} of {} subproject(s) with Conformance", active.len() - missing.len(), active.len()) };
+    let detail = if missing.is_empty() {
+        "every subproject has a Conformance line".to_string()
+    } else {
+        format!("{} of {} subproject(s) with Conformance", active.len() - missing.len(), active.len())
+    };
     create_gate(GATE_CONFORMANCE, "Conformance per subproject", missing.is_empty(), Some(detail), &items, false)
 }
 
@@ -193,7 +209,13 @@ pub fn build_subproject_map_gate(facts: &Value) -> Value {
         .iter()
         .map(|p| {
             let documents = map_documents(p);
-            let state = if !documents.is_empty() { format!("{} document(s)", documents.len()) } else if t(p.get("has_code")) { "no map".into() } else { "no code".into() };
+            let state = if !documents.is_empty() {
+                format!("{} document(s)", documents.len())
+            } else if t(p.get("has_code")) {
+                "no map".into()
+            } else {
+                "no code".into()
+            };
             format!("{}: {state}", text_of(p.get("path")))
         })
         .collect();
@@ -244,7 +266,14 @@ pub fn build_code_prerequisite_gates(facts: &Value) -> Vec<Value> {
         return gates;
     }
     let conformance = text_of(facts.get("conformance"));
-    gates.push(create_gate(GATE_CONFORMANCE, "Conformance in CLAUDE.md", !conformance.is_empty(), Some(if conformance.is_empty() { "choose STANDARD or LEGACY".into() } else { format!("Conformance: {conformance}") }), &[], false));
+    gates.push(create_gate(
+        GATE_CONFORMANCE,
+        "Conformance in CLAUDE.md",
+        !conformance.is_empty(),
+        Some(if conformance.is_empty() { "choose STANDARD or LEGACY".into() } else { format!("Conformance: {conformance}") }),
+        &[],
+        false,
+    ));
     let detail = if running {
         format!("mapping now: {} document(s) written so far", map_files.len())
     } else if !map_files.is_empty() {
@@ -267,11 +296,25 @@ pub fn build_repos_gates(facts: &Value) -> Vec<Value> {
         if warnings.is_empty() {
             return vec![];
         }
-        return vec![create_gate(GATE_REPOS, "Other repositories set up", true, Some(format!("{} warning(s) about reference repositories", warnings.len())), &warnings, true)];
+        return vec![create_gate(
+            GATE_REPOS,
+            "Other repositories set up",
+            true,
+            Some(format!("{} warning(s) about reference repositories", warnings.len())),
+            &warnings,
+            true,
+        )];
     }
     let mut items: Vec<String> = unready.iter().map(|r| text_of(r.get("detail"))).collect();
     items.extend(warnings);
-    vec![create_gate(GATE_REPOS, "Other repositories set up", false, Some(format!("{} repository(ies) without the minimum setup (Conformance + codebase map)", unready.len())), &items, false)]
+    vec![create_gate(
+        GATE_REPOS,
+        "Other repositories set up",
+        false,
+        Some(format!("{} repository(ies) without the minimum setup (Conformance + codebase map)", unready.len())),
+        &items,
+        false,
+    )]
 }
 
 /// `[goal, features, fields, open_questions, flows, test_environment]`: the state of the planning documents.
@@ -286,7 +329,8 @@ pub fn build_plan_gates(app: &App, facts: &Value) -> Vec<Value> {
     let env_problems: Vec<String> = strings(facts.get("environment_all_problems")).iter().map(|p| friendly_environment_problem(p)).collect();
     let env_check = read_environment_validation(app, &text_of(facts.get("work_dir")));
     let check_problems: Vec<String> = env_check["problems"].as_array().map(|a| a.iter().map(|i| text_of(i.get("message"))).collect()).unwrap_or_default();
-    let check_warnings: Vec<String> = env_check["warnings"].as_array().map(|a| a.iter().map(|i| format!("warning: {}", text_of(i.get("message")))).collect()).unwrap_or_default();
+    let check_warnings: Vec<String> =
+        env_check["warnings"].as_array().map(|a| a.iter().map(|i| format!("warning: {}", text_of(i.get("message")))).collect()).unwrap_or_default();
     let env_blocking = t(env_check.get("exists")) && !check_problems.is_empty() && !t(env_check.get("unfinished")); // ENV-01: only a written plan blocks
     let mut env_items = env_problems.clone();
     env_items.extend(check_problems.clone());
@@ -327,9 +371,30 @@ pub fn build_plan_gates(app: &App, facts: &Value) -> Vec<Value> {
             &parse_errors,
             false,
         ),
-        create_gate(GATE_FIELDS, "Feature fields", field_errors.is_empty(), if field_errors.is_empty() { None } else { Some(format!("{} error(s)", field_errors.len())) }, &field_errors, false),
-        create_gate(GATE_OPEN_QUESTIONS, "Open questions answered", questions.is_empty(), if questions.is_empty() { None } else { Some(format!("{} open question(s) in the ROADMAP", questions.len())) }, &questions, false),
-        create_gate(GATE_FLOWS, "A flow for every feature (FLOWS.md)", flows_exists && t(Some(features)) && coverage_missing.is_empty(), describe_flows(facts, coverage), &coverage_missing, false),
+        create_gate(
+            GATE_FIELDS,
+            "Feature fields",
+            field_errors.is_empty(),
+            if field_errors.is_empty() { None } else { Some(format!("{} error(s)", field_errors.len())) },
+            &field_errors,
+            false,
+        ),
+        create_gate(
+            GATE_OPEN_QUESTIONS,
+            "Open questions answered",
+            questions.is_empty(),
+            if questions.is_empty() { None } else { Some(format!("{} open question(s) in the ROADMAP", questions.len())) },
+            &questions,
+            false,
+        ),
+        create_gate(
+            GATE_FLOWS,
+            "A flow for every feature (FLOWS.md)",
+            flows_exists && t(Some(features)) && coverage_missing.is_empty(),
+            describe_flows(facts, coverage),
+            &coverage_missing,
+            false,
+        ),
         create_gate(
             GATE_TEST_ENV,
             "Test environment (credentials and limits)",
@@ -367,7 +432,13 @@ pub fn read_environment_validation(app: &App, work_dir: &str) -> Value {
 /// `[{covered, dropped, missing}]` of every SENT import (newest first) against `facts["import_coverage_text"]`; `[]` without one.
 pub fn check_sent_imports_coverage(facts: &Value) -> Vec<Value> {
     let coverage = parse_coverage(&text_of(facts.get("import_coverage_text")));
-    facts.get("imports").and_then(Value::as_array).map(|imports| imports.iter().filter(|m| t(m.get("sent_at"))).map(|meta| check_coverage(meta.get("items").filter(|i| t(Some(i))).unwrap_or(&json!({})), &coverage)).collect()).unwrap_or_default()
+    facts
+        .get("imports")
+        .and_then(Value::as_array)
+        .map(|imports| {
+            imports.iter().filter(|m| t(m.get("sent_at"))).map(|meta| check_coverage(meta.get("items").filter(|i| t(Some(i))).unwrap_or(&json!({})), &coverage)).collect()
+        })
+        .unwrap_or_default()
 }
 
 /// `[import_coverage]` when a spec import was sent (nothing otherwise); not optional: ok only when no source item is missing from
@@ -378,7 +449,14 @@ pub fn build_import_coverage_gates(facts: &Value) -> Vec<Value> {
         return vec![];
     }
     if text_of(facts.get("import_coverage_text")).trim().is_empty() {
-        return vec![create_gate(GATE_IMPORT_COVERAGE, "Import coverage (IMPORT-COVERAGE.md)", false, Some(IMPORT_COVERAGE_MISSING.into()), &[IMPORT_COVERAGE_MISSING.into()], false)];
+        return vec![create_gate(
+            GATE_IMPORT_COVERAGE,
+            "Import coverage (IMPORT-COVERAGE.md)",
+            false,
+            Some(IMPORT_COVERAGE_MISSING.into()),
+            &[IMPORT_COVERAGE_MISSING.into()],
+            false,
+        )];
     }
     let covered: usize = results.iter().map(|r| len_of(r.get("covered"))).sum();
     let dropped: Vec<&Value> = results.iter().flat_map(|r| r.get("dropped").and_then(Value::as_array).into_iter().flatten()).collect();
@@ -412,14 +490,30 @@ pub fn read_roadmap_loop_settings(work_dir: &str) -> ParsedSettings {
 }
 
 pub fn describe_loop_settings_problems(loop_settings: &ParsedSettings) -> Vec<String> {
-    loop_settings.problems.iter().map(|item| format!("ROADMAP setting \"{}: {}\" is invalid ({})", text_of(item.get("name")), text_of(item.get("value")), text_of(item.get("message")))).collect()
+    loop_settings
+        .problems
+        .iter()
+        .map(|item| format!("ROADMAP setting \"{}: {}\" is invalid ({})", text_of(item.get("name")), text_of(item.get("value")), text_of(item.get("message"))))
+        .collect()
 }
 
 pub fn format_loop_setting_value(key: &str, value: &Value) -> String {
     match value {
         Value::Bool(b) => (if *b { "yes" } else { "no" }).into(),
-        _ if key == "branch" => if t(Some(value)) { text_of(Some(value)) } else { "automatic".into() },
-        _ if key == "setup" => if t(Some(value)) { text_of(Some(value)) } else { "(none)".into() },
+        _ if key == "branch" => {
+            if t(Some(value)) {
+                text_of(Some(value))
+            } else {
+                "automatic".into()
+            }
+        }
+        _ if key == "setup" => {
+            if t(Some(value)) {
+                text_of(Some(value))
+            } else {
+                "(none)".into()
+            }
+        }
         Value::Number(n) if key == "budget_turn" || key == "budget_loop" => {
             let f = n.as_f64().unwrap_or(0.0);
             format!("US$ {}", if f.fract() == 0.0 { format!("{}", f as i64) } else { py_float_text(f) })
@@ -431,7 +525,11 @@ pub fn format_loop_setting_value(key: &str, value: &Value) -> String {
 /// Python `str(float)` for the amounts shown (shortest round-trip text, `1e-05` style not needed here).
 fn py_float_text(value: f64) -> String {
     let text = format!("{value}");
-    if text.contains('.') { text } else { format!("{text}.0") }
+    if text.contains('.') {
+        text
+    } else {
+        format!("{text}.0")
+    }
 }
 
 /// `{"name", "source": "roadmap|env|default"}`: the ROADMAP `Branch base` line (valid), then LOOP_PR_BASE / LOOP_INTEGRATION_BRANCH, then
@@ -451,7 +549,11 @@ pub fn resolve_base_branch(app: &App, loop_settings: &ParsedSettings) -> Value {
 /// LOOP_INTEGRATION_BRANCH, then `developer`. The one helper every payload uses (same order as the engine's delivery).
 pub fn get_integration_branch(app: &App, roadmap_text: &str) -> String {
     let from_roadmap = engine_state::roadmap_settings::read_roadmap_base_branch(roadmap_text);
-    if from_roadmap.is_empty() { get_environment_integration_branch(app) } else { from_roadmap }
+    if from_roadmap.is_empty() {
+        get_environment_integration_branch(app)
+    } else {
+        from_roadmap
+    }
 }
 
 /// LOOP_PR_BASE / LOOP_INTEGRATION_BRANCH (environment, then the app .env), else the default.
@@ -468,9 +570,12 @@ pub fn describe_loop_settings_for_ai(app: &App, loop_settings: &ParsedSettings) 
     let mut settings: Map<String, Value> = loop_settings.settings.clone();
     let base_header = LOOP_SETTING_HEADER_NAMES.iter().find(|(k, _)| *k == "base_branch").map(|(_, n)| *n).unwrap_or("");
     if loop_settings.missing.iter().any(|m| m == "base_branch") || invalid.iter().any(|n| n == base_header) {
-        settings.insert("base_branch".into(), json!(get_environment_integration_branch(app))); // no usable line: the environment, then developer (as the engine resolves it)
+        settings.insert("base_branch".into(), json!(get_environment_integration_branch(app)));
+        // no usable line: the environment, then developer (as the engine resolves it)
     }
-    let mut lines = vec!["- [OK] loop_settings: decided here in planning (ROADMAP header lines `**Name:** value`), read by the loop at Start; a missing line = the default".to_string()];
+    let mut lines =
+        vec!["- [OK] loop_settings: decided here in planning (ROADMAP header lines `**Name:** value`), read by the loop at Start; a missing line = the default"
+            .to_string()];
     for (key, header_name) in LOOP_SETTING_HEADER_NAMES {
         let mark = if invalid.iter().any(|n| n == header_name) { " (invalid in the ROADMAP: the default is used)" } else { "" };
         lines.push(format!("    * {header_name}: {}{mark}", format_loop_setting_value(key, settings.get(key).unwrap_or(&Value::Null))));
@@ -509,7 +614,8 @@ pub fn create_readiness_gate(readiness: &Value) -> Value {
 /// The engine preflight words its messages for the regression/e2e case; here the file may simply not exist yet.
 pub fn friendly_environment_problem(problem: &str) -> String {
     if problem.contains("is missing") {
-        return "TEST-ENVIRONMENT.md does not exist yet: initialize the .specs/ structure (or send a message in the chat) and the app creates it from its template".into();
+        return "TEST-ENVIRONMENT.md does not exist yet: initialize the .specs/ structure (or send a message in the chat) and the app creates it from its template"
+            .into();
     }
     problem.to_string()
 }
@@ -525,7 +631,11 @@ pub fn describe_test_environment(problems: &[String], required: bool, blocking: 
     if blocking {
         return format!("fix before approving the roadmap: {}{more}", problems[0]);
     }
-    let prefix = if required { "needed before the loop starts (a feature asks for regression or the ROADMAP says E2E: yes): " } else { "optional (no regression feature and E2E: no): " };
+    let prefix = if required {
+        "needed before the loop starts (a feature asks for regression or the ROADMAP says E2E: yes): "
+    } else {
+        "optional (no regression feature and E2E: no): "
+    };
     let tail = if required { " (values: this project's .env.test; the Test environment tab can import names from your machine files)" } else { "" };
     format!("{prefix}{}{tail}", problems[0])
 }
@@ -565,7 +675,11 @@ pub fn load_rejected_repos(work_dir: &str) -> Vec<Value> {
     if data.is_object() {
         data = data.get("rejected").cloned().unwrap_or(Value::Null);
     }
-    data.as_array().map(|list| list.iter().filter(|i| i.is_object() && t(i.get("path"))).map(|i| json!({"path": text_of(i.get("path")), "reason": text_of(i.get("reason"))})).collect()).unwrap_or_default()
+    data.as_array()
+        .map(|list| {
+            list.iter().filter(|i| i.is_object() && t(i.get("path"))).map(|i| json!({"path": text_of(i.get("path")), "reason": text_of(i.get("reason"))})).collect()
+        })
+        .unwrap_or_default()
 }
 
 const INVENTORY_PARTS: [&str; 5] = [".specs", "project", "loop", "internal", "inventory"];
@@ -580,7 +694,8 @@ pub fn read_root_giants(work_dir: &str) -> (usize, Vec<Value>) {
     }
     let path = INVENTORY_PARTS.iter().fold(Path::new(work_dir).to_path_buf(), |a, p| a.join(p)).join("_root.json");
     let Some(document) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else { return (0, vec![]) };
-    let giants: Vec<&Value> = document.get("giant").and_then(Value::as_array).map(|g| g.iter().filter(|i| i.is_object() && t(i.get("path"))).collect()).unwrap_or_default();
+    let giants: Vec<&Value> =
+        document.get("giant").and_then(Value::as_array).map(|g| g.iter().filter(|i| i.is_object() && t(i.get("path"))).collect()).unwrap_or_default();
     (giants.len(), giants.iter().take(GIANT_FILES_SHOWN).map(|i| json!({"path": i["path"], "lines": i.get("lines").cloned().unwrap_or(json!(0))})).collect())
 }
 
@@ -606,11 +721,21 @@ pub fn describe_subprojects_for_ai(described: Option<&Value>, work_dir: &str) ->
     let mut lines = vec![format!("[Subprojects of this monorepo{}]", if confirmed { "" } else { " (list NOT confirmed yet: the user confirms it in the app)" })];
     for project in &projects {
         if t(project.get("skip")) {
-            lines.push(format!("- {}: skipped{}", text_of(project.get("path")), if t(project.get("reason")) { format!(" ({})", text_of(project.get("reason"))) } else { String::new() }));
+            lines.push(format!(
+                "- {}: skipped{}",
+                text_of(project.get("path")),
+                if t(project.get("reason")) { format!(" ({})", text_of(project.get("reason"))) } else { String::new() }
+            ));
             continue;
         }
         let files = map_documents(project);
-        let map_state = if !files.is_empty() { format!("map: {} document(s)", files.len()) } else if t(project.get("has_code")) { "map: missing".into() } else { "map: no code".into() };
+        let map_state = if !files.is_empty() {
+            format!("map: {} document(s)", files.len())
+        } else if t(project.get("has_code")) {
+            "map: missing".into()
+        } else {
+            "map: no code".into()
+        };
         let stack = Some(text_of(project.get("stack"))).filter(|s| !s.is_empty()).unwrap_or_else(|| "unknown".into());
         let conformance = Some(text_of(project.get("conformance"))).filter(|s| !s.is_empty()).unwrap_or_else(|| "missing".into());
         lines.push(format!("- {} (stack {stack}): Conformance {conformance}, {map_state}", text_of(project.get("path"))));
@@ -636,10 +761,23 @@ pub fn describe_subprojects_for_ai(described: Option<&Value>, work_dir: &str) ->
 /// Plain-text status block sent to the planning AI before every user message: what passes and what is missing. With `work_dir` (or
 /// `rejected_repos`) it also lists the repository suggestions the app refused, so the AI fixes them. `loop_settings` (the result of
 /// `parse_loop_settings`) adds the loop settings block with a WARNING per invalid value.
-pub fn describe_gates_for_ai(app: &App, gates: &[Value], work_dir: &str, rejected_repos: Option<&[Value]>, subprojects: Option<&Value>, loop_settings: Option<&ParsedSettings>) -> String {
+pub fn describe_gates_for_ai(
+    app: &App,
+    gates: &[Value],
+    work_dir: &str,
+    rejected_repos: Option<&[Value]>,
+    subprojects: Option<&Value>,
+    loop_settings: Option<&ParsedSettings>,
+) -> String {
     let mut lines = vec!["[Planning status from the app, read just now: the source of truth, newer than your memory. Fix what is MISSING in the planning documents; do not ask the user for what is already OK.]".to_string()];
     for gate in gates {
-        let mark = if gate["ok"] == true { "OK" } else if gate["optional"] == true { "optional" } else { "MISSING" };
+        let mark = if gate["ok"] == true {
+            "OK"
+        } else if gate["optional"] == true {
+            "optional"
+        } else {
+            "MISSING"
+        };
         let detail = if t(gate.get("detail")) { format!(" - {}", text_of(gate.get("detail"))) } else { String::new() };
         lines.push(format!("- [{mark}] {}: {}{detail}", text_of(gate.get("id")), text_of(gate.get("label"))));
         if gate["ok"] != true {
@@ -710,15 +848,26 @@ mod tests {
         assert_eq!(by_id("conformance")["detail"], "choose STANDARD or LEGACY");
         assert_eq!((by_id("map")["ok"].clone(), by_id("map")["detail"].clone()), (json!(false), json!("mapping now: 2 document(s) written so far")));
         assert_eq!(by_id("goal")["detail"], "1 line(s) still with FILL_IN");
-        assert_eq!((by_id("features")["detail"].clone(), by_id("open_questions")["detail"].clone()), (json!("outside the grammar"), json!("1 open question(s) in the ROADMAP")));
+        assert_eq!(
+            (by_id("features")["detail"].clone(), by_id("open_questions")["detail"].clone()),
+            (json!("outside the grammar"), json!("1 open question(s) in the ROADMAP"))
+        );
         assert_eq!(by_id("flows")["detail"], "1 feature(s) without a flow of 2+ steps; warning: flows of unknown features: zz");
-        assert!(by_id("test_environment")["detail"].as_str().unwrap().starts_with("optional (no regression feature and E2E: no): TEST-ENVIRONMENT.md does not exist yet"));
+        assert!(by_id("test_environment")["detail"]
+            .as_str()
+            .unwrap()
+            .starts_with("optional (no regression feature and E2E: no): TEST-ENVIRONMENT.md does not exist yet"));
         assert_eq!(by_id("ready")["detail"], "p1 (+1 more)");
         assert_eq!(by_id("ready")["items"], json!(["p1", "p2", "warning: w"]));
         assert!(!are_gates_ok(&gates) && !are_prerequisites_ok(&gates));
         let text = describe_gates_for_ai(&app, &gates, "", Some(&[json!({"path": "C:\\x", "reason": "no"})]), None, None);
         assert!(text.starts_with("[Planning status from the app, read just now") && text.contains("- [MISSING] git: Git repository - the folder"));
-        assert!(text.contains("    * bad line") && text.contains("- [MISSING] repos_rejected:") && text.contains("    * C:\\x: no") && text.contains("- [optional] test_environment:"));
+        assert!(
+            text.contains("    * bad line")
+                && text.contains("- [MISSING] repos_rejected:")
+                && text.contains("    * C:\\x: no")
+                && text.contains("- [optional] test_environment:")
+        );
     }
 
     #[test]
@@ -737,7 +886,10 @@ mod tests {
         facts["subprojects"]["projects"][0]["map"] = json!({"files": ["STACK.md"]});
         let gates = build_planning_gates(&app, &facts);
         let find = |id: &str| gates.iter().find(|g| g["id"] == id).unwrap().clone();
-        assert_eq!((find("conformance")["ok"].clone(), find("map")["ok"].clone(), find("map")["detail"].clone()), (json!(true), json!(true), json!("every subproject with code has a map")));
+        assert_eq!(
+            (find("conformance")["ok"].clone(), find("map")["ok"].clone(), find("map")["detail"].clone()),
+            (json!(true), json!(true), json!("every subproject with code has a map"))
+        );
         let described = describe_subprojects_for_ai(Some(&facts["subprojects"]), "");
         assert_eq!(described[1], "- api (stack dotnet): Conformance STANDARD, map: 1 document(s)");
         assert!(described.last().unwrap().starts_with("In the ROADMAP write every feature's `paths=`") || described.iter().any(|l| l.contains("`api/...`")));
@@ -758,12 +910,15 @@ mod tests {
         let settings = parse_loop_settings("**Dispatch:** 4\n**Branch base:** release/2.0\n**Max spend per turn:** 7.5\n");
         let lines = describe_loop_settings_for_ai(&app, &settings);
         assert!(lines.contains(&"    * Dispatch: 4".to_string()) && lines.contains(&"    * Branch base: release/2.0".to_string()));
-        assert!(lines.contains(&"    * Max spend per turn: US$ 7.5".to_string()) && lines.contains(&"    * base_branch_resolved: release/2.0 (source: roadmap)".to_string()));
+        assert!(
+            lines.contains(&"    * Max spend per turn: US$ 7.5".to_string()) && lines.contains(&"    * base_branch_resolved: release/2.0 (source: roadmap)".to_string())
+        );
         assert_eq!(format_loop_setting_value("budget_loop", &json!(50.0)), "US$ 50");
         assert_eq!((format_loop_setting_value("e2e", &json!(true)), format_loop_setting_value("branch", &json!(""))), ("yes".to_string(), "automatic".to_string()));
         assert_eq!(resolve_base_branch(&app, &parse_loop_settings(""))["source"], "default");
         std::fs::create_dir_all(dir.path().join(".specs/project/loop/internal/planning")).unwrap();
-        std::fs::write(dir.path().join(".specs/project/loop/internal/planning/repos_rejected.json"), r#"{"rejected": [{"path": "p", "reason": "r"}, {"nope": 1}]}"#).unwrap();
+        std::fs::write(dir.path().join(".specs/project/loop/internal/planning/repos_rejected.json"), r#"{"rejected": [{"path": "p", "reason": "r"}, {"nope": 1}]}"#)
+            .unwrap();
         assert_eq!(load_rejected_repos(&dir.path().display().to_string()), vec![json!({"path": "p", "reason": "r"})]);
     }
 }

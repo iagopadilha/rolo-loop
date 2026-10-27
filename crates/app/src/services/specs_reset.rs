@@ -168,7 +168,9 @@ impl SpecsResetService<'_> {
             return Err(AppError::loop_running("loop running: stop the loop before resetting the specs").with_code(LOOP_RUNNING_CODE));
         }
         if self.app.jobs().get_running_job(context.repo_path()).is_some() {
-            return Err(AppError::new(Kind::JobInProgress, "a claude job (planning reply, roadmap or map) is running: wait for it to finish").with_code(PLANNING_BUSY_CODE));
+            return Err(
+                AppError::new(Kind::JobInProgress, "a claude job (planning reply, roadmap or map) is running: wait for it to finish").with_code(PLANNING_BUSY_CODE)
+            );
         }
         Ok(())
     }
@@ -210,7 +212,8 @@ impl SpecsResetService<'_> {
         if path.is_dir() {
             let prefix = format!("{}\\", normalize(path));
             if protected.iter().any(|item| item.starts_with(&prefix)) {
-                let mut names: Vec<String> = std::fs::read_dir(path).map(|entries| entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+                let mut names: Vec<String> =
+                    std::fs::read_dir(path).map(|entries| entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
                 names.sort();
                 for name in names {
                     self.collect(&path.join(name), specs_dir, protected, templates, sources);
@@ -256,7 +259,14 @@ impl SpecsResetService<'_> {
             let outcome = destination.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::rename(source, &destination));
             if let Err(failure) = outcome {
                 // a locked file on Windows: what moved so far is in the trash and logged
-                self.app.log.error("specs_reset_move_failed", &[("path", json!(source.display().to_string())), ("message", json!(failure.to_string().chars().take(200).collect::<String>())), ("moved", json!(moved.len()))]);
+                self.app.log.error(
+                    "specs_reset_move_failed",
+                    &[
+                        ("path", json!(source.display().to_string())),
+                        ("message", json!(failure.to_string().chars().take(200).collect::<String>())),
+                        ("moved", json!(moved.len())),
+                    ],
+                );
                 return Err(AppError::new(Kind::Internal, format!("cannot move {} to the trash: {failure}", source.display())));
             }
             moved.push(relative_to(Path::new(work), source));

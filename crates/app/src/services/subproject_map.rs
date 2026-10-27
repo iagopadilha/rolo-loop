@@ -128,9 +128,16 @@ pub fn public_queue(state: &Value) -> Value {
     if !state.is_object() {
         return Value::Null;
     }
-    let items: Map<String, Value> = state.get("items").and_then(Value::as_object).map(|items| {
-        items.iter().map(|(path, item)| (path.clone(), Value::Object(ITEM_FIELDS.iter().map(|f| (f.to_string(), item.get(*f).cloned().unwrap_or(Value::Null))).collect()))).collect()
-    }).unwrap_or_default();
+    let items: Map<String, Value> = state
+        .get("items")
+        .and_then(Value::as_object)
+        .map(|items| {
+            items
+                .iter()
+                .map(|(path, item)| (path.clone(), Value::Object(ITEM_FIELDS.iter().map(|f| (f.to_string(), item.get(*f).cloned().unwrap_or(Value::Null))).collect())))
+                .collect()
+        })
+        .unwrap_or_default();
     let by_state = |wanted: &str| -> Vec<String> { items.iter().filter(|(_, i)| state_of(i, "state") == wanted).map(|(p, _)| p.clone()).collect() };
     let running = by_state(ITEM_RUNNING);
     let system = state.get("system").cloned().unwrap_or(json!({}));
@@ -219,7 +226,15 @@ impl SubprojectMapService<'_> {
         let (key, folder, previous, selected) = match prepared {
             Ok(parts) => parts,
             Err(refusal) => {
-                self.app.log.info("map_refused", &[("project", json!(project_id)), ("scope", json!("subprojects")), ("reason", json!(format!("{:?}", refusal.kind))), ("message", json!(clip(&refusal.message, 200)))]);
+                self.app.log.info(
+                    "map_refused",
+                    &[
+                        ("project", json!(project_id)),
+                        ("scope", json!("subprojects")),
+                        ("reason", json!(format!("{:?}", refusal.kind))),
+                        ("message", json!(clip(&refusal.message, 200))),
+                    ],
+                );
                 return Err(refusal);
             }
         };
@@ -256,7 +271,11 @@ impl SubprojectMapService<'_> {
     fn ensure_free_for_map_jobs(&self, context: &ProjectContext) -> Result<(), AppError> {
         match self.app.roadmap().ensure_repo_free_for_job(context) {
             Err(error) if error.kind == Kind::JobInProgress => {
-                if self.app.jobs().get_blocking_job(context.repo_path(), Some(PROBE_PARALLEL_KEY)).is_some() { Err(error) } else { Ok(()) }
+                if self.app.jobs().get_blocking_job(context.repo_path(), Some(PROBE_PARALLEL_KEY)).is_some() {
+                    Err(error)
+                } else {
+                    Ok(())
+                }
             }
             other => other,
         }
@@ -274,7 +293,13 @@ impl SubprojectMapService<'_> {
 
     /// Explicit paths must be listed, not skipped and exist on disk (else the request is refused). Without paths: the failed and not-started items of
     /// a stopped queue, else every non-skipped project with code and no map yet (missing folders are left out).
-    fn select_paths(&self, folder: &str, projects: &[(String, Map<String, Value>)], requested: Option<&Value>, previous: Option<&Value>) -> Result<Vec<String>, AppError> {
+    fn select_paths(
+        &self,
+        folder: &str,
+        projects: &[(String, Map<String, Value>)],
+        requested: Option<&Value>,
+        previous: Option<&Value>,
+    ) -> Result<Vec<String>, AppError> {
         let find = |path: &str| projects.iter().find(|(p, _)| p == path).map(|(_, project)| project);
         if let Some(requested) = requested {
             let list = requested.as_array().filter(|l| !l.is_empty() && l.iter().all(Value::is_string));
@@ -297,8 +322,18 @@ impl SubprojectMapService<'_> {
         }
         let stopped = previous.filter(|p| state_of(p, "state") == QUEUE_STOPPED);
         let candidates: Vec<String> = match stopped {
-            Some(stopped) => stopped["items"].as_object().into_iter().flatten().filter(|(_, i)| matches!(state_of(i, "state"), ITEM_FAILED | ITEM_QUEUED)).map(|(p, _)| p.clone()).collect(),
-            None => projects.iter().filter(|(path, p)| p.get("has_code") == Some(&Value::Bool(true)) && run_hints::list_map_documents(&map_folder(folder, path)).is_empty()).map(|(p, _)| p.clone()).collect(),
+            Some(stopped) => stopped["items"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(_, i)| matches!(state_of(i, "state"), ITEM_FAILED | ITEM_QUEUED))
+                .map(|(p, _)| p.clone())
+                .collect(),
+            None => projects
+                .iter()
+                .filter(|(path, p)| p.get("has_code") == Some(&Value::Bool(true)) && run_hints::list_map_documents(&map_folder(folder, path)).is_empty())
+                .map(|(p, _)| p.clone())
+                .collect(),
         };
         let mut selected: Vec<String> = Vec::new();
         for path in candidates {
@@ -339,11 +374,15 @@ impl SubprojectMapService<'_> {
                     if raise_on_first_failure && started.is_empty() {
                         return Err(failure);
                     }
-                    self.app.log.warn("subproject_map_next_failed", &[("path", json!(path)), ("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))]);
+                    self.app.log.warn(
+                        "subproject_map_next_failed",
+                        &[("path", json!(path)), ("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))],
+                    );
                     let item = &mut state["items"][&path];
                     item["state"] = json!(ITEM_FAILED);
                     item["finished_at"] = json!(now_iso());
-                    item["error"] = json!(format!("could not start: {}", if failure.message.is_empty() { format!("{:?}", failure.kind) } else { clip(&failure.message, 300) }));
+                    item["error"] =
+                        json!(format!("could not start: {}", if failure.message.is_empty() { format!("{:?}", failure.kind) } else { clip(&failure.message, 300) }));
                 }
             }
         }
@@ -375,7 +414,8 @@ impl SubprojectMapService<'_> {
         item["error"] = json!("");
         item["job_id"] = job["id"].clone();
         item["documents"] = json!(0);
-        let (app, context, key, folder, path, job_id) = (self.app.shared(), context.clone(), key.to_string(), folder.to_string(), path.to_string(), text_of(job.get("id")));
+        let (app, context, key, folder, path, job_id) =
+            (self.app.shared(), context.clone(), key.to_string(), folder.to_string(), path.to_string(), text_of(job.get("id")));
         let thread_name = format!("subproject-map-{job_id}");
         let _ = std::thread::Builder::new().name(thread_name).spawn(move || app.subproject_maps().watch_job(&context, &key, &folder, &path, &job_id));
         Ok(job)
@@ -399,7 +439,10 @@ impl SubprojectMapService<'_> {
         match outcome {
             Ok(Ok(())) => {}
             Ok(Err(failure)) => {
-                self.app.log.error("subproject_map_watch_failed", &[("path", json!(path)), ("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))]);
+                self.app.log.error(
+                    "subproject_map_watch_failed",
+                    &[("path", json!(path)), ("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))],
+                );
                 self.fail_item(folder, path, job_id, &format!("internal failure: {:?}", failure.kind));
             }
             Err(_) => {
@@ -477,7 +520,9 @@ impl SubprojectMapService<'_> {
             Err(error) => {
                 // the subproject maps stay: the reason is shown next to the system map
                 failure = Some(clip(&error.message, 300)).filter(|m| !m.is_empty()).unwrap_or_else(|| format!("{:?}", error.kind));
-                self.app.log.warn("subproject_map_finished_callback_failed", &[("type", json!(format!("{:?}", error.kind))), ("message", json!(clip(&error.message, 200)))]);
+                self.app
+                    .log
+                    .warn("subproject_map_finished_callback_failed", &[("type", json!(format!("{:?}", error.kind))), ("message", json!(clip(&error.message, 200)))]);
             }
         }
         let Some(job) = job else {
@@ -594,7 +639,14 @@ impl SubprojectMapService<'_> {
         state["system"].as_object_mut()?.entry("error").or_insert(json!(""));
         for item in state["items"].as_object_mut()?.values_mut() {
             if let Some(map) = item.as_object_mut() {
-                for (field, default) in [("state", json!(ITEM_QUEUED)), ("started_at", Value::Null), ("finished_at", Value::Null), ("error", json!("")), ("job_id", json!("")), ("documents", json!(0))] {
+                for (field, default) in [
+                    ("state", json!(ITEM_QUEUED)),
+                    ("started_at", Value::Null),
+                    ("finished_at", Value::Null),
+                    ("error", json!("")),
+                    ("job_id", json!("")),
+                    ("documents", json!(0)),
+                ] {
                     map.entry(field).or_insert(default);
                 }
             }

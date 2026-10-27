@@ -21,7 +21,8 @@ pub const KIND_SYSTEM: &str = "system";
 pub const CODEBASE_FOLDER: &str = "docs/codebase";
 pub const CLAUDE_FILE: &str = "CLAUDE.md";
 const LIST_LIMIT: usize = 12;
-const WARNING_SENTENCE: &str = "These files are not committed. The loop worktree is created when the loop starts, from the last commit, so the agents will not see them. Commit them first.";
+const WARNING_SENTENCE: &str =
+    "These files are not committed. The loop worktree is created when the loop starts, from the last commit, so the agents will not see them. Commit them first.";
 
 pub fn state_by_code(letter: char) -> &'static str {
     match letter {
@@ -179,7 +180,8 @@ mod tests {
         assert_eq!(kind_of("CLAUDE.md", false), Some("claude"));
         assert_eq!(kind_of("README.md", false), None);
         assert_eq!(build_pathspecs(None), vec![":(glob)docs/codebase/*.md", ":(glob)CLAUDE.md"]);
-        let entry: Map<String, Value> = serde_json::from_value(json!({"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web", "skip": true}, {"path": "api/"}]})).unwrap();
+        let entry: Map<String, Value> =
+            serde_json::from_value(json!({"monorepo": true, "confirmed": true, "projects": [{"path": "api"}, {"path": "web", "skip": true}, {"path": "api/"}]})).unwrap();
         assert_eq!(build_pathspecs(Some(&entry)), vec![":(glob)api/docs/codebase/*.md", ":(glob)api/CLAUDE.md", ":(glob)docs/codebase/SYSTEM.md"]);
     }
 
@@ -192,7 +194,11 @@ mod tests {
         assert!(uncommitted_warning_text(&items).ends_with("Commit them first. docs/codebase/A.md, docs/codebase/B.md, docs/codebase/N.md"));
         assert_eq!(uncommitted_warning_text(&[]), "");
         assert_eq!(uncommitted_chip_summary(&items), "maps: 3 files");
-        let mixed = vec![json!({"path": "CLAUDE.md", "kind": "claude"}), json!({"path": "api/CLAUDE.md", "kind": "claude"}), json!({"path": "docs/codebase/SYSTEM.md", "kind": "system"})];
+        let mixed = vec![
+            json!({"path": "CLAUDE.md", "kind": "claude"}),
+            json!({"path": "api/CLAUDE.md", "kind": "claude"}),
+            json!({"path": "docs/codebase/SYSTEM.md", "kind": "system"}),
+        ];
         assert_eq!(uncommitted_chip_summary(&mixed), "CLAUDE.md: root, api, SYSTEM.md");
     }
 }

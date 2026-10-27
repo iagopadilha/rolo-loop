@@ -17,5 +17,9 @@ pub fn run(env: &Env, project: &str, probe: bool, selftest: bool, json: bool) ->
     } else {
         println!("{}", format_report(&report));
     }
-    if report["runtime_self_test"]["ok"] == false { 1 } else { 0 }
+    if report["runtime_self_test"]["ok"] == false {
+        1
+    } else {
+        0
+    }
 }

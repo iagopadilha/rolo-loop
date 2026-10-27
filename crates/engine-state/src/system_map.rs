@@ -32,7 +32,8 @@ const HTTP_METHODS: &str = "GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS";
 /// `docs/codebase/SYSTEM.md` with forward slashes (git pathspec form).
 pub const SYSTEM_DOCUMENT: &str = "docs/codebase/SYSTEM.md";
 
-static ENTRY_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*[-*]\s*\[(add|change|remove)\]\s+(route|dto|auth|env)\s+(.+?)(?:\s+(?:—|-)\s+(.*?)\s*\(([^()]+)\))?\s*\z"));
+static ENTRY_LINE: LazyLock<Re> =
+    LazyLock::new(|| Re::new(r"^\s*[-*]\s*\[(add|change|remove)\]\s+(route|dto|auth|env)\s+(.+?)(?:\s+(?:—|-)\s+(.*?)\s*\(([^()]+)\))?\s*\z"));
 static CANDIDATE_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*[-*]\s*\["));
 static ROUTE_IDENTITY: LazyLock<Re> = LazyLock::new(|| Re::ci(&format!(r"^({HTTP_METHODS})\s+(/\S*)\z")));
 static RENDERED_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^- (route|dto|auth|env) (.+?) — (.+)\z"));
@@ -170,7 +171,10 @@ fn parse_section(section: &str) -> (Vec<String>, Entries) {
         if let Some(c) = &conflict {
             text.truncate(c.start);
         }
-        entries.entry((rendered.group(1).unwrap_or("").to_string(), rendered.group(2).unwrap_or("").to_string())).or_default().push(Entry { text, conflict: conflict.and_then(|c| c.group(1).map(String::from)) });
+        entries
+            .entry((rendered.group(1).unwrap_or("").to_string(), rendered.group(2).unwrap_or("").to_string()))
+            .or_default()
+            .push(Entry { text, conflict: conflict.and_then(|c| c.group(1).map(String::from)) });
     }
     (preamble, entries)
 }
@@ -178,7 +182,11 @@ fn parse_section(section: &str) -> (Vec<String>, Entries) {
 fn route_area(identity: &str) -> String {
     let path = identity.split_once(' ').map(|x| x.1).unwrap_or("").trim_matches('/');
     let first = path.split('/').next().unwrap_or("").split('?').next().unwrap_or("");
-    if first.is_empty() { "root".into() } else { first.into() }
+    if first.is_empty() {
+        "root".into()
+    } else {
+        first.into()
+    }
 }
 
 fn render_section(preamble: &[String], entries: &Entries, newline: &str) -> String {
@@ -214,11 +222,20 @@ fn render_section(preamble: &[String], entries: &Entries, newline: &str) -> Stri
             }
         }
     }
-    if lines.is_empty() { newline.to_string() } else { format!("{newline}{}{newline}", lines.join(newline)) }
+    if lines.is_empty() {
+        newline.to_string()
+    } else {
+        format!("{newline}{}{newline}", lines.join(newline))
+    }
 }
 
 fn origin_of(origins: &Map<String, Value>, key_text: &str, text: &str) -> Option<String> {
-    origins.get(key_text)?.as_array()?.iter().find(|pair| pair.get(0).and_then(Value::as_str) == Some(text)).and_then(|pair| pair.get(1).and_then(Value::as_str).map(String::from))
+    origins
+        .get(key_text)?
+        .as_array()?
+        .iter()
+        .find(|pair| pair.get(0).and_then(Value::as_str) == Some(text))
+        .and_then(|pair| pair.get(1).and_then(Value::as_str).map(String::from))
 }
 
 fn apply_delta(entries: &mut Entries, origins: &mut Map<String, Value>, slug: &str, delta: &Delta, warnings: &mut Vec<String>) {
@@ -235,7 +252,12 @@ fn apply_delta(entries: &mut Entries, origins: &mut Map<String, Value>, slug: &s
     if existing.iter().any(|e| e.text == text) {
         return;
     }
-    let foreign: Vec<String> = existing.iter().map(|e| origin_of(origins, &key_text, &e.text)).filter(|o| o.as_deref() != Some(slug)).map(|o| o.unwrap_or_else(|| "an earlier entry".into())).collect();
+    let foreign: Vec<String> = existing
+        .iter()
+        .map(|e| origin_of(origins, &key_text, &e.text))
+        .filter(|o| o.as_deref() != Some(slug))
+        .map(|o| o.unwrap_or_else(|| "an earlier entry".into()))
+        .collect();
     if existing.is_empty() || foreign.is_empty() {
         entries.insert(key, vec![Entry { text: text.clone(), conflict: None }]);
         origins.insert(key_text, json!([[text, slug]]));
@@ -323,7 +345,8 @@ pub fn pending_slugs(root: &str, slugs: &[String]) -> Vec<String> {
         .iter()
         .filter(|slug| {
             let path = contract_path(&root, slug);
-            path.is_file() && std::fs::read(&path).map(|raw| ledger["merged"].get(slug.as_str()).and_then(Value::as_str) != Some(content_hash(&raw).as_str())).unwrap_or(false)
+            path.is_file()
+                && std::fs::read(&path).map(|raw| ledger["merged"].get(slug.as_str()).and_then(Value::as_str) != Some(content_hash(&raw).as_str())).unwrap_or(false)
         })
         .cloned()
         .collect()
@@ -344,26 +367,50 @@ fn parse_slugs(args: &[String]) -> Vec<String> {
 /// `harness system-map merge|pending <root> --slugs a,b [--json]`: returns (exit code, stdout).
 pub fn run_cli(args: &[String]) -> (i32, String) {
     if args.len() < 2 || !matches!(args[0].as_str(), "merge" | "pending") {
-        return (2, format!("{USAGE}
-"));
+        return (
+            2,
+            format!(
+                "{USAGE}
+"
+            ),
+        );
     }
     let slugs = parse_slugs(args);
     if args[0] == "pending" {
-        let lines: String = pending_slugs(&args[1], &slugs).iter().map(|slug| format!("{}
-", pending_line(slug))).collect();
+        let lines: String = pending_slugs(&args[1], &slugs)
+            .iter()
+            .map(|slug| {
+                format!(
+                    "{}
+",
+                    pending_line(slug)
+                )
+            })
+            .collect();
         return (0, lines);
     }
     let result = merge_contract_deltas(&args[1], &slugs);
     if args.iter().any(|a| a == "--json") {
         let body = json!({"changed": result.changed, "warnings": result.warnings});
-        return (0, format!("{}
-", py_json_dumps_indent(&body, false, 2)));
+        return (
+            0,
+            format!(
+                "{}
+",
+                py_json_dumps_indent(&body, false, 2)
+            ),
+        );
     }
-    let mut out = format!("changed: {}
-", if result.changed { "yes" } else { "no" });
+    let mut out = format!(
+        "changed: {}
+",
+        if result.changed { "yes" } else { "no" }
+    );
     for warning in &result.warnings {
-        out.push_str(&format!("WARNING: {warning}
-"));
+        out.push_str(&format!(
+            "WARNING: {warning}
+"
+        ));
     }
     (0, out)
 }

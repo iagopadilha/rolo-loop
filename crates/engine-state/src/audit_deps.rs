@@ -18,8 +18,7 @@ const EXTS: [&str; 8] = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".cs", ".c
 const MAX_FILES: usize = 400;
 
 static MARK: LazyLock<Re> = LazyLock::new(|| Re::new(r"^- \[(pending|applied|refused|cycle|review)\] (\S+) -> (\S+) \|"));
-static JS_IMPORT: LazyLock<Re> =
-    LazyLock::new(|| Re::new(r#"(?:\bimport\s[^'";]*?from\s*|\bimport\s*|\brequire\(\s*|\bexport\s[^'";]*?from\s*)['"]([^'"]+)['"]"#));
+static JS_IMPORT: LazyLock<Re> = LazyLock::new(|| Re::new(r#"(?:\bimport\s[^'";]*?from\s*|\bimport\s*|\brequire\(\s*|\bexport\s[^'";]*?from\s*)['"]([^'"]+)['"]"#));
 static PY_FROM: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*from\s+(\.*[\w.]*)\s+import\b"));
 static PY_IMPORT: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*import\s+([\w., ]+)"));
 static CS_USING: LazyLock<Re> = LazyLock::new(|| Re::new(r"^\s*using\s+(?:static\s+)?([\w.]+)\s*;"));
@@ -276,7 +275,11 @@ fn relpath(path: &Path, start: &Path) -> String {
     match p.strip_prefix(&s) {
         Some(rest) => {
             let rest = rest.trim_start_matches(['\\', '/']);
-            if rest.is_empty() { ".".into() } else { rest.to_string() }
+            if rest.is_empty() {
+                ".".into()
+            } else {
+                rest.to_string()
+            }
         }
         None => p,
     }
@@ -564,7 +567,8 @@ pub fn run_cli(args: &[String]) -> (i32, String) {
     }
     if args.iter().any(|a| a == "--json") {
         let review: Vec<Value> = result.review.iter().map(|(f, d)| json!({"feature": f, "depends_on": d})).collect();
-        let doc = json!({"suggestions": result.suggestions.iter().map(Suggestion::to_json).collect::<Vec<_>>(), "review": review, "roadmap_errors": result.roadmap_errors});
+        let doc =
+            json!({"suggestions": result.suggestions.iter().map(Suggestion::to_json).collect::<Vec<_>>(), "review": review, "roadmap_errors": result.roadmap_errors});
         out.push_str(&format!("{}\n", py_json_dumps_indent(&doc, false, 2)));
     } else {
         let pending = result.suggestions.iter().filter(|s| s.cycle.is_empty() && !applied.contains(&(s.feature.clone(), s.depends_on.clone()))).count();

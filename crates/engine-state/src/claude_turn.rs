@@ -34,7 +34,11 @@ pub fn mcp_read_arguments(ctx: &AppCtx, project_root: &str) -> (String, Vec<Stri
 /// `--model <value>` of every orchestrator turn (normal, correction and resume); an empty option sends no flag.
 pub fn model_arguments(opts: &LoopOpts) -> Vec<String> {
     let model = opts.orchestrator_model.trim();
-    if model.is_empty() { vec![] } else { vec!["--model".into(), model.to_string()] }
+    if model.is_empty() {
+        vec![]
+    } else {
+        vec!["--model".into(), model.to_string()]
+    }
 }
 
 /// Isolation flags of every turn (normal, correction, resume): `--setting-sources project,local`, `--add-dir=<bundle>` and the guard hook
@@ -72,7 +76,19 @@ pub fn claude_command(ctx: &AppCtx, opts: &LoopOpts, prompt: &str) -> Vec<String
     // `reference` repo (read only, no worktree) is granted the same way, as its own folder
     let extra_dirs: Vec<String> = opts.extra_worktrees.iter().chain(opts.reference_dirs.iter()).map(|p| format!("--add-dir={p}")).collect();
     let (mcp_config, allowed_tools, denied_tools) = mcp_read_arguments(ctx, &opts.repo);
-    for item in ["-p", prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", &opts.permission_mode, "--permission-prompts", "none", "--max-budget-usd", &py_float(opts.budget)] {
+    for item in [
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        &opts.permission_mode,
+        "--permission-prompts",
+        "none",
+        "--max-budget-usd",
+        &py_float(opts.budget),
+    ] {
         argv.push(item.to_string());
     }
     argv.extend(model_arguments(opts));
@@ -92,7 +108,11 @@ pub fn claude_command(ctx: &AppCtx, opts: &LoopOpts, prompt: &str) -> Vec<String
 
 /// `str(float)`: `5.0`, `2.5`, `10.0`.
 pub fn py_float(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e16 { format!("{value:.1}") } else { format!("{value}") }
+    if value.fract() == 0.0 && value.abs() < 1e16 {
+        format!("{value:.1}")
+    } else {
+        format!("{value}")
+    }
 }
 
 /// Prompt of the single correction turn (same session, --resume): only write LOOP.json, never redo or start work.

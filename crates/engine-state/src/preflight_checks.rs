@@ -203,7 +203,11 @@ pub fn test_environment_stop_reason(root: &str, problems: &[String]) -> String {
     }
     let features = parse_roadmap(&roadmap(root)).0;
     let asked: Vec<String> = features.iter().filter(|(_, f)| matches!(f.get("regression"), Some("yes") | Some("baseline"))).map(|(s, _)| s.clone()).collect();
-    let who = if asked.is_empty() { "the loop was started with --e2e".to_string() } else { format!("regression=yes on: {}", asked.iter().take(MAX_NAMED_FEATURES).cloned().collect::<Vec<_>>().join(", ")) };
+    let who = if asked.is_empty() {
+        "the loop was started with --e2e".to_string()
+    } else {
+        format!("regression=yes on: {}", asked.iter().take(MAX_NAMED_FEATURES).cloned().collect::<Vec<_>>().join(", "))
+    };
     format!(
         "The loop did NOT start (nothing was spent): the real-app tests were requested ({who}) but the test environment cannot run.\nMissing: {}\nWhere: names go in .specs/project/TEST-ENVIRONMENT.md (names only); values go in .specs/project/.env.test of the project, which is the ONLY credential source the loop reads (no environment variable, no ~/.loop-harness/.env, no shared file). To copy values from a machine file, use \"Import from machine sources\" in the Test environment tab (sources: env_sources in the app's config.json). Fix it and start the loop again, or remove regression=yes from the ROADMAP.",
         problems.join("; ")
@@ -213,7 +217,8 @@ pub fn test_environment_stop_reason(root: &str, problems: &[String]) -> String {
 /// All verified/blocked = nothing to do, EXCEPT when the user is answering a question (--option/--answer): the answer may reopen a
 /// quarantined feature (e.g. fix the spec and redo the gate).
 pub fn nothing_left_to_do(done: i64, total: i64, opts: &LoopOpts, state: Option<&Value>, tiebreak_possible: bool) -> bool {
-    let will_auto_answer = state.is_some_and(|s| s.get("status").and_then(Value::as_str) == Some("awaiting_user")) && opts.auto_answer && state.and_then(pick_auto_answer).is_some();
+    let will_auto_answer =
+        state.is_some_and(|s| s.get("status").and_then(Value::as_str) == Some("awaiting_user")) && opts.auto_answer && state.and_then(pick_auto_answer).is_some();
     total != 0 && done == total && !(opts.option != 0 || !opts.answer.is_empty()) && !will_auto_answer && !tiebreak_possible
 }
 
@@ -250,7 +255,9 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
         if item.role == ROLE_REFERENCE {
             if !Path::new(&item.path).is_dir() {
                 warns.push(format!("{tag}reference folder {} is missing (moved or deleted); the loop will not be able to read it", item.path));
-            } else if !readiness_checks_folder_has_map(&item.path) && std::fs::read_dir(&item.path).map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))).unwrap_or(false) {
+            } else if !readiness_checks_folder_has_map(&item.path)
+                && std::fs::read_dir(&item.path).map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))).unwrap_or(false)
+            {
                 warns.push(format!("reference repo {} has no codebase map: agents will read the raw code; map it from Workspace", item.name));
             }
             continue;
@@ -281,7 +288,14 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
 
 fn readiness_checks_folder_has_map(folder: &str) -> bool {
     let dir = ["docs", "codebase"].iter().fold(PathBuf::from(folder), |a, p| a.join(p));
-    std::fs::read_dir(dir).map(|d| d.flatten().any(|e| { let n = e.file_name().to_string_lossy().to_lowercase(); !n.starts_with('.') && n.ends_with(".md") })).unwrap_or(false)
+    std::fs::read_dir(dir)
+        .map(|d| {
+            d.flatten().any(|e| {
+                let n = e.file_name().to_string_lossy().to_lowercase();
+                !n.starts_with('.') && n.ends_with(".md")
+            })
+        })
+        .unwrap_or(false)
 }
 
 pub fn check_fix(kind: &str) -> &'static str {
@@ -322,7 +336,9 @@ pub fn check_items(problems: &[String], warns: &[String], repos: &[RepoRef], rep
         if kind == "uncommitted" {
             continue;
         }
-        items.push(json!({"kind": kind, "level": if problems.contains(text) { "problem" } else { "warning" }, "repo": null, "files": [], "text": text, "fix": check_fix(kind)}));
+        items.push(
+            json!({"kind": kind, "level": if problems.contains(text) { "problem" } else { "warning" }, "repo": null, "files": [], "text": text, "fix": check_fix(kind)}),
+        );
     }
     let mut all: Vec<Value> = readiness_checks::uncommitted_items(repos, repo)
         .into_iter()
@@ -445,7 +461,10 @@ pub fn dependency_audit_warnings(root: &str) -> Vec<String> {
 /// The guard binary must exist and block `git push` under the executor profile.
 pub fn guard_problems(ctx: &AppCtx) -> Pair {
     if ctx.guard.as_os_str().is_empty() || !ctx.guard.is_file() {
-        return (vec![format!("the orchestrator plugin's guard was not found (looked in {}): set LOOP_SKILL_DIR or run `harness install`", ctx.describe_guard_search_paths())], vec![]);
+        return (
+            vec![format!("the orchestrator plugin's guard was not found (looked in {}): set LOOP_SKILL_DIR or run `harness install`", ctx.describe_guard_search_paths())],
+            vec![],
+        );
     }
     let result = crate::loop_io::run_process(
         &[ctx.guard_text(), "--profile".into(), "executor".into()],
@@ -461,7 +480,11 @@ pub fn guard_problems(ctx: &AppCtx) -> Pair {
 }
 
 pub fn cost_cap_warnings(opts: &LoopOpts) -> Vec<String> {
-    if opts.max_cost != 0.0 { vec![] } else { vec!["no total cost cap (--max-cost 0): the loop only stops on progress/error, not on spend".into()] }
+    if opts.max_cost != 0.0 {
+        vec![]
+    } else {
+        vec!["no total cost cap (--max-cost 0): the loop only stops on progress/error, not on spend".into()]
+    }
 }
 
 /// Mandatory notice channels present and configured; unknown or half-configured channels only warn.
@@ -509,7 +532,11 @@ pub fn push_problems(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
             texts.push("no `origin` remote: nowhere to push the feature branch".into());
         }
         for text in texts {
-            if opts.push_explicit { problems.push(format!("--push: {text}")) } else { warns.push(format!("the final push/PR will not happen: {text}")) }
+            if opts.push_explicit {
+                problems.push(format!("--push: {text}"))
+            } else {
+                warns.push(format!("the final push/PR will not happen: {text}"))
+            }
         }
         if which("gh").is_none() {
             warns.push("`gh` not found: the end of the loop pushes the branch but only returns the compare LINK (the PR is not created)".into());
@@ -556,8 +583,12 @@ pub fn feature_path_repo_problems(repos: &[RepoRef], features: &Features) -> Vec
             }
             seen.push(name.clone());
             match repos.iter().find(|r| r.name == name) {
-                None => problems.push(format!("feature {slug}: path `{entry}` is in repo `{name}`, which is not listed in the project: add it as an edit repo or change the feature")),
-                Some(target) if target.role == ROLE_REFERENCE => problems.push(format!("feature {slug}: path `{entry}` is in the reference repo `{name}` (read only): promote it to edit or change the feature")),
+                None => problems.push(format!(
+                    "feature {slug}: path `{entry}` is in repo `{name}`, which is not listed in the project: add it as an edit repo or change the feature"
+                )),
+                Some(target) if target.role == ROLE_REFERENCE => {
+                    problems.push(format!("feature {slug}: path `{entry}` is in the reference repo `{name}` (read only): promote it to edit or change the feature"))
+                }
                 _ => {}
             }
         }
@@ -605,13 +636,19 @@ pub fn mentioned_mcp_servers(ctx: &AppCtx, texts: &[&str]) -> Vec<String> {
         .servers
         .iter()
         .map(|(name, _)| name.clone())
-        .filter(|name| Re::try_build(&format!("(?<![a-z0-9-]){}(?![a-z0-9-])", pycompat::escape(&name.to_lowercase())), false).is_some_and(|re| re.search(&text).is_some()))
+        .filter(|name| {
+            Re::try_build(&format!("(?<![a-z0-9-]){}(?![a-z0-9-])", pycompat::escape(&name.to_lowercase())), false).is_some_and(|re| re.search(&text).is_some())
+        })
         .collect()
 }
 
 pub fn claude_config_readable(ctx: &AppCtx) -> bool {
     let path = crate::mcp_discovery::claude_config_path(&ctx.env);
-    std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(&t)).ok()).is_some_and(|v| v.is_object())
+    std::fs::read(path)
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok())
+        .and_then(|t| serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(&t)).ok())
+        .is_some_and(|v| v.is_object())
 }
 
 pub fn mcp_readiness(ctx: &AppCtx, root: &str, roadmap_text: &str) -> Pair {
@@ -683,7 +720,10 @@ pub fn planning_readiness(ctx: &AppCtx, root: &str, repos: &[RepoRef], features:
     push_new(&mut warns, new_warns);
     for item in worktree_repos(repos, features, None) {
         if Path::new(&item.path).is_dir() && known_test_command(&item.path).is_empty() {
-            warns.push(format!("repo {}: no build/test command known (no docs/codebase/TESTING.md, no package.json scripts or project file): the verifier cannot prove its features", item.name));
+            warns.push(format!(
+                "repo {}: no build/test command known (no docs/codebase/TESTING.md, no package.json scripts or project file): the verifier cannot prove its features",
+                item.name
+            ));
         }
     }
     (problems, warns)
@@ -837,11 +877,19 @@ mod tests {
         std::fs::create_dir_all(plugin.join("skills/orchestrator")).unwrap();
         std::fs::create_dir_all(plugin.join("hooks")).unwrap();
         std::fs::write(plugin.join("skills/orchestrator/SKILL.md"), "---\nname: orchestrator\n---\nbody").unwrap();
-        let env = Env::from_pairs([("LOOP_SKILL_DIR", plugin.join("skills/orchestrator").display().to_string()), ("LOOP_DATA_DIR", dir.path().join("data").display().to_string()), ("USERPROFILE", dir.path().display().to_string())]);
+        let env = Env::from_pairs([
+            ("LOOP_SKILL_DIR", plugin.join("skills/orchestrator").display().to_string()),
+            ("LOOP_DATA_DIR", dir.path().join("data").display().to_string()),
+            ("USERPROFILE", dir.path().display().to_string()),
+        ]);
         let ctx = AppCtx::discover_in(&env, dir.path().to_path_buf());
         let root = ctx.plugin_root_text();
         assert_eq!(hook_path_problems(&ctx), vec![format!("hooks/hooks.json not found in the plugin root ({root}): the agents run without the guard")]);
-        std::fs::write(plugin.join("hooks/hooks.json"), r#"{"hooks": {"PreToolUse": [{"hooks": [{"command": "\"${CLAUDE_PLUGIN_ROOT}/bin/guard.exe\" --profile auto"}]}]}}"#).unwrap();
+        std::fs::write(
+            plugin.join("hooks/hooks.json"),
+            r#"{"hooks": {"PreToolUse": [{"hooks": [{"command": "\"${CLAUDE_PLUGIN_ROOT}/bin/guard.exe\" --profile auto"}]}]}}"#,
+        )
+        .unwrap();
         assert_eq!(hook_path_problems(&ctx), vec!["hooks/hooks.json points the guard at ${CLAUDE_PLUGIN_ROOT}/bin/guard.exe, which does not exist on this machine"]);
         std::fs::create_dir_all(plugin.join("bin")).unwrap();
         std::fs::write(plugin.join("bin/guard.exe"), "").unwrap();

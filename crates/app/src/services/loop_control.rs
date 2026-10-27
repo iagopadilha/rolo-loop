@@ -71,7 +71,11 @@ fn is_finite_non_negative_number(value: Option<&Value>) -> bool {
 
 /// `5.0` -> "5", `7.5` -> "7.5" (the text the engine option receives).
 pub fn format_amount(value: f64) -> String {
-    if value.fract() == 0.0 { format!("{}", value as i64) } else { format!("{value}") }
+    if value.fract() == 0.0 {
+        format!("{}", value as i64)
+    } else {
+        format!("{value}")
+    }
 }
 
 /// `Ok((push, remove_worktree_on_finish))` (each `None` when not given), or `Err(error)`. Other body keys are ignored.
@@ -215,7 +219,8 @@ impl LoopControlService<'_> {
     /// Call with the relaunch lock held. Output goes to `internal/monitor-relaunch.log`.
     fn spawn_detached_loop(&self, context: &ProjectContext, action: &str, argv: &[String], folder: &str, extra_env: &[(String, String)]) -> Reply {
         let log_path = self.app.loop_commands.get_relaunch_log_path(&context.work_dir());
-        let spawned = self.write_launch_marker(&log_path, action).and_then(|_| self.app.processes.spawn_detached(argv, folder, &log_path.display().to_string(), extra_env));
+        let spawned =
+            self.write_launch_marker(&log_path, action).and_then(|_| self.app.processes.spawn_detached(argv, folder, &log_path.display().to_string(), extra_env));
         match spawned {
             Ok(pid) => {
                 self.app.relaunched_pids.lock().unwrap_or_else(|e| e.into_inner()).insert(context.project.id.clone(), pid);
@@ -223,7 +228,10 @@ impl LoopControlService<'_> {
                 (200, json!({"ok": true, "pid": pid}))
             }
             Err(error) => {
-                self.app.log.error("loop_command_failed", &[("project", json!(context.project.id)), ("action", json!(action)), ("error", json!(error.to_string().chars().take(300).collect::<String>()))]);
+                self.app.log.error(
+                    "loop_command_failed",
+                    &[("project", json!(context.project.id)), ("action", json!(action)), ("error", json!(error.to_string().chars().take(300).collect::<String>()))],
+                );
                 failure(500, format!("could not relaunch the loop: {error}"))
             }
         }
@@ -253,7 +261,10 @@ impl LoopControlService<'_> {
             Ok(command) => command,
             Err(refusal) => {
                 self.app.log.warn("loop_command_refused", &[("project", json!(context.project.id)), ("reason", json!(refusal.0.chars().take(300).collect::<String>()))]);
-                return Err((409, json!({"ok": false, "code": loop_command::LOOP_COMMAND_INVALID_CODE, "error": format!("LOOP-CMD.json was not trusted, nothing was started ({}). Start the loop again from the New loop panel to record it again.", refusal.0)})));
+                return Err((
+                    409,
+                    json!({"ok": false, "code": loop_command::LOOP_COMMAND_INVALID_CODE, "error": format!("LOOP-CMD.json was not trusted, nothing was started ({}). Start the loop again from the New loop panel to record it again.", refusal.0)}),
+                ));
             }
         };
         let dropped = command["dropped"].as_array().cloned().unwrap_or_default();
@@ -313,7 +324,8 @@ impl LoopControlService<'_> {
             result["problems"] = json!([last.unwrap_or_else(|| format!("the --check did not confirm READY (code {code})"))]);
         }
         for key in ["problems", "warnings"] {
-            let cleaned: Vec<String> = result[key].as_array().map(|a| a.iter().map(|i| redact_secrets(i.as_str().unwrap_or(""), Some(CHECK_MESSAGE_LIMIT))).collect()).unwrap_or_default();
+            let cleaned: Vec<String> =
+                result[key].as_array().map(|a| a.iter().map(|i| redact_secrets(i.as_str().unwrap_or(""), Some(CHECK_MESSAGE_LIMIT))).collect()).unwrap_or_default();
             result[key] = json!(cleaned);
         }
         let mut body = Map::from_iter([("ok".to_string(), json!(true))]);
@@ -374,7 +386,11 @@ impl LoopControlService<'_> {
 
     /// One warning per invalid ROADMAP loop setting (the default is used); never a problem, the loop still starts.
     fn describe_settings_warnings(loop_settings: &ParsedSettings) -> Vec<String> {
-        loop_settings.problems.iter().map(|item| format!("ROADMAP setting \"{}: {}\" is invalid ({})", text_of(item.get("name")), text_of(item.get("value")), text_of(item.get("message")))).collect()
+        loop_settings
+            .problems
+            .iter()
+            .map(|item| format!("ROADMAP setting \"{}: {}\" is invalid ({})", text_of(item.get("name")), text_of(item.get("value")), text_of(item.get("message"))))
+            .collect()
     }
 
     /// `[{"name", "uncommitted_context"}]` per repo, the same list as `GET workspace` (empty once the repo's worktree exists).
@@ -459,7 +475,12 @@ impl LoopControlService<'_> {
             _ => read_json_object(&self.pending_delivery_path(context)),
         };
         let defaults = self.build_delivery_choices(context, &json!({}));
-        Value::Object(defaults.iter().map(|(name, default)| (name.clone(), if recorded.get(name).is_some_and(Value::is_boolean) { recorded[name].clone() } else { default.clone() })).collect())
+        Value::Object(
+            defaults
+                .iter()
+                .map(|(name, default)| (name.clone(), if recorded.get(name).is_some_and(Value::is_boolean) { recorded[name].clone() } else { default.clone() }))
+                .collect(),
+        )
     }
 
     /// `GET loop/settings`: what the Start dialog shows, read-only (the values are decided in planning).
@@ -504,7 +525,9 @@ impl LoopControlService<'_> {
     /// resumes. Refused unless the new cap is above what was already spent (`cost_usd`, never reset).
     pub fn raise_loop_limit(&self, context: &ProjectContext, body: &Value) -> Reply {
         let value = body.get("max_cost_usd");
-        let Some(limit) = value.filter(|_| is_finite_non_negative_number(value)).and_then(Value::as_f64).filter(|v| *v > 0.0) else { return failure(400, "max_cost_usd must be a number greater than 0") };
+        let Some(limit) = value.filter(|_| is_finite_non_negative_number(value)).and_then(Value::as_f64).filter(|v| *v > 0.0) else {
+            return failure(400, "max_cost_usd must be a number greater than 0");
+        };
         let mut meta = self.app.loop_commands.read_meta(&context.work_dir());
         let spent = if is_finite_non_negative_number(meta.get("cost_usd")) { meta["cost_usd"].as_f64().unwrap_or(0.0) } else { 0.0 };
         if limit <= spent {
@@ -521,7 +544,10 @@ impl LoopControlService<'_> {
         if code != 200 {
             return (code, data);
         }
-        self.app.log.info("loop_command_launched", &[("project", json!(context.project.id)), ("action", json!("raise_limit")), ("pid", data.get("pid").cloned().unwrap_or(Value::Null))]);
+        self.app.log.info(
+            "loop_command_launched",
+            &[("project", json!(context.project.id)), ("action", json!("raise_limit")), ("pid", data.get("pid").cloned().unwrap_or(Value::Null))],
+        );
         (202, json!({"ok": true, "cost_usd": spent, "max_cost_usd": limit}))
     }
 
@@ -591,7 +617,8 @@ impl LoopControlService<'_> {
         let attachments = match body.get("attachments") {
             None | Some(Value::Null) => vec![],
             Some(Value::Array(list)) => {
-                let texts: Option<Vec<String>> = list.iter().map(|i| i.as_str().filter(|s| s.chars().count() <= INSTRUCTION_ATTACHMENT_LIMIT).map(String::from)).collect();
+                let texts: Option<Vec<String>> =
+                    list.iter().map(|i| i.as_str().filter(|s| s.chars().count() <= INSTRUCTION_ATTACHMENT_LIMIT).map(String::from)).collect();
                 match texts {
                     Some(texts) if texts.len() <= MAX_INSTRUCTION_ATTACHMENTS => texts,
                     _ => return Err(limits_error),
@@ -652,14 +679,39 @@ mod tests {
     #[test]
     fn check_output_is_parsed_and_flags_follow_the_settings() {
         let parsed = parse_check_output("noise\n[check] WARNING: slow disk\n[check] PROBLEM: no git\n[check] READY. Command:\nharness loop x\n");
-        assert_eq!((parsed["ready"].clone(), parsed["problems"].clone(), parsed["warnings"].clone(), parsed["command"].clone()), (json!(false), json!(["no git"]), json!(["slow disk"]), json!("harness loop x")));
+        assert_eq!(
+            (parsed["ready"].clone(), parsed["problems"].clone(), parsed["warnings"].clone(), parsed["command"].clone()),
+            (json!(false), json!(["no git"]), json!(["slow disk"]), json!("harness loop x"))
+        );
         assert_eq!(parse_check_output("[check] READY. Command: run it")["command"], "run it");
         assert_eq!(parse_check_output("[check] READY")["ready"], true);
         let settings = parse_loop_settings("**Dispatch:** 2\n**E2E:** yes\n**Max spend per turn:** 7.5\n**Max minutes per turn:** 30\n**Branch:** feature/x\n**Setup:** -weird\n**When a feature gets stuck:** continue\n").settings;
         let flags = convert_settings_to_loop_flags(&settings, 2, false, Some(""), "release/1");
-        assert_eq!(flags, ["--wave", "2", "--e2e", "--no-push", "--continue-on-blocked", "--budget", "7.5", "--timeout", "30", "--branch", "feature/x", "--base-branch", "release/1", "--setup=-weird", "--orchestrator-model", ""]);
+        assert_eq!(
+            flags,
+            [
+                "--wave",
+                "2",
+                "--e2e",
+                "--no-push",
+                "--continue-on-blocked",
+                "--budget",
+                "7.5",
+                "--timeout",
+                "30",
+                "--branch",
+                "feature/x",
+                "--base-branch",
+                "release/1",
+                "--setup=-weird",
+                "--orchestrator-model",
+                ""
+            ]
+        );
         let defaults = parse_loop_settings("").settings;
-        assert!(convert_settings_to_loop_flags(&defaults, 3, true, None, "").is_empty() || convert_settings_to_loop_flags(&defaults, 3, true, None, "") == ["--wave", "3"]);
+        assert!(
+            convert_settings_to_loop_flags(&defaults, 3, true, None, "").is_empty() || convert_settings_to_loop_flags(&defaults, 3, true, None, "") == ["--wave", "3"]
+        );
         assert_eq!((format_amount(5.0), format_amount(7.5)), ("5".to_string(), "7.5".to_string()));
         assert_eq!(compose_instruction_text(" fix ", Some("login"), &["  a ".into(), " ".into()]), "[login] fix\nAttached context:\n- a");
         assert_eq!(read_run_choices(&json!({"push": "yes"})).unwrap_err(), "push must be a boolean");

@@ -67,7 +67,13 @@ pub fn replace_block(text: &str, block: &str) -> String {
         }
     }
     let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
-    let separator = if text.is_empty() { String::new() } else if text.ends_with('\n') { newline.to_string() } else { newline.repeat(2) }; // one blank line before the block
+    let separator = if text.is_empty() {
+        String::new()
+    } else if text.ends_with('\n') {
+        newline.to_string()
+    } else {
+        newline.repeat(2)
+    }; // one blank line before the block
     format!("{text}{separator}{}{newline}", block.replace('\n', newline))
 }
 
@@ -107,11 +113,15 @@ impl ProjectCapabilitiesService<'_> {
             let primary = engine_state::notify_truthy(item.get("primary")) || pycompat::nt_normcase(&pycompat::nt_normpath(&path)) == primary_key;
             found_primary = found_primary || primary;
             let role = if primary || item.get("role").and_then(Value::as_str) != Some(ROLE_REFERENCE) { ROLE_EDIT } else { ROLE_REFERENCE };
-            let name = if engine_state::notify_truthy(item.get("name")) { text_of(item.get("name")) } else { pycompat::last_segment(&pycompat::nt_normpath(&path)).to_string() };
+            let name =
+                if engine_state::notify_truthy(item.get("name")) { text_of(item.get("name")) } else { pycompat::last_segment(&pycompat::nt_normpath(&path)).to_string() };
             repos.push((name, path, role.to_string(), primary));
         }
         if !found_primary {
-            repos.insert(0, (pycompat::last_segment(&pycompat::nt_normpath(context.repo_path())).to_string(), context.repo_path().to_string(), ROLE_EDIT.to_string(), true));
+            repos.insert(
+                0,
+                (pycompat::last_segment(&pycompat::nt_normpath(context.repo_path())).to_string(), context.repo_path().to_string(), ROLE_EDIT.to_string(), true),
+            );
         }
         repos
     }
@@ -140,7 +150,10 @@ impl ProjectCapabilitiesService<'_> {
             format!("- MCP read tools: {}.", if servers.is_empty() { "none available on this machine".to_string() } else { servers.join("; ") }),
             String::new(),
             "**Edit**".into(),
-            format!("- Only the PATHS of your feature, in the loop worktree of an `edit` repository ({}). A `reference` repository is never edited.", if edit_names.is_empty() { "none".to_string() } else { edit_names.join(", ") }),
+            format!(
+                "- Only the PATHS of your feature, in the loop worktree of an `edit` repository ({}). A `reference` repository is never edited.",
+                if edit_names.is_empty() { "none".to_string() } else { edit_names.join(", ") }
+            ),
             String::new(),
             "**Reserved** (do not try: the guard blocks it)".into(),
             "- `git commit`: the orchestrator's checkpoint, never a subagent.".into(),
@@ -259,8 +272,23 @@ mod tests {
         let app = App::for_tests(dir.path());
         let repo = dir.path().join("main-app");
         std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
-        std::fs::write(repo.join(".specs/project/REPOS.json"), format!(r#"{{"repos": [{{"name": "ref", "path": "{}", "role": "reference"}}, {{"name": "main-app", "path": "{}", "primary": true, "role": "reference"}}]}}"#, dir.path().join("ref").display().to_string().replace('\\', "\\\\"), repo.display().to_string().replace('\\', "\\\\"))).unwrap();
-        let context = ProjectContext::new(Project { id: "p".into(), name: "main-app".into(), repo_path: repo.display().to_string(), opened_at: String::new(), last_opened_at: String::new(), favorite: false });
+        std::fs::write(
+            repo.join(".specs/project/REPOS.json"),
+            format!(
+                r#"{{"repos": [{{"name": "ref", "path": "{}", "role": "reference"}}, {{"name": "main-app", "path": "{}", "primary": true, "role": "reference"}}]}}"#,
+                dir.path().join("ref").display().to_string().replace('\\', "\\\\"),
+                repo.display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .unwrap();
+        let context = ProjectContext::new(Project {
+            id: "p".into(),
+            name: "main-app".into(),
+            repo_path: repo.display().to_string(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        });
         let provider = || json!([{"server": "grafana", "tools": ["query"]}]);
         let service = ProjectCapabilitiesService { app: &app, mcp_provider: Some(&provider) };
         let text = service.render(&context);

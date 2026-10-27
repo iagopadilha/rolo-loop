@@ -39,7 +39,11 @@ impl ChatScopeContextService<'_> {
         let item = errors["items"].as_array()?.iter().find(|row| row["id"] == error_id)?;
         let or = |value: &Value, fallback: &str| {
             let text = text_or_empty(Some(value));
-            if text.is_empty() { fallback.to_string() } else { text }
+            if text.is_empty() {
+                fallback.to_string()
+            } else {
+                text
+            }
         };
         let mut lines = vec![
             format!("Error shown in the loop panel: {}", item["title"].as_str().unwrap_or("")),
@@ -77,7 +81,12 @@ impl ChatScopeContextService<'_> {
             .take(TURN_EVENTS_LIMIT)
             .map(|event| {
                 let out = event["out"].as_str().filter(|o| !o.is_empty()).unwrap_or("(no text)");
-                format!("- {} | {} | {} | {out}", py_str(&event["feature"]), step_key(event["step"].as_u64().unwrap_or(0) as usize), event["status"].as_str().unwrap_or(""))
+                format!(
+                    "- {} | {} | {} | {out}",
+                    py_str(&event["feature"]),
+                    step_key(event["step"].as_u64().unwrap_or(0) as usize),
+                    event["status"].as_str().unwrap_or("")
+                )
             })
             .collect()
     }
@@ -97,7 +106,9 @@ mod tests {
         let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
         assert!(app.chat_scope().build_error_context(&context, "nope").is_none());
         let text = app.chat_scope().build_error_context(&context, "feature-a").unwrap();
-        assert!(text.starts_with("Error shown in the loop panel: Feature a is blocked (quarantine)\nKind: feature. Severity: error. When: unknown. Turn: n/a.\nDetail:\n2 failures. flaky"));
+        assert!(text.starts_with(
+            "Error shown in the loop panel: Feature a is blocked (quarantine)\nKind: feature. Severity: error. When: unknown. Turn: n/a.\nDetail:\n2 failures. flaky"
+        ));
         assert!(text.contains("General loop context. Read what you need with Read:"));
     }
 }

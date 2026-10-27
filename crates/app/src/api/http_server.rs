@@ -88,7 +88,11 @@ fn mime_of(path: &Path) -> String {
         "xml" => "text/xml",
         _ => "application/octet-stream",
     };
-    if guessed.starts_with("text/") || guessed == "application/json" || guessed == "image/svg+xml" { format!("{guessed}; charset=utf-8") } else { guessed.to_string() }
+    if guessed.starts_with("text/") || guessed == "application/json" || guessed == "image/svg+xml" {
+        format!("{guessed}; charset=utf-8")
+    } else {
+        guessed.to_string()
+    }
 }
 
 /// Constant-time comparison of two texts (the token never leaks through the time of a failed check).
@@ -204,7 +208,12 @@ impl AppHttpServer {
             Body::Bytes(bytes, content_type) => (bytes, content_type),
             Body::Json(value) => (pycompat::json::py_json_dumps(&value, false).into_bytes(), "application/json; charset=utf-8".to_string()),
         };
-        let head = format!("HTTP/1.1 {} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", response.status, reason(response.status), body.len());
+        let head = format!(
+            "HTTP/1.1 {} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            response.status,
+            reason(response.status),
+            body.len()
+        );
         let _ = stream.write_all(head.as_bytes()).and_then(|_| stream.write_all(&body)).and_then(|_| stream.flush());
     }
 
@@ -256,7 +265,10 @@ impl AppHttpServer {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (route.handler)(&request))) {
             Ok(response) => response,
             Err(_) => {
-                self.app.log.error("route_failed", &[("route", Value::from(route.pattern.clone())), ("type", Value::from("panic")), ("message", Value::from("the handler panicked"))]);
+                self.app.log.error(
+                    "route_failed",
+                    &[("route", Value::from(route.pattern.clone())), ("type", Value::from("panic")), ("message", Value::from("the handler panicked"))],
+                );
                 Response::error(500, "internal error: panic")
             }
         }
@@ -365,7 +377,10 @@ mod tests {
 
     #[test]
     fn queries_follow_parse_qs() {
-        assert_eq!(parse_query("a=1&a=2&b=&c=x%20y+z&flag"), vec![("a".to_string(), vec!["1".to_string(), "2".to_string()]), ("c".to_string(), vec!["x y z".to_string()])]);
+        assert_eq!(
+            parse_query("a=1&a=2&b=&c=x%20y+z&flag"),
+            vec![("a".to_string(), vec!["1".to_string(), "2".to_string()]), ("c".to_string(), vec!["x y z".to_string()])]
+        );
         assert!(same_text("abc", "abc") && !same_text("abc", "abd") && !same_text("abc", "ab"));
     }
 
@@ -396,8 +411,14 @@ mod tests {
         assert!(get("/api/ping", &local).contains("200 OK") && get("/api/ping", &local).ends_with("{\"ok\": true}"));
         assert!(get("/api/ping", "evil.example:80").contains("403 Forbidden") && get("/api/ping", "evil.example:80").contains("invalid Host"));
         assert!(get("/api/nope", &local).contains("404") && get("/", &local).contains("monitor-token\" content=\"secret\""));
-        assert!(get("/p/abc/", &local).contains("text/html") && get("/static/app.js", &local).contains("text/javascript") && get("/static/..%5Cindex.html", &local).contains("404"));
-        let post = |token: &str, body: &str| ask(format!("POST /api/echo HTTP/1.1\r\nHost: {local}\r\nX-Monitor-Token: {token}\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
+        assert!(
+            get("/p/abc/", &local).contains("text/html")
+                && get("/static/app.js", &local).contains("text/javascript")
+                && get("/static/..%5Cindex.html", &local).contains("404")
+        );
+        let post = |token: &str, body: &str| {
+            ask(format!("POST /api/echo HTTP/1.1\r\nHost: {local}\r\nX-Monitor-Token: {token}\r\nContent-Length: {}\r\n\r\n{body}", body.len()))
+        };
         assert!(post("wrong", "{}").contains("403 Forbidden"));
         assert!(post("secret", "{\"a\": 1}").ends_with("{\"a\": 1}"));
         assert!(post("secret", "[1]").contains("body must be a JSON object") && post("secret", "{oops").contains("body is not valid JSON"));

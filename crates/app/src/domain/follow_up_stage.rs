@@ -101,7 +101,14 @@ fn heading_index(lines: &[String], round_number: i64) -> Option<usize> {
 }
 
 /// Why the round's edit is NOT "only the Follow-up <n> stage changed (+ appended FLOWS text)"; `None` when it is.
-pub fn validate_round_stage(baseline_roadmap: &str, after_roadmap: &str, baseline_flows: &str, after_flows: &str, round_number: i64, executed_slugs: &[String]) -> Option<String> {
+pub fn validate_round_stage(
+    baseline_roadmap: &str,
+    after_roadmap: &str,
+    baseline_flows: &str,
+    after_flows: &str,
+    round_number: i64,
+    executed_slugs: &[String],
+) -> Option<String> {
     let before_lines: Vec<String> = normalize_newlines(baseline_roadmap).trim_end().split('\n').map(String::from).collect();
     let after_lines: Vec<String> = normalize_newlines(after_roadmap).trim_end().split('\n').map(String::from).collect();
     let cut = heading_index(&before_lines, round_number);
@@ -157,7 +164,10 @@ pub fn describe_stage_change(before_stage: Option<&Value>, after_stage: Option<&
             .map(|fs| {
                 fs.iter()
                     .map(|f| {
-                        let mut pairs: Vec<(String, String)> = f.as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))).collect()).unwrap_or_default();
+                        let mut pairs: Vec<(String, String)> = f
+                            .as_object()
+                            .map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))).collect())
+                            .unwrap_or_default();
                         pairs.sort();
                         (f["slug"].as_str().unwrap_or("").to_string(), format!("{pairs:?}"))
                     })
@@ -180,7 +190,9 @@ mod tests {
 
     #[test]
     fn lists_follow_up_stages() {
-        let text = format!("{BASE}## Stage Follow-up-1 - Follow-up 1\n- [b] status=pending paths=src/b\n## Stage Follow-up-2 - Follow-up 2\n- [c] status=pending paths=src/c deps=b\n");
+        let text = format!(
+            "{BASE}## Stage Follow-up-1 - Follow-up 1\n- [b] status=pending paths=src/b\n## Stage Follow-up-2 - Follow-up 2\n- [c] status=pending paths=src/c deps=b\n"
+        );
         let stages = list_follow_up_stages(&text);
         assert_eq!(stages.len(), 2);
         assert_eq!((stages[0]["id"].as_str(), stages[0]["n"].as_i64(), stages[0]["features"][0]["slug"].as_str()), (Some("Follow-up-1"), Some(1), Some("b")));

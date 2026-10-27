@@ -123,7 +123,12 @@ fn meta_path(work: &str) -> std::path::PathBuf {
 }
 
 fn auto_opts(opts: &LoopOpts) -> AutoOpts {
-    AutoOpts { auto_answer: opts.auto_answer, max_auto_answers: opts.max_auto_answers, auto_answers_per_feature: opts.auto_answers_per_feature, gate_tiebreaks: opts.gate_tiebreaks }
+    AutoOpts {
+        auto_answer: opts.auto_answer,
+        max_auto_answers: opts.max_auto_answers,
+        auto_answers_per_feature: opts.auto_answers_per_feature,
+        gate_tiebreaks: opts.gate_tiebreaks,
+    }
 }
 
 /// Flags for the resume command that goes in the notice (the same as this run).
@@ -272,9 +277,11 @@ impl Runner {
     /// Notice data (only what comes from LOOP.json, ROADMAP and git log; never project file contents).
     fn build_context(&self, work: &str, meta: &Value, status: &str, reason: &str, opts: &LoopOpts, repo: &str, summary: &str) -> Value {
         let state = load_json(&state_file(work, "LOOP.json"));
-        let features: Vec<Value> = loop_summary::feature_statuses(&read(&Path::new(work).join(".specs").join("project").join("ROADMAP.md"))).into_iter().map(|(s, st)| json!([s, st])).collect();
+        let features: Vec<Value> =
+            loop_summary::feature_statuses(&read(&Path::new(work).join(".specs").join("project").join("ROADMAP.md"))).into_iter().map(|(s, st)| json!([s, st])).collect();
         let base = text(meta.get("base"));
-        let range = if base.is_empty() { "-8".to_string() } else { format!("{base}..{}", if truthy(meta.get("branch")) { text(meta.get("branch")) } else { "HEAD".into() }) };
+        let range =
+            if base.is_empty() { "-8".to_string() } else { format!("{base}..{}", if truthy(meta.get("branch")) { text(meta.get("branch")) } else { "HEAD".into() }) };
         let log = git(work, &["log", "--oneline", "--no-decorate", &range]).1;
         let graph = graph_view::load(work);
         json!({
@@ -302,7 +309,14 @@ impl Runner {
     fn ensure_worktrees(&self, repo: &str, opts: &mut LoopOpts) -> Result<(String, Value), String> {
         let mut env = self.env();
         let mut ctx = Ctx { env: &mut env, toolkit_root: self.ctx.toolkit_text() };
-        let mut wt = WtOpts { setup: opts.setup.clone(), branch: opts.branch.clone(), dry_run: opts.dry_run, base_branch: opts.base_branch.clone(), only_repos: opts.only_repos.clone(), repo_path: opts.repo_path.clone() };
+        let mut wt = WtOpts {
+            setup: opts.setup.clone(),
+            branch: opts.branch.clone(),
+            dry_run: opts.dry_run,
+            base_branch: opts.base_branch.clone(),
+            only_repos: opts.only_repos.clone(),
+            repo_path: opts.repo_path.clone(),
+        };
         let result = ensure_worktrees(&mut ctx, repo, &mut wt);
         opts.repo_path = wt.repo_path;
         result
@@ -366,11 +380,18 @@ impl Runner {
             let why = u["reason"].as_str().filter(|r| !r.is_empty()).unwrap_or("no reason in the output");
             reason = format!("The previous account is unusable ({why}), so the loop moved to the backup command. Waiting does not fix a login: sign in again (`claude` then /login, or `claude setup-token`) or ask the admin to enable access.");
         } else if same_command {
-            reason = format!("The `{}` account picker moved to another account because the previous one hit its usage limit{}.", command_base_name(name), limit_suffix(&phrase_of(&command_base_name(&previous.0))));
+            reason = format!(
+                "The `{}` account picker moved to another account because the previous one hit its usage limit{}.",
+                command_base_name(name),
+                limit_suffix(&phrase_of(&command_base_name(&previous.0)))
+            );
         } else if is_main {
             reason = format!("The usage limit of the main account{} should have reset, so the loop went back to it.", limit_suffix(&phrase_of(&main_name)));
         } else {
-            reason = format!("The previous account hit its usage limit{}, so the loop moved to the backup command.", limit_suffix(&phrase_of(&command_base_name(&previous.0))));
+            reason = format!(
+                "The previous account hit its usage limit{}, so the loop moved to the backup command.",
+                limit_suffix(&phrase_of(&command_base_name(&previous.0)))
+            );
         }
         self.notify_wait(
             &claude_change_subject(name, account, is_main, same_command, &unusable_subject),
@@ -396,12 +417,19 @@ impl Runner {
         let moment = usage_windows::reset_moment(Some(blocking));
         let until = moment.map(usage_windows::format_moment).unwrap_or_else(|| "its reset (time unknown)".to_string());
         let fallback = next_fallback_name(opts);
-        let goes_on = if fallback.is_empty() { "no other command is configured, the loop waits for the reset".to_string() } else { format!("the loop continues on `{}`", command_base_name(&fallback)) };
+        let goes_on = if fallback.is_empty() {
+            "no other command is configured, the loop waits for the reset".to_string()
+        } else {
+            format!("the loop continues on `{}`", command_base_name(&fallback))
+        };
         let lines = other_usage_lines(opts, meta, name);
         println!("[loop] main account weekly limit reached on `{main_base}`, unusable until {until}; {goes_on}");
         self.notify_wait(
             &format!("main account weekly limit reached, unusable until {until}; {goes_on}"),
-            &format!("Turn {turn}: the weekly window of the main command `{main_base}` is used up.\nLast known usage of the other commands:\n{}", if lines.is_empty() { "- none configured".to_string() } else { lines.join("\n") }),
+            &format!(
+                "Turn {turn}: the weekly window of the main command `{main_base}` is used up.\nLast known usage of the other commands:\n{}",
+                if lines.is_empty() { "- none configured".to_string() } else { lines.join("\n") }
+            ),
             None,
         );
         true
@@ -445,7 +473,17 @@ impl Runner {
         graph_view::write(work);
         let env = self.env();
         let out_dir = if opts.summary_dir.is_empty() { loop_summary::default_output_dir(&env) } else { opts.summary_dir.clone() };
-        let args = vec![work.to_string(), "--branch".into(), text(meta.get("branch")), "--base".into(), text(meta.get("base")), "--out".into(), out_dir, "--max-cost".into(), py_float(effective_cost_cap(meta, opts.max_cost))];
+        let args = vec![
+            work.to_string(),
+            "--branch".into(),
+            text(meta.get("branch")),
+            "--base".into(),
+            text(meta.get("base")),
+            "--out".into(),
+            out_dir,
+            "--max-cost".into(),
+            py_float(effective_cost_cap(meta, opts.max_cost)),
+        ];
         let summary = loop_summary::run_cli(&args, &env).1.trim().to_string();
         let repo = if truthy(meta.get("repo")) { text(meta.get("repo")) } else { opts.repo.clone() };
         let context = self.build_context(work, meta, status, reason, opts, &nt_abspath(&repo), &summary);
@@ -543,7 +581,10 @@ impl Runner {
             } else {
                 String::new()
             };
-            return Err(format!("pre-flight failed, the loop did not start. {}{tail_text}", if env_reason.is_empty() { String::new() } else { format!("{env_reason} ") }));
+            return Err(format!(
+                "pre-flight failed, the loop did not start. {}{tail_text}",
+                if env_reason.is_empty() { String::new() } else { format!("{env_reason} ") }
+            ));
         }
         let repos = project_repos::load_repos(&repo);
         opts.repo_names = repo_names_of(&repos);
@@ -556,7 +597,10 @@ impl Runner {
             .map(|r| r.values().filter(|i| i.is_object() && !truthy(i.get("primary")) && truthy(i.get("worktree"))).map(|i| text(i.get("worktree"))).collect())
             .unwrap_or_default();
         if opts.dry_run {
-            println!("[dry-run] turn 1 command: {}", claude_command(&self.ctx, &opts, &format!("/orchestrator continue --headless --turn 1 --wave {}", opts.wave)).join(" "));
+            println!(
+                "[dry-run] turn 1 command: {}",
+                claude_command(&self.ctx, &opts, &format!("/orchestrator continue --headless --turn 1 --wave {}", opts.wave)).join(" ")
+            );
             return Ok(0);
         }
         let lock = acquire_lock(&work)?; // first thing after the worktree exists: a second loop on it stops here, before the monitor, the answer or a Claude call
@@ -567,7 +611,12 @@ impl Runner {
                 let options: Vec<Value> = state.get("options").and_then(Value::as_array).cloned().unwrap_or_default();
                 if opts.option < 1 || opts.option as usize > options.len() {
                     let listed = options.iter().enumerate().map(|(i, o)| format!("{}) {}", i + 1, text(Some(o)))).collect::<Vec<_>>().join("; ");
-                    return Err(format!("--option {} invalid: the notice listed {} option(s) ({})", opts.option, options.len(), if listed.is_empty() { "none".to_string() } else { listed }));
+                    return Err(format!(
+                        "--option {} invalid: the notice listed {} option(s) ({})",
+                        opts.option,
+                        options.len(),
+                        if listed.is_empty() { "none".to_string() } else { listed }
+                    ));
                 }
                 opts.answer = text(options.get(opts.option as usize - 1));
             }
@@ -579,7 +628,8 @@ impl Runner {
                 let next_turn = i64_of(meta.get("turns")) + 1;
                 // turn stopped on a trivial question: answer it and carry on without you
                 if !try_auto_answer(&work, next_turn, &auto_opts(&opts), &mut meta, &mut auto_state) {
-                    try_gate_tiebreak(&work, next_turn, &auto_opts(&opts), &mut meta, &mut auto_state); // spec that failed the gate on the previous run: break the tie
+                    try_gate_tiebreak(&work, next_turn, &auto_opts(&opts), &mut meta, &mut auto_state);
+                    // spec that failed the gate on the previous run: break the tie
                 }
             }
             let turn = i64_of(meta.get("turns"));
@@ -600,7 +650,8 @@ impl Runner {
             }
         };
         let egress_layer = self.start_egress_layer(&work, &repo);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.turns(&repo, &work, &mut meta, &mut opts, auto_state, turn, cost, egress_layer.as_ref())));
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.turns(&repo, &work, &mut meta, &mut opts, auto_state, turn, cost, egress_layer.as_ref())));
         egress_proxy::release(egress_layer.as_ref()); // also on every crash path: the proxy stops and the runtime file goes
         release_lock(&lock);
         match result {
@@ -610,7 +661,17 @@ impl Runner {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn turns(&mut self, repo: &str, work: &str, meta: &mut Value, opts: &mut LoopOpts, mut auto_state: AutoState, mut turn: i64, mut cost: f64, egress: Option<&egress_proxy::Layer>) -> i32 {
+    fn turns(
+        &mut self,
+        repo: &str,
+        work: &str,
+        meta: &mut Value,
+        opts: &mut LoopOpts,
+        mut auto_state: AutoState,
+        mut turn: i64,
+        mut cost: f64,
+        egress: Option<&egress_proxy::Layer>,
+    ) -> i32 {
         let specs = Path::new(work).join(".specs").join("project").display().to_string();
         let logs = turns_dir(work);
         let (mut stall, mut last_score, mut last_print, mut limit_hits) = (0i64, roadmap_score(work).0, String::new(), 0i64);
@@ -663,7 +724,12 @@ impl Runner {
             if !applied.is_empty() {
                 println!("[loop] forgotten dependencies applied to the ROADMAP before the turn: {}", applied.join("; "));
             }
-            let prompt = format!("/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}", opts.wave, if opts.e2e { " --e2e" } else { "" }, plan_flags(work, opts.wave, &opts.primary_name));
+            let prompt = format!(
+                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}",
+                opts.wave,
+                if opts.e2e { " --e2e" } else { "" },
+                plan_flags(work, opts.wave, &opts.primary_name)
+            );
             let started = Instant::now();
             let clock = local_now();
             println!("[loop] turn {turn} | {:02}:{:02}:{:02}", clock.hour(), clock.minute(), clock.second());
@@ -688,7 +754,11 @@ impl Runner {
             log.insert("usage_windows".into(), windows.clone());
             log.insert("limit_status".into(), json!(limit_status));
             // what the turn says about limits and logins: the result text and stderr (the rest of a stream-json output is the model's own work)
-            let scan_text = if data.get("ok") == Some(&Value::Bool(true)) { format!("{}\n{err}", text(data.get("result"))) } else { format!("{}\n{err}", cli_output::strip_rate_limit_events(&out)) };
+            let scan_text = if data.get("ok") == Some(&Value::Bool(true)) {
+                format!("{}\n{err}", text(data.get("result")))
+            } else {
+                format!("{}\n{err}", cli_output::strip_rate_limit_events(&out))
+            };
             let picked_account = claude_binaries::account_from_stderr(&err);
             let blocking = usage_windows::blocking_window(&rate_limit, None);
             if !err.is_empty() {
@@ -752,9 +822,13 @@ impl Runner {
                     // the `cc` picker ran on an account that ran out during the turn: run it again, it picks the next free one ("cc" + Enter)
                     opts.picker_tried.push(picked_account.clone());
                     if opts.last_claude_used.is_none() {
-                        opts.last_claude_used = Some((claude_name.clone(), account.clone())); // notify the change
+                        opts.last_claude_used = Some((claude_name.clone(), account.clone()));
+                        // notify the change
                     }
-                    println!("[loop] usage limit on `{claude_name}` account {picked_account}{}; turn {turn} again, the picker chooses another account", limit_suffix(&limit_phrase));
+                    println!(
+                        "[loop] usage limit on `{claude_name}` account {picked_account}{}; turn {turn} again, the picker chooses another account",
+                        limit_suffix(&limit_phrase)
+                    );
                     turn -= 1;
                     continue;
                 }
@@ -763,7 +837,8 @@ impl Runner {
                 println!("[loop] usage limit on `{claude_name}`{}; turn {turn} again with `{}`", limit_suffix(&limit_phrase), current_claude(opts));
                 set(meta, "claude_switches", json!(i64_of(meta.get("claude_switches")) + 1));
                 if opts.last_claude_used.is_none() {
-                    opts.last_claude_used = Some((claude_name.clone(), account.clone())); // notify the change
+                    opts.last_claude_used = Some((claude_name.clone(), account.clone()));
+                    // notify the change
                 }
                 let _ = save_meta(&meta_path(work), meta);
                 turn -= 1;
@@ -789,7 +864,8 @@ impl Runner {
                     println!("[loop] account unusable on `{claude_name}` ({}); turn {turn} again with `{}`", text(record.get("reason")), current_claude(opts));
                     set(meta, "claude_switches", json!(i64_of(meta.get("claude_switches")) + 1));
                     if opts.last_claude_used.is_none() {
-                        opts.last_claude_used = Some((claude_name.clone(), account.clone())); // notify the change
+                        opts.last_claude_used = Some((claude_name.clone(), account.clone()));
+                        // notify the change
                     }
                     let _ = save_meta(&meta_path(work), meta);
                     turn -= 1;
@@ -816,7 +892,11 @@ impl Runner {
                 let first_account = if when.is_empty() {
                     format!("The reset time is unknown: it tries again in {}.", wait_text(seconds))
                 } else {
-                    format!("The first account frees up at {when} (in {}{}).", wait_text(seconds), if window_text.is_empty() { String::new() } else { format!("; {window_text}") })
+                    format!(
+                        "The first account frees up at {when} (in {}{}).",
+                        wait_text(seconds),
+                        if window_text.is_empty() { String::new() } else { format!("; {window_text}") }
+                    )
                 };
                 self.notify_wait(
                     &format!("credits ran out{}, back in {}", limit_suffix(&window_text), wait_text(seconds)),
@@ -854,7 +934,13 @@ impl Runner {
                 );
             }
             if failed {
-                let why = if !err.is_empty() { err.clone() } else if truthy(data.get("result")) { text(data.get("result")) } else { text(data.get("sample")) };
+                let why = if !err.is_empty() {
+                    err.clone()
+                } else if truthy(data.get("result")) {
+                    text(data.get("result"))
+                } else {
+                    text(data.get("sample"))
+                };
                 return self.finish(work, meta, "error", &format!("claude exited with code {code} on turn {turn}: {}", head(&why, 300)), opts);
             }
             self.notify_claude_change(opts, turn, &claude_name, &account);
@@ -867,7 +953,8 @@ impl Runner {
             }
 
             let mut state = load_json(&state_file(work, "LOOP.json"));
-            let state_ok = |s: &Value| s.get("turn").and_then(Value::as_i64) == Some(turn) && s.get("status").and_then(Value::as_str).is_some_and(|st| STATUS_OK.contains(&st));
+            let state_ok =
+                |s: &Value| s.get("turn").and_then(Value::as_i64) == Some(turn) && s.get("status").and_then(Value::as_str).is_some_and(|st| STATUS_OK.contains(&st));
             if !state_ok(&state) && truthy(data.get("session_id")) {
                 // the model finished the turn (e.g. while waiting on background subagents) without writing LOOP.json: ONE correction turn in the
                 // same session, only asking for the file (no new work), before failing the loop
@@ -910,18 +997,42 @@ impl Runner {
             let head_now = git(work, &["rev-parse", "HEAD"]).1;
             let new_commits = count_new_commits(prev.as_ref(), work, meta, &head_now);
             let prev_text = prev.as_ref().map(|p| read(&Path::new(p.get("dir").and_then(Value::as_str).unwrap_or("")).join("ROADMAP.md"))).unwrap_or_default();
-            let violations = loop_state::validate(&prev_text, &read(&Path::new(&specs).join("ROADMAP.md")), Some(&state), new_commits.max(0) as usize, state_file(work, "ANSWERS.md").exists(), opts.repo_names.as_deref(), &opts.primary_name);
+            let violations = loop_state::validate(
+                &prev_text,
+                &read(&Path::new(&specs).join("ROADMAP.md")),
+                Some(&state),
+                new_commits.max(0) as usize,
+                state_file(work, "ANSWERS.md").exists(),
+                opts.repo_names.as_deref(),
+                &opts.primary_name,
+            );
             let heads = heads_map(work, meta);
             loop_state::snapshot(work, turn as u64, &head_now, heads.as_ref());
             graph_view::write(work); // .specs/project/loop/GRAPH.md always current
             if !violations.is_empty() {
-                return self.finish(work, meta, "error", &format!("invalid state after turn {turn} (use --rewind {} to go back): {}", turn - 1, violations.iter().take(4).cloned().collect::<Vec<_>>().join("; ")), opts);
+                return self.finish(
+                    work,
+                    meta,
+                    "error",
+                    &format!(
+                        "invalid state after turn {turn} (use --rewind {} to go back): {}",
+                        turn - 1,
+                        violations.iter().take(4).cloned().collect::<Vec<_>>().join("; ")
+                    ),
+                    opts,
+                );
             }
             if !denials.is_empty() {
                 let progress = denial_progress(prev.as_ref(), &specs, &state, new_commits);
                 if progress.is_empty() {
                     let listed = denials.iter().map(denial_text).collect::<Vec<_>>().join("; ");
-                    return self.finish(work, meta, "error", &format!("permission denied on turn {turn} and the turn did not advance (no new commit, no ROADMAP change): {}", head(&listed, 400)), opts);
+                    return self.finish(
+                        work,
+                        meta,
+                        "error",
+                        &format!("permission denied on turn {turn} and the turn did not advance (no new commit, no ROADMAP change): {}", head(&listed, 400)),
+                        opts,
+                    );
                 }
                 note_tolerated_denials(work, turn, &denials, &progress);
                 if let Some(map) = meta.as_object_mut() {
@@ -949,7 +1060,13 @@ impl Runner {
             if status == "done" && opts.e2e {
                 let pending = e2e_unmarked(&specs);
                 if !pending.is_empty() {
-                    return self.finish(work, meta, "error", &format!("E2E phase ended without recording the result in the ROADMAP (e2e=ok|failed|not-covered): {}", pending.join("; ")), opts);
+                    return self.finish(
+                        work,
+                        meta,
+                        "error",
+                        &format!("E2E phase ended without recording the result in the ROADMAP (e2e=ok|failed|not-covered): {}", pending.join("; ")),
+                        opts,
+                    );
                 }
             }
             if status == "awaiting_user" && try_auto_answer(work, turn, &auto_opts(opts), meta, &mut auto_state) {
@@ -982,7 +1099,11 @@ impl Runner {
                 }
             }
             last_score = score; // baseline always follows the score (a blocked feature lowers the score without stopping the others' progress)
-            println!("[loop] turn {turn} ok in {:.0}s | progress {score} ({done}/{total} closed) | no progress: {stall}/{} | cost US$ {cost:.2}", started.elapsed().as_secs_f64(), opts.max_stall);
+            println!(
+                "[loop] turn {turn} ok in {:.0}s | progress {score} ({done}/{total} closed) | no progress: {stall}/{} | cost US$ {cost:.2}",
+                started.elapsed().as_secs_f64(),
+                opts.max_stall
+            );
         }
     }
 }

@@ -18,7 +18,8 @@ pub const LIST: &str = "list";
 pub const CHOICE: &str = "choice";
 const TEXT_MAX_LENGTH: usize = 500;
 const LIST_MAX_ITEMS: usize = 50;
-pub const CAVEMAN_NOT_INSTALLED_NOTE: &str = "Not installed: no SessionStart hook that mentions caveman was found in your Claude settings (~/.claude/settings.json), so there is nothing to carry.";
+pub const CAVEMAN_NOT_INSTALLED_NOTE: &str =
+    "Not installed: no SessionStart hook that mentions caveman was found in your Claude settings (~/.claude/settings.json), so there is nothing to carry.";
 pub const CAVEMAN_RECOMMENDATION: &str = "Off by default: loop output is mostly machine-read lines and files, so terse replies save little. Turn it on to measure.";
 /// config.json: `{server: {allow, kind, production, read_only}}` (grammar: the `mcp-policy` crate).
 pub const MCP_SERVERS_KEY: &str = "mcp_servers";
@@ -95,7 +96,8 @@ pub fn invalid_setting(message: impl Into<String>) -> AppError {
 pub fn validate_mcp_settings(servers: &Value, extra: &Value) -> Result<(Value, Value)> {
     match mcp_policy::check_config(servers, extra) {
         Ok((list, patterns)) => {
-            let map: Map<String, Value> = list.into_iter().map(|(name, o)| (name, json!({"allow": o.allow, "kind": o.kind, "production": o.production, "read_only": o.read_only}))).collect();
+            let map: Map<String, Value> =
+                list.into_iter().map(|(name, o)| (name, json!({"allow": o.allow, "kind": o.kind, "production": o.production, "read_only": o.read_only}))).collect();
             Ok((Value::Object(map), json!(patterns)))
         }
         Err(error) => Err(invalid_setting(error.to_string())),
@@ -104,9 +106,10 @@ pub fn validate_mcp_settings(servers: &Value, extra: &Value) -> Result<(Value, V
 
 pub fn find_definition(key: &Value) -> Result<SettingDefinition> {
     let name = key.as_str().unwrap_or("");
-    setting_catalog().into_iter().find(|d| d.key == name && key.is_string()).ok_or_else(|| {
-        invalid_setting(format!("unknown setting: {}", key.as_str().map(String::from).unwrap_or_else(|| py_type_name(key))))
-    })
+    setting_catalog()
+        .into_iter()
+        .find(|d| d.key == name && key.is_string())
+        .ok_or_else(|| invalid_setting(format!("unknown setting: {}", key.as_str().map(String::from).unwrap_or_else(|| py_type_name(key)))))
 }
 
 fn py_type_name(v: &Value) -> String {
@@ -181,8 +184,18 @@ fn check_network_list(key: &str, items: &[String]) -> Result<()> {
             "egress_hosts" => parse_entry(&json!(text), "project").map(|_| ()),
             "egress_never" => parse_deny(&json!(text)).map(|_| ()),
             "env_sources" => {
-                let expanded = if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\")) { format!("{}\\{rest}", cfg::Env::process().home_dir().display()) } else if text == "~" { cfg::Env::process().home_dir().display().to_string() } else { text.clone() };
-                if pycompat::nt_isabs(&expanded) { Ok(()) } else { Err("use a full path (or one that starts with ~)".to_string()) }
+                let expanded = if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\")) {
+                    format!("{}\\{rest}", cfg::Env::process().home_dir().display())
+                } else if text == "~" {
+                    cfg::Env::process().home_dir().display().to_string()
+                } else {
+                    text.clone()
+                };
+                if pycompat::nt_isabs(&expanded) {
+                    Ok(())
+                } else {
+                    Err("use a full path (or one that starts with ~)".to_string())
+                }
             }
             _ => Ok(()),
         };
@@ -198,11 +211,21 @@ fn check_network_list(key: &str, items: &[String]) -> Result<()> {
 pub fn read_stored_or_default(definition: &SettingDefinition, stored: &Map<String, Value>) -> Value {
     let value = stored.get(definition.key).cloned().unwrap_or_else(|| definition.default.clone());
     match definition.kind {
-        BOOL => if value.is_boolean() { value } else { definition.default.clone() },
+        BOOL => {
+            if value.is_boolean() {
+                value
+            } else {
+                definition.default.clone()
+            }
+        }
         INT => {
             let n = value.as_f64();
             let fits = is_whole_number(&value) && n.is_some_and(|n| definition.minimum.is_none_or(|m| n >= m) && definition.maximum.is_none_or(|m| n <= m));
-            if fits { value } else { definition.default.clone() }
+            if fits {
+                value
+            } else {
+                definition.default.clone()
+            }
         }
         LIST => match &value {
             Value::Array(items) => json!(items.iter().filter_map(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).collect::<Vec<_>>()),
@@ -213,7 +236,11 @@ pub fn read_stored_or_default(definition: &SettingDefinition, stored: &Map<Strin
 }
 
 fn number_text(v: f64) -> String {
-    if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") }
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
 }
 
 /// The value to store, or an `InvalidSetting`. Bool must be a JSON boolean, int a whole number (no 6.5, no true), number finite.
@@ -275,7 +302,10 @@ mod tests {
         assert_eq!(validate_setting_value(&def_of("loop_max_hours"), &json!(200)).unwrap_err().message, "loop_max_hours must be at most 168");
         assert_eq!(validate_setting_value(&def_of("idle_hours"), &json!(0.5)).unwrap(), json!(0.5));
         assert_eq!(validate_setting_value(&def_of("orchestrator_model"), &json!(" sonnet ")).unwrap(), json!("sonnet"));
-        assert_eq!(validate_setting_value(&def_of("orchestrator_model"), &json!("gpt")).unwrap_err().message, "orchestrator_model must be one of: 'opus', 'sonnet', 'haiku', ''");
+        assert_eq!(
+            validate_setting_value(&def_of("orchestrator_model"), &json!("gpt")).unwrap_err().message,
+            "orchestrator_model must be one of: 'opus', 'sonnet', 'haiku', ''"
+        );
         assert_eq!(validate_setting_value(&def_of("claude_binary"), &json!("  cc ")).unwrap(), json!("cc"));
         assert_eq!(validate_setting_value(&def_of("output_dir"), &json!(" ")).unwrap_err().message, "output_dir cannot be empty: use Reset to default instead");
         assert_eq!(validate_setting_value(&def_of("claude_binary"), &json!("a\nb")).unwrap_err().message, "claude_binary must be one line of at most 500 characters");
@@ -286,13 +316,25 @@ mod tests {
     #[test]
     fn lists_are_cleaned_and_checked() {
         assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &json!([" a ", "a", "", "b-c"])).unwrap(), json!(["a", "b-c"]));
-        assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &json!(["../x"])).unwrap_err().message, "'../x' is not a valid skill name (letters, digits, dot, dash and underscore only)");
+        assert_eq!(
+            validate_setting_value(&def_of("loop_extra_skills"), &json!(["../x"])).unwrap_err().message,
+            "'../x' is not a valid skill name (letters, digits, dot, dash and underscore only)"
+        );
         assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &json!("a")).unwrap_err().message, "loop_extra_skills must be a list");
         assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &json!([1])).unwrap_err().message, "loop_extra_skills must be a list of text");
         assert_eq!(validate_setting_value(&def_of("egress_hosts"), &json!(["api.example.com POST cred"])).unwrap(), json!(["api.example.com POST cred"]));
-        assert!(validate_setting_value(&def_of("egress_hosts"), &json!(["ok.example.com", "http://bad"])).unwrap_err().message.starts_with("egress_hosts item 2 (http://bad): "));
-        assert!(validate_setting_value(&def_of("egress_never"), &json!(["*.prod.example.com", "x.com:80"])).unwrap_err().message.starts_with("egress_never item 2 (x.com:80): "));
-        assert_eq!(validate_setting_value(&def_of("env_sources"), &json!(["relative/.env"])).unwrap_err().message, "env_sources item 1 (relative/.env): use a full path (or one that starts with ~)");
+        assert!(validate_setting_value(&def_of("egress_hosts"), &json!(["ok.example.com", "http://bad"]))
+            .unwrap_err()
+            .message
+            .starts_with("egress_hosts item 2 (http://bad): "));
+        assert!(validate_setting_value(&def_of("egress_never"), &json!(["*.prod.example.com", "x.com:80"]))
+            .unwrap_err()
+            .message
+            .starts_with("egress_never item 2 (x.com:80): "));
+        assert_eq!(
+            validate_setting_value(&def_of("env_sources"), &json!(["relative/.env"])).unwrap_err().message,
+            "env_sources item 1 (relative/.env): use a full path (or one that starts with ~)"
+        );
         assert!(validate_setting_value(&def_of("env_sources"), &json!(["C:\\a\\.env", "~/x/.env"])).is_ok());
         let many: Vec<Value> = (0..51).map(|i| json!(format!("s{i}"))).collect();
         assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(many)).unwrap_err().message, "loop_extra_skills accepts at most 50 items");
@@ -300,7 +342,8 @@ mod tests {
 
     #[test]
     fn stored_values_fall_back_to_the_default() {
-        let stored: Map<String, Value> = serde_json::from_value(json!({"loop_isolation": "x", "max_parallel_maps": 0, "loop_extra_skills": [" a ", 3, ""], "claude_binary": "cc"})).unwrap();
+        let stored: Map<String, Value> =
+            serde_json::from_value(json!({"loop_isolation": "x", "max_parallel_maps": 0, "loop_extra_skills": [" a ", 3, ""], "claude_binary": "cc"})).unwrap();
         assert_eq!(read_stored_or_default(&def_of("loop_isolation"), &stored), json!(true));
         assert_eq!(read_stored_or_default(&def_of("max_parallel_maps"), &stored), json!(6));
         assert_eq!(read_stored_or_default(&def_of("loop_extra_skills"), &stored), json!(["a"]));

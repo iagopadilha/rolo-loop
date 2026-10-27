@@ -8,7 +8,7 @@ use crate::domain::project::ProjectContext;
 use crate::repositories::loop_read_formatting::{now_iso, number_value, to_number, to_text_list};
 use crate::repositories::specs_file::compute_bytes_version;
 use engine_state::{graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
-use pycompat::{nt_normpath, last_segment, partition, Re};
+use pycompat::{last_segment, nt_normpath, partition, Re};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -81,7 +81,11 @@ pub fn read_command_limits(loop_command: &Map<String, Value>) -> CommandLimits {
 
 /// A whole `f64` as an integer JSON number, else as a float.
 fn num_json(value: f64) -> Value {
-    if value.fract() == 0.0 && value.abs() < 9e15 { json!(value as i64) } else { json!(value) }
+    if value.fract() == 0.0 && value.abs() < 9e15 {
+        json!(value as i64)
+    } else {
+        json!(value)
+    }
 }
 
 fn truthy_number(value: &Value) -> Option<f64> {
@@ -113,7 +117,11 @@ pub fn compute_current_turn(loop_json: &Map<String, Value>, meta: &Value, number
     if let Some(turn) = loop_turn {
         return Some(num_json(turn));
     }
-    if turns_done != 0.0 { Some(num_json(turns_done)) } else { None }
+    if turns_done != 0.0 {
+        Some(num_json(turns_done))
+    } else {
+        None
+    }
 }
 
 /// Name of the repo folder (from meta.json when the engine wrote it), without the worktree suffix.
@@ -228,7 +236,8 @@ impl LoopPanelService<'_> {
         }
         meta_block.extend(build_turn_claude(&meta).as_object().cloned().unwrap_or_default());
         meta_block.insert("max_parallel_tasks".into(), loop_settings["settings"]["max_parallel_tasks"].clone());
-        meta_block.insert("max_parallel_tasks_in_header".into(), json!(!loop_settings["missing"].as_array().is_some_and(|m| m.iter().any(|k| k == "max_parallel_tasks"))));
+        meta_block
+            .insert("max_parallel_tasks_in_header".into(), json!(!loop_settings["missing"].as_array().is_some_and(|m| m.iter().any(|k| k == "max_parallel_tasks"))));
         let validate: Vec<String> = pycompat::splitlines(&files.read_state_file(&work_dir, "VALIDATE.md"))
             .into_iter()
             .map(str::trim)
@@ -324,7 +333,8 @@ impl LoopPanelService<'_> {
                     Some(note) => format!("{note} ({tries} failures)"),
                     None => format!("{tries} failures"),
                 };
-                let stuck: Vec<&Value> = features.iter().filter(|o| o["deps"].as_array().is_some_and(|d| d.contains(&feature["id"])) && o["status"] != "verified").map(|o| &o["id"]).collect();
+                let stuck: Vec<&Value> =
+                    features.iter().filter(|o| o["deps"].as_array().is_some_and(|d| d.contains(&feature["id"])) && o["status"] != "verified").map(|o| &o["id"]).collect();
                 json!({"id": feature["id"], "reason": reason, "stuck": stuck, "options": QUARANTINE_OPTIONS})
             })
             .collect()
@@ -369,7 +379,11 @@ impl LoopPanelService<'_> {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            if is_dir { folders.push(name) } else { names.push(name) }
+            if is_dir {
+                folders.push(name)
+            } else {
+                names.push(name)
+            }
         }
         names.sort();
         folders.sort();
@@ -403,7 +417,11 @@ impl LoopPanelService<'_> {
             .into_iter()
             .filter_map(|(folder, label)| {
                 let files = Self::list_map_files(&work_dir, &folder);
-                if files.is_empty() { None } else { Some(json!({"folder": folder, "label": label, "files": files})) }
+                if files.is_empty() {
+                    None
+                } else {
+                    Some(json!({"folder": folder, "label": label, "files": files}))
+                }
             })
             .collect();
         json!({"groups": groups})
@@ -418,7 +436,8 @@ impl LoopPanelService<'_> {
         }
         let not_found = || AppError::new(Kind::SpecFileNotFound, format!("file not found in the codebase maps: {text}"));
         let tree = self.build_codebase_tree(context);
-        let allowed: BTreeSet<&str> = tree["groups"].as_array().into_iter().flatten().flat_map(|g| g["files"].as_array().into_iter().flatten()).filter_map(|f| f["path"].as_str()).collect();
+        let allowed: BTreeSet<&str> =
+            tree["groups"].as_array().into_iter().flatten().flat_map(|g| g["files"].as_array().into_iter().flatten()).filter_map(|f| f["path"].as_str()).collect();
         if !allowed.contains(text.as_str()) {
             return Err(not_found());
         }
@@ -441,7 +460,9 @@ mod tests {
         assert_eq!(limits, CommandLimits { max_cost: 12.5, max_stall: 4, timeout: 60 });
         assert_eq!(effective_cost_cap(&json!({"max_cost_usd": 30}), &limits), json!(30));
         assert_eq!(effective_cost_cap(&json!({}), &limits), json!(12.5));
-        let answers = parse_answers("## Answer 2026-01-01 [applied]\nQuestion: Which db?\nUser answer: pg\n## Answer 2026-01-02\nQuestion: x\nUser answer: automatic answer used\n");
+        let answers = parse_answers(
+            "## Answer 2026-01-01 [applied]\nQuestion: Which db?\nUser answer: pg\n## Answer 2026-01-02\nQuestion: x\nUser answer: automatic answer used\n",
+        );
         assert_eq!((answers[0]["state"].clone(), answers[0]["question"].clone(), answers[0]["answer"].clone()), (json!("applied"), json!("Which db?"), json!("pg")));
         assert_eq!(answers[1]["state"], "automatic");
         assert_eq!(build_limit("cost", "cost", json!(5), json!(50.0), "USD")["pct"], 10.0);

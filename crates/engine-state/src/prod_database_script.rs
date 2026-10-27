@@ -9,7 +9,7 @@
 //!
 //! Nothing to script (no migration, no `.sql`) = no file. A failure never blocks a delivery: it becomes a warning in the result.
 
-use crate::loop_io::{run_timeout_raw, run_timeout};
+use crate::loop_io::{run_timeout, run_timeout_raw};
 use crate::loop_state::{feature_folder_name, parse_roadmap};
 use cfg::Env;
 use pycompat::{nt_abspath, nt_join, Re};
@@ -289,7 +289,11 @@ pub fn manual_scripts(spec_roots: &[&str], roadmap_root: &str) -> Vec<(String, S
 pub fn safe_name(text: &str) -> String {
     let cleaned = SAFE_NAME.replace_lit(text.trim(), "-");
     let trimmed = cleaned.trim_matches('-');
-    if trimmed.is_empty() { "project".into() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        "project".into()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 pub fn today_iso() -> String {
@@ -328,7 +332,11 @@ pub fn generate(
         match outcome {
             Ok(None) => {}
             Ok(Some((folder, first, last, body))) => {
-                sections.push(format!("-- ---- {}: migrations {first} -> {last} (project folder: {}) ----\n{body}\n", entry.name, if folder.is_empty() { "." } else { &folder }));
+                sections.push(format!(
+                    "-- ---- {}: migrations {first} -> {last} (project folder: {}) ----\n{body}\n",
+                    entry.name,
+                    if folder.is_empty() { "." } else { &folder }
+                ));
                 repos.push(json!(entry.name));
             }
             Err(error) => {
@@ -381,7 +389,12 @@ mod tests {
 
     #[test]
     fn ids_and_names() {
-        let ids = migration_ids(&["Api/Migrations/20260101120000_AddOrders.cs".into(), "Api/Migrations/20260101120000_AddOrders.Designer.cs".into(), "Api/Migrations/ModelSnapshot.cs".into(), "x/Other/20260101120000_A.cs".into()]);
+        let ids = migration_ids(&[
+            "Api/Migrations/20260101120000_AddOrders.cs".into(),
+            "Api/Migrations/20260101120000_AddOrders.Designer.cs".into(),
+            "Api/Migrations/ModelSnapshot.cs".into(),
+            "x/Other/20260101120000_A.cs".into(),
+        ]);
         assert_eq!(ids.into_iter().collect::<Vec<_>>(), vec![("Api".to_string(), "20260101120000_AddOrders".to_string())]);
         assert_eq!(safe_name("  my proj/x "), "my-proj-x");
         assert_eq!(safe_name("///"), "project");
@@ -415,7 +428,11 @@ mod tests {
         let result = generate(&env, "proj", &entries, &root, &out, None, Some("2026-01-02"), &[("proj".to_string(), "reference".to_string())], &[]);
         assert_eq!(result["sql_files"], json!(["b-two/x.sql", "a-one/1.sql", "a-one/2.sql"]));
         let text = std::fs::read_to_string(result["path"].as_str().unwrap()).unwrap();
-        assert!(text.starts_with("-- ====") && text.contains("-- Project: proj    Generated: 2026-01-02") && text.contains("-- ---- manual script: a-one/2.sql ----\nSELECT 2;\n"));
+        assert!(
+            text.starts_with("-- ====")
+                && text.contains("-- Project: proj    Generated: 2026-01-02")
+                && text.contains("-- ---- manual script: a-one/2.sql ----\nSELECT 2;\n")
+        );
         assert_eq!(result["warnings"], json!([]));
     }
 

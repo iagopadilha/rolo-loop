@@ -184,7 +184,10 @@ impl LoopWorktreeService<'_> {
             .iter()
             .filter(|w| {
                 let (path, branch) = (w["path"].as_str().unwrap_or(""), w["branch"].as_str().unwrap_or("").to_lowercase());
-                cited.iter().any(|item| !item.trim().is_empty() && (is_same_path(path, item) || [branch.clone(), pycompat::last_segment(path).to_lowercase()].contains(&item.trim().to_lowercase())))
+                cited.iter().any(|item| {
+                    !item.trim().is_empty()
+                        && (is_same_path(path, item) || [branch.clone(), pycompat::last_segment(path).to_lowercase()].contains(&item.trim().to_lowercase()))
+                })
             })
             .filter_map(|w| w["path"].as_str().map(String::from))
             .collect()
@@ -193,7 +196,8 @@ impl LoopWorktreeService<'_> {
     /// `delivery <target>` with LOOP_PR_MODE=off: push only, no PR; delivery refusals still apply.
     pub fn push_worktree_branch(&self, worktree: &Value) -> Value {
         let path = worktree["path"].as_str().unwrap_or("");
-        let result = self.app.engine_scripts().run_engine_script_and_wait("delivery", path, &[], SCRIPT_TIMEOUT_SECONDS, &[(PR_MODE_VARIABLE.into(), PR_MODE_OFF.into())]);
+        let result =
+            self.app.engine_scripts().run_engine_script_and_wait("delivery", path, &[], SCRIPT_TIMEOUT_SECONDS, &[(PR_MODE_VARIABLE.into(), PR_MODE_OFF.into())]);
         let returned = extract_last_json(&result.output);
         let push = returned.get("push").and_then(Value::as_str).map(|p| redact_secrets(p, Some(PUSH_LIMIT)));
         let output = if result.timed_out { TIMED_OUT_TEXT.to_string() } else { combine_output(&result.output, &result.error) };
@@ -233,7 +237,8 @@ impl LoopWorktreeService<'_> {
             let detail = if tail.is_empty() { "no output".to_string() } else { tail };
             return (folder.clone(), Some(format!("backup failed: loop_summary.py did not finish cleanly ({})", redact_secrets(&detail, Some(BACKUP_ERROR_LIMIT)))));
         }
-        let has_markdown = std::fs::read_dir(&folder).map(|entries| entries.flatten().any(|e| e.file_name().to_string_lossy().to_lowercase().ends_with(".md"))).unwrap_or(false);
+        let has_markdown =
+            std::fs::read_dir(&folder).map(|entries| entries.flatten().any(|e| e.file_name().to_string_lossy().to_lowercase().ends_with(".md"))).unwrap_or(false);
         if !has_markdown {
             return (folder.clone(), Some(format!("backup failed: the summary was not generated in {folder}")));
         }
@@ -287,7 +292,10 @@ impl LoopWorktreeService<'_> {
         if !deleted {
             item["error"] = json!("the folder is still there after git worktree remove");
         }
-        self.app.log.info(if deleted { "loop_worktree_deleted" } else { "loop_worktree_not_deleted" }, &[("project", json!(context.project.id)), ("branch", worktree["branch"].clone()), ("backup", json!(backup_dir))]);
+        self.app.log.info(
+            if deleted { "loop_worktree_deleted" } else { "loop_worktree_not_deleted" },
+            &[("project", json!(context.project.id)), ("branch", worktree["branch"].clone()), ("backup", json!(backup_dir))],
+        );
         item
     }
 
@@ -296,7 +304,8 @@ impl LoopWorktreeService<'_> {
     pub fn check_close_loop(&self, context: &ProjectContext) -> Result<Value, AppError> {
         let returned = self.run_close_loop_routine(context, &["--check".to_string()])?;
         let running = self.app.loop_status().is_loop_running(context);
-        let repos: Vec<Value> = returned.get("repos").and_then(Value::as_array).into_iter().flatten().filter(|i| i.is_object()).map(|i| Self::complete_repo_readiness(i, running)).collect();
+        let repos: Vec<Value> =
+            returned.get("repos").and_then(Value::as_array).into_iter().flatten().filter(|i| i.is_object()).map(|i| Self::complete_repo_readiness(i, running)).collect();
         let can_close = !repos.is_empty() && repos.iter().all(|r| r["can_close"] == true);
         Ok(json!({"ok": true, "can_close": can_close, "loop_finished": self.is_loop_finished(context), "repos": repos}))
     }
@@ -317,14 +326,18 @@ impl LoopWorktreeService<'_> {
         let force_remove = flag("force_remove", "force_remove must be true or false")?;
         let names: Option<Vec<String>> = match body.get("repos") {
             None | Some(Value::Null) => None,
-            Some(Value::Array(list)) if list.iter().all(|n| n.as_str().is_some_and(|s| !s.trim().is_empty())) => Some(list.iter().filter_map(Value::as_str).map(|s| s.trim().to_string()).collect()),
+            Some(Value::Array(list)) if list.iter().all(|n| n.as_str().is_some_and(|s| !s.trim().is_empty())) => {
+                Some(list.iter().filter_map(Value::as_str).map(|s| s.trim().to_string()).collect())
+            }
             Some(_) => return Err(AppError::invalid_request("repos must be a list of repo names")),
         };
         if self.app.loop_status().is_loop_running(context) {
             return Err(AppError::loop_running("the loop is running: stop it before closing").with_code(LOOP_RUNNING_CODE));
         }
         let mut arguments: Vec<String> = vec!["--close".into(), "--out".into(), self.get_output_dir()];
-        for (enabled, flag_text) in [(confirm, "--confirm-compare-link"), (allow_missing_pr, "--allow-missing-pr"), (finished, "--finished"), (force_remove, "--force-remove")] {
+        for (enabled, flag_text) in
+            [(confirm, "--confirm-compare-link"), (allow_missing_pr, "--allow-missing-pr"), (finished, "--finished"), (force_remove, "--force-remove")]
+        {
             if enabled {
                 arguments.push(flag_text.into()); // the engine still backs up first (typed confirmation is the caller's job)
             }
@@ -340,14 +353,23 @@ impl LoopWorktreeService<'_> {
         let mut result = returned.clone();
         result.insert("ok".into(), json!(true));
         result.insert("repos".into(), Value::Object(repos.clone()));
-        let named = |closed: bool| -> Vec<&String> { repos.iter().filter(|(_, item)| item.is_object() && (item["status"] == "closed") == closed).map(|(name, _)| name).collect() };
+        let named = |closed: bool| -> Vec<&String> {
+            repos.iter().filter(|(_, item)| item.is_object() && (item["status"] == "closed") == closed).map(|(name, _)| name).collect()
+        };
         if !result.contains_key("closed") {
             result.insert("closed".into(), json!(named(true)));
         }
         if !result.contains_key("kept") {
             result.insert("kept".into(), json!(named(false)));
         }
-        self.app.log.info("close_loop_done", &[("project", json!(context.project.id)), ("closed", json!(result["closed"].as_array().map_or(0, Vec::len))), ("kept", json!(result["kept"].as_array().map_or(0, Vec::len)))]);
+        self.app.log.info(
+            "close_loop_done",
+            &[
+                ("project", json!(context.project.id)),
+                ("closed", json!(result["closed"].as_array().map_or(0, Vec::len))),
+                ("kept", json!(result["kept"].as_array().map_or(0, Vec::len))),
+            ],
+        );
         Ok(Value::Object(result))
     }
 
@@ -362,9 +384,15 @@ impl LoopWorktreeService<'_> {
             } else {
                 let text = if result.error.is_empty() { result.output.trim() } else { result.error.trim() };
                 let tail: String = text.chars().rev().take(BACKUP_ERROR_LIMIT).collect::<Vec<_>>().into_iter().rev().collect();
-                if tail.is_empty() { "no output".to_string() } else { tail }
+                if tail.is_empty() {
+                    "no output".to_string()
+                } else {
+                    tail
+                }
             };
-            return Err(AppError::new(Kind::RepoConflict, format!("close routine failed: {}", redact_secrets(&detail, Some(BACKUP_ERROR_LIMIT)))).with_code(CLOSE_FAILED_CODE));
+            return Err(
+                AppError::new(Kind::RepoConflict, format!("close routine failed: {}", redact_secrets(&detail, Some(BACKUP_ERROR_LIMIT)))).with_code(CLOSE_FAILED_CODE)
+            );
         }
         Ok(returned)
     }

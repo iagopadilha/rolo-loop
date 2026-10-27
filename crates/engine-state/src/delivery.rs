@@ -183,7 +183,6 @@ pub struct Options<'a> {
     pub own_name: &'a str,
 }
 
-
 /// Push of the feature branch + PR. Returns `{"push", "pr", "pr_status"}`; never fails; never forces or merges.
 pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {
     let roadmap_root = if o.roadmap_root.is_empty() { root } else { o.roadmap_root };
@@ -195,7 +194,14 @@ pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {
     let branch = if o.branch.is_empty() { git(root, &["branch", "--show-current"]).1 } else { o.branch.to_string() };
     let chosen = if o.base.is_empty() { roadmap_base_branch(roadmap_root) } else { o.base.to_string() };
     let base = integration_branch(env, &chosen);
-    let mode = { let m = env.text("LOOP_PR_MODE"); if m.is_empty() { "auto".to_string() } else { m.to_lowercase() } };
+    let mode = {
+        let m = env.text("LOOP_PR_MODE");
+        if m.is_empty() {
+            "auto".to_string()
+        } else {
+            m.to_lowercase()
+        }
+    };
     if branch.is_empty() {
         set(&mut result, "push", json!("not done: detached HEAD (no branch)"));
     } else if !valid_branch_name(root, &branch) {
@@ -220,7 +226,11 @@ pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {
         } else {
             let refspec = format!("refs/heads/{branch}:refs/heads/{branch}"); // explicit refspec: never a force, never another ref
             let (code, out, err) = run_git_push(root, &refspec);
-            if code == 0 { format!("done: origin/{branch}") } else { format!("FAILED: {}", clip(if err.is_empty() { &out } else { &err }, 300)) }
+            if code == 0 {
+                format!("done: origin/{branch}")
+            } else {
+                format!("FAILED: {}", clip(if err.is_empty() { &out } else { &err }, 300))
+            }
         };
         set(&mut result, "push", json!(push));
         if (push.starts_with("done") || push.starts_with("dry-run")) && mode != "off" {
@@ -320,7 +330,16 @@ pub fn attach_prod_database(env: &Env, primary_work: &str, meta: &Value, result:
 
 /// Delivery of the whole project. Without a `repos` map this IS the single-repo delivery; with it: one `finalize` per repo,
 /// the primary first, then the sibling links are written into the PR bodies this run created.
-pub fn finalize_project(env: &mut Env, primary_work: &str, meta: &Value, draft: bool, dry_run: bool, output_dir: &str, runner: Option<prod::Runner>, base: &str) -> Map<String, Value> {
+pub fn finalize_project(
+    env: &mut Env,
+    primary_work: &str,
+    meta: &Value,
+    draft: bool,
+    dry_run: bool,
+    output_dir: &str,
+    runner: Option<prod::Runner>,
+    base: &str,
+) -> Map<String, Value> {
     let base = if base.is_empty() { roadmap_base_branch(primary_work) } else { base.to_string() };
     let Some(repos) = meta.get("repos").and_then(Value::as_object).filter(|r| !r.is_empty()) else {
         let branch = meta.get("branch").and_then(Value::as_str).unwrap_or("");
@@ -358,7 +377,8 @@ pub fn finalize_project(env: &mut Env, primary_work: &str, meta: &Value, draft: 
         };
         results.push(((*name).clone(), item));
     }
-    let links: Vec<(String, String)> = results.iter().filter_map(|(n, r)| r.get("pr").and_then(Value::as_str).filter(|p| !p.is_empty()).map(|p| (n.clone(), p.to_string()))).collect();
+    let links: Vec<(String, String)> =
+        results.iter().filter_map(|(n, r)| r.get("pr").and_then(Value::as_str).filter(|p| !p.is_empty()).map(|p| (n.clone(), p.to_string()))).collect();
     if links.len() > 1 {
         for (name, result) in &results {
             if result.get("pr_status").and_then(Value::as_str) == Some("PR created") {
@@ -392,7 +412,11 @@ pub fn run_cli(args: &[String], env: &mut Env) -> (i32, String, String) {
     while i < args.len() {
         match args[i].as_str() {
             "--branch" | "--base" if i + 1 < args.len() => {
-                if args[i] == "--branch" { branch = args[i + 1].clone() } else { base = args[i + 1].clone() }
+                if args[i] == "--branch" {
+                    branch = args[i + 1].clone()
+                } else {
+                    base = args[i + 1].clone()
+                }
                 i += 1;
             }
             "--draft" => draft = true,

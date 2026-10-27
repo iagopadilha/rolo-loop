@@ -26,11 +26,24 @@ pub const SECRETS_FOLDER_NAME: &str = ".secrets";
 pub const MCP_CONFIG_FILE_NAME: &str = "mcp-access.json";
 /// The public Grafana MCP server: its read tools and its writers are known (a loop gets the reads only).
 pub const GRAFANA_SERVER: &str = "grafana";
-pub const GRAFANA_READ_TOOL_NAMES: [&str; 7] = ["query_loki_logs", "list_loki_label_names", "list_loki_label_values", "query_loki_stats", "query_loki_patterns", "find_error_pattern_logs", "list_datasources"];
+pub const GRAFANA_READ_TOOL_NAMES: [&str; 7] =
+    ["query_loki_logs", "list_loki_label_names", "list_loki_label_values", "query_loki_stats", "query_loki_patterns", "find_error_pattern_logs", "list_datasources"];
 /// Belt and braces for Grafana: these writers are denied by name too (a deny rule beats an allow rule in any user setting).
 pub const GRAFANA_DENIED_WRITE_TOOL_NAMES: [&str; 14] = [
-    "create_annotation", "update_annotation", "create_incident", "add_activity_to_incident", "update_dashboard", "create_folder", "create_datasource",
-    "update_datasource", "create_snapshot", "delete_snapshot", "install_plugin", "alerting_manage_rules", "alerting_manage_routing", "grafana_api_request",
+    "create_annotation",
+    "update_annotation",
+    "create_incident",
+    "add_activity_to_incident",
+    "update_dashboard",
+    "create_folder",
+    "create_datasource",
+    "update_datasource",
+    "create_snapshot",
+    "delete_snapshot",
+    "install_plugin",
+    "alerting_manage_rules",
+    "alerting_manage_routing",
+    "grafana_api_request",
 ];
 
 static STRICT_INVALID: LazyLock<Re> = LazyLock::new(|| Re::new(r"[^A-Za-z0-9_-]"));
@@ -129,7 +142,11 @@ pub fn describe_policy(env: &Env, claude_json: Option<&str>, project_root: &str)
     names.extend(extra_server_keys(&policy));
     let definitions = read_server_definitions(env, claude_json, &names, project_root);
     let found = |name: &str| definitions.iter().any(|(n, _)| n == name);
-    let rows: Vec<Value> = policy.servers.iter().map(|(name, o)| json!({"server": name, "allow": o.allow, "kind": o.kind, "production": o.production, "read_only": o.read_only, "found": found(name)})).collect();
+    let rows: Vec<Value> = policy
+        .servers
+        .iter()
+        .map(|(name, o)| json!({"server": name, "allow": o.allow, "kind": o.kind, "production": o.production, "read_only": o.read_only, "found": found(name)}))
+        .collect();
     let mut warnings: Vec<String> = policy.notes.clone();
     if !policy.broken.is_empty() {
         warnings.push(format!("{} is unreadable: no MCP server is allowed for loops until it is fixed", policy.broken));
@@ -230,7 +247,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.path().join("claude.json"), r#"{"mcpServers": {"grafana": {"url": "http://g.example.com"}, "tool": {"command": "t"}}}"#).unwrap();
-        let env = Env::from_pairs([("LOOP_CLAUDE_CONFIG_FILE", dir.path().join("claude.json").display().to_string()), ("LOOP_CLAUDE_HOME", dir.path().join("none").display().to_string()), ("LOOP_DATA_DIR", data.display().to_string())]);
+        let env = Env::from_pairs([
+            ("LOOP_CLAUDE_CONFIG_FILE", dir.path().join("claude.json").display().to_string()),
+            ("LOOP_CLAUDE_HOME", dir.path().join("none").display().to_string()),
+            ("LOOP_DATA_DIR", data.display().to_string()),
+        ]);
         (dir, env, data)
     }
 

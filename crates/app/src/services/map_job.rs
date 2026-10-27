@@ -103,7 +103,21 @@ fn path_refs(items: &[String]) -> Vec<&str> {
 impl MapJobRunner<'_> {
     /// Registers the job (202 path) and returns its public record at once.
     pub fn start(&self, params: MapStart) -> Result<Value, AppError> {
-        let MapStart { repo_path, project_id, budget_usd, mut prompt, work_dir, allowed_folders, ignored_paths, map_root, model, hook_profile, job_type, extra_before_start, parallel_key } = params;
+        let MapStart {
+            repo_path,
+            project_id,
+            budget_usd,
+            mut prompt,
+            work_dir,
+            allowed_folders,
+            ignored_paths,
+            map_root,
+            model,
+            hook_profile,
+            job_type,
+            extra_before_start,
+            parallel_key,
+        } = params;
         let holder: Arc<Mutex<Option<WorkspaceSnapshot>>> = Arc::new(Mutex::new(None));
         let map_root_path = if map_root.is_empty() { PathBuf::from(&repo_path) } else { Path::new(&repo_path).join(&map_root) };
         let map_folder = run_hints::MAP_FOLDER.split('/').fold(map_root_path.clone(), |a, p| a.join(p));
@@ -126,7 +140,8 @@ impl MapJobRunner<'_> {
             }
             Ok(None)
         });
-        let options = CommandOptions { model, budget_usd, no_mcp: true, prompt_argument: prompt, permission_mode: JOB_PERMISSION_MODE.into(), hook_profile, ..Default::default() };
+        let options =
+            CommandOptions { model, budget_usd, no_mcp: true, prompt_argument: prompt, permission_mode: JOB_PERMISSION_MODE.into(), hook_profile, ..Default::default() };
         let argv = self.app.claude.build_command(&options);
         let finish_app = self.app.shared();
         let (finish_holder, finish_project, finish_repo, finish_root, finish_folder) = (holder, project_id, repo_path.clone(), map_root_path, map_folder);
@@ -134,13 +149,24 @@ impl MapJobRunner<'_> {
         command.work_dir = work_dir;
         command.parallel_key = parallel_key;
         command.before_start = Some(before_start);
-        command.finalize = Some(Box::new(move |result| finish_app.map_jobs().finish(&finish_project, &finish_repo, &finish_root, &finish_folder, &finish_holder, &allowed_folders, result)));
+        command.finalize = Some(Box::new(move |result| {
+            finish_app.map_jobs().finish(&finish_project, &finish_repo, &finish_root, &finish_folder, &finish_holder, &allowed_folders, result)
+        }));
         self.app.jobs().start_job(&repo_path, &job_type, command)
     }
 
     /// Runs in the job thread: undoes changes outside the allowed folders, fails the job when no map document was written and writes the index and
     /// the `CODEBASE` block.
-    fn finish(&self, project_id: &str, repo_path: &str, map_root_path: &Path, map_folder: &Path, holder: &Arc<Mutex<Option<WorkspaceSnapshot>>>, allowed_folders: &[String], result: Value) -> Value {
+    fn finish(
+        &self,
+        project_id: &str,
+        repo_path: &str,
+        map_root_path: &Path,
+        map_folder: &Path,
+        holder: &Arc<Mutex<Option<WorkspaceSnapshot>>>,
+        allowed_folders: &[String],
+        result: Value,
+    ) -> Value {
         let snapshot = holder.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let Some(snapshot) = snapshot else { return result };
         let report = WorkspaceFileGuard::default().revert_unexpected_changes(&snapshot, &path_refs(allowed_folders));
@@ -149,7 +175,10 @@ impl MapJobRunner<'_> {
         let touched: Vec<String> = reverted.iter().chain(&removed).chain(&unrestorable).cloned().collect();
         if !touched.is_empty() {
             let head = |items: &[String]| json!(items.iter().take(50).collect::<Vec<_>>());
-            self.app.log.warn("map_guard_reverted", &[("project", json!(project_id)), ("reverted", head(&reverted)), ("removed", head(&removed)), ("unrestorable", head(&unrestorable))]);
+            self.app.log.warn(
+                "map_guard_reverted",
+                &[("project", json!(project_id)), ("reverted", head(&reverted)), ("removed", head(&removed)), ("unrestorable", head(&unrestorable))],
+            );
         }
         let mut result = result;
         let ok = engine_state::notify_truthy(result.get("ok"));

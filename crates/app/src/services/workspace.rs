@@ -47,7 +47,8 @@ const SETUP_SET_UP: &str = "set_up";
 const SETUP_MAP_MISSING: &str = "map_missing";
 const SETUP_MAPPING: &str = "mapping";
 const MAP_JOB_TYPE: &str = "map";
-const EXPLANATION: &str = "The loop works in a separate folder (a git worktree) on a new loop/<date> branch, so your folder and branch are never touched. Nothing is pushed until you deliver.";
+const EXPLANATION: &str =
+    "The loop works in a separate folder (a git worktree) on a new loop/<date> branch, so your folder and branch are never touched. Nothing is pushed until you deliver.";
 const UNCOMMITTED_NOTE: &str = "Your folder has uncommitted changes. The worktree is born from the last commit and does not carry them.";
 const MISSING_NOTE: &str = "The repo folder does not exist anymore; restore it or remove the repo from the list.";
 /// Copied at creation by the engine; not the user's copy list.
@@ -204,11 +205,20 @@ impl WorkspaceService<'_> {
     }
 
     fn integration_branch(&self, context: &ProjectContext) -> String {
-        let text = std::fs::read(Path::new(&context.specs_dir()).join("project").join("ROADMAP.md")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        let text =
+            std::fs::read(Path::new(&context.specs_dir()).join("project").join("ROADMAP.md")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
         get_integration_branch(self.app, &text)
     }
 
-    fn describe_repo(&self, context: &ProjectContext, repo: &RepoRef, meta: &Map<String, Value>, loop_running: bool, setup: Option<String>, changed: Option<&BTreeSet<String>>) -> Value {
+    fn describe_repo(
+        &self,
+        context: &ProjectContext,
+        repo: &RepoRef,
+        meta: &Map<String, Value>,
+        loop_running: bool,
+        setup: Option<String>,
+        changed: Option<&BTreeSet<String>>,
+    ) -> Value {
         let (folder, worktree) = (repo.path.clone(), repo.loop_worktree_path());
         let (folder_exists, worktree_exists) = (Path::new(&folder).is_dir(), Path::new(&worktree).is_dir());
         let recorded: Map<String, Value> = match meta.get("repos") {
@@ -244,7 +254,13 @@ impl WorkspaceService<'_> {
             }
         } else {
             dirty = self.has_changes_outside_specs(&worktree);
-            state = if loop_running { STATE_LOOP_RUNNING } else if dirty { STATE_DIRTY } else { STATE_READY };
+            state = if loop_running {
+                STATE_LOOP_RUNNING
+            } else if dirty {
+                STATE_DIRTY
+            } else {
+                STATE_READY
+            };
         }
         let mut description = Map::new();
         for (key, value) in [
@@ -269,7 +285,11 @@ impl WorkspaceService<'_> {
         ] {
             description.insert(key.into(), value);
         }
-        let branches = if folder_exists { self.describe_branches(&folder, &self.integration_branch(context)) } else { json!({"current_branch": null, "base_branch": null, "base_sha": null, "upstream": null}) };
+        let branches = if folder_exists {
+            self.describe_branches(&folder, &self.integration_branch(context))
+        } else {
+            json!({"current_branch": null, "base_branch": null, "base_sha": null, "upstream": null})
+        };
         description.extend(branches.as_object().cloned().unwrap_or_default());
         description.insert("setup".into(), if folder_exists { self.describe_setup_state(context, repo) } else { json!({"state": SETUP_NOT_SET_UP, "monorepo": false}) });
         let changes = if folder_exists && !read_only { self.classify_user_folder(context, repo) } else { json!({"setup_files": [], "other_changes": []}) };
@@ -286,11 +306,19 @@ impl WorkspaceService<'_> {
         let base = if code == 0 { Some(integration.to_string()) } else { current.clone() };
         let base_sha = base.as_ref().and_then(|b| {
             let (code, output, _) = git.run_git(folder, &["rev-parse", "--short", &format!("refs/heads/{b}")]);
-            if code == 0 && !output.is_empty() { Some(output) } else { None }
+            if code == 0 && !output.is_empty() {
+                Some(output)
+            } else {
+                None
+            }
         });
         let upstream = current.as_ref().and_then(|c| {
             let (code, output, _) = git.run_git(folder, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", &format!("{c}@{{upstream}}")]);
-            if code == 0 && !output.is_empty() { Some(output) } else { None }
+            if code == 0 && !output.is_empty() {
+                Some(output)
+            } else {
+                None
+            }
         });
         json!({"current_branch": current, "base_branch": base, "base_sha": base_sha, "upstream": upstream})
     }
@@ -322,7 +350,7 @@ impl WorkspaceService<'_> {
             return json!({"state": SETUP_MAPPING, "monorepo": monorepo});
         }
         let needs_conformance = repo.role != project_repos::ROLE_REFERENCE;
-        
+
         let missing_map = if monorepo {
             let entry = entry.as_ref().unwrap();
             if entry.get("confirmed") != Some(&Value::Bool(true)) {
@@ -471,7 +499,13 @@ impl WorkspaceService<'_> {
             return Err(repo_conflict(format!("`{branch}` is a protected branch: the app never commits or pushes there"), NOT_LOOP_BRANCH_CODE));
         }
         if !branch.starts_with(LOOP_BRANCH_PREFIX) {
-            return Err(repo_conflict(format!("{USER_FOLDER_REFUSAL}: the worktree is not on a {LOOP_BRANCH_PREFIX}* branch (it is on `{}`)", if branch.is_empty() { "detached HEAD" } else { &branch }), NOT_LOOP_BRANCH_CODE));
+            return Err(repo_conflict(
+                format!(
+                    "{USER_FOLDER_REFUSAL}: the worktree is not on a {LOOP_BRANCH_PREFIX}* branch (it is on `{}`)",
+                    if branch.is_empty() { "detached HEAD" } else { &branch }
+                ),
+                NOT_LOOP_BRANCH_CODE,
+            ));
         }
         let text = match message {
             None | Some(Value::Null) => Some(String::new()),
@@ -482,11 +516,24 @@ impl WorkspaceService<'_> {
             return Err(invalid_repo(format!("the commit message must be one line of up to {COMMIT_MESSAGE_LIMIT} characters")));
         };
         let outcome = self.app.git.commit_all_and_push(&worktree, if text.is_empty() { DEFAULT_COMMIT_MESSAGE } else { &text }, push);
-        self.app.log.info("workspace_commit_push", &[("project", json!(context.project.id)), ("repo", json!(repo.name)), ("ok", outcome["ok"].clone()), ("committed", outcome["committed"].clone()), ("pushed", outcome["pushed"].clone())]);
+        self.app.log.info(
+            "workspace_commit_push",
+            &[
+                ("project", json!(context.project.id)),
+                ("repo", json!(repo.name)),
+                ("ok", outcome["ok"].clone()),
+                ("committed", outcome["committed"].clone()),
+                ("pushed", outcome["pushed"].clone()),
+            ],
+        );
         if outcome["ok"] != true {
-            return Err(repo_conflict(outcome["error"].as_str().unwrap_or(""), COMMIT_FAILED_CODE).with_extra("committed", outcome["committed"].clone()).with_extra("branch", outcome["branch"].clone()));
+            return Err(repo_conflict(outcome["error"].as_str().unwrap_or(""), COMMIT_FAILED_CODE)
+                .with_extra("committed", outcome["committed"].clone())
+                .with_extra("branch", outcome["branch"].clone()));
         }
-        Ok(json!({"ok": true, "repo": repo.name, "branch": outcome["branch"], "committed": outcome["committed"], "pushed": outcome["pushed"], "commit": outcome["commit"]}))
+        Ok(
+            json!({"ok": true, "repo": repo.name, "branch": outcome["branch"], "committed": outcome["committed"], "pushed": outcome["pushed"], "commit": outcome["commit"]}),
+        )
     }
 
     // ------------------------------------------------ create
@@ -505,7 +552,10 @@ impl WorkspaceService<'_> {
             Err(failure) if failure.kind == Kind::JobInProgress => return Err(repo_conflict(failure.message, BUSY_CODE)),
             Err(failure) => return Err(failure),
         };
-        self.app.log.info("workspace_create_started", &[("project", json!(context.project.id)), ("repos", json!(targets.iter().map(|r| r.name.clone()).collect::<Vec<_>>().join(",")))]);
+        self.app.log.info(
+            "workspace_create_started",
+            &[("project", json!(context.project.id)), ("repos", json!(targets.iter().map(|r| r.name.clone()).collect::<Vec<_>>().join(",")))],
+        );
         Ok(json!({"ok": true, "job_id": job["id"]}))
     }
 
@@ -555,7 +605,10 @@ impl WorkspaceService<'_> {
             add_step(json!({"at": now_iso(), "repo": repo.name, "kind": "reuse", "text": format!("worktree already exists: {}", repo.loop_worktree_path())}));
             let branch = Some(git.get_current_branch(&repo.loop_worktree_path())).filter(|b| !b.is_empty());
             let base = Some(git.get_current_branch(&repo.path)).filter(|b| !b.is_empty());
-            created.lock().unwrap_or_else(|e| e.into_inner()).insert(repo.name.clone(), json!({"worktree": repo.loop_worktree_path(), "branch": branch, "base": base, "reattached": false, "copied": []}));
+            created
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(repo.name.clone(), json!({"worktree": repo.loop_worktree_path(), "branch": branch, "base": base, "reattached": false, "copied": []}));
         }
         if to_create.is_empty() {
             return json!({"ok": true, "result": {"repos": created.into_inner().unwrap_or_default()}, "error": ""});
@@ -588,9 +641,16 @@ impl WorkspaceService<'_> {
             }
         };
         let names: Vec<String> = to_create.iter().map(|r| r.name.clone()).collect();
-        let failure = EngineWorktreeAdapter { app: self.app }.run(&primary.path, &names, &loop_state::loop_path(context.repo_path(), CREATE_LOG_FILE_NAME), &mut on_output_line, CREATE_TIMEOUT_SECONDS);
+        let failure = EngineWorktreeAdapter { app: self.app }.run(
+            &primary.path,
+            &names,
+            &loop_state::loop_path(context.repo_path(), CREATE_LOG_FILE_NAME),
+            &mut on_output_line,
+            CREATE_TIMEOUT_SECONDS,
+        );
         let created = created.into_inner().unwrap_or_default();
-        let missing: Vec<&str> = to_create.iter().filter(|r| !created.get(&r.name).is_some_and(|e| engine_state::notify_truthy(e.get("worktree")))).map(|r| r.name.as_str()).collect();
+        let missing: Vec<&str> =
+            to_create.iter().filter(|r| !created.get(&r.name).is_some_and(|e| engine_state::notify_truthy(e.get("worktree")))).map(|r| r.name.as_str()).collect();
         if failure.is_some() || !missing.is_empty() {
             let last_line = output_tail.lock().unwrap_or_else(|e| e.into_inner()).iter().rev().find(|l| !l.trim().is_empty()).cloned().unwrap_or_default();
             let reason = failure.filter(|f| !f.is_empty()).or(Some(last_line).filter(|l| !l.is_empty())).unwrap_or_else(|| "the engine did not report a worktree".into());
@@ -602,14 +662,16 @@ impl WorkspaceService<'_> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn step_lines_of_the_engine_are_parsed() {
-        assert_eq!(parse_step_line("[loop] [api] ready: path=C:\\w branch=loop/x base=main", "web"), Some(Step { repo: "api".into(), kind: "ready".into(), text: "path=C:\\w branch=loop/x base=main".into() }));
+        assert_eq!(
+            parse_step_line("[loop] [api] ready: path=C:\\w branch=loop/x base=main", "web"),
+            Some(Step { repo: "api".into(), kind: "ready".into(), text: "path=C:\\w branch=loop/x base=main".into() })
+        );
         assert_eq!(parse_step_line("[loop] copy: .env, CLAUDE.md", "web").unwrap().repo, "web");
         assert_eq!(parse_step_line("[loop] reusing worktree C:\\w on branch loop/x", "web").unwrap().text, "reusing worktree C:\\w on branch loop/x");
         assert_eq!(parse_step_line("[loop] worktree created: C:\\w (branch loop/x, base main; setup)", "web").unwrap().text, "path=C:\\w branch=loop/x base=main");
@@ -626,7 +688,10 @@ mod tests {
         let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
         let service = app.workspace();
         let view = service.get_workspace(&context);
-        assert_eq!((view["multi"].clone(), view["repos"][0]["state"].clone(), view["repos"][0]["worktree_exists"].clone(), view["defined"].clone()), (json!(false), json!("not_created"), json!(false), json!(true)));
+        assert_eq!(
+            (view["multi"].clone(), view["repos"][0]["state"].clone(), view["repos"][0]["worktree_exists"].clone(), view["defined"].clone()),
+            (json!(false), json!("not_created"), json!(false), json!(true))
+        );
         assert_eq!(view["repos"][0]["setup"], json!({"state": "not_set_up", "monorepo": false}));
         assert_eq!(service.commit_and_push(&context, "proj", None, Some(&json!("yes"))).unwrap_err().message, "push must be true or false");
         assert_eq!(service.commit_and_push(&context, "proj", None, None).unwrap_err().code.as_deref(), Some("user_folder_refused"));

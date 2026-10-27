@@ -97,13 +97,9 @@ pub fn list_project_slug_variants(work_dir: &str) -> Vec<String> {
 pub fn extract_block_text(content: &Value) -> String {
     match content {
         Value::String(s) => s.clone(),
-        Value::Array(blocks) => blocks
-            .iter()
-            .filter_map(Value::as_object)
-            .filter_map(|b| b.get("text").filter(|t| !t.is_null()))
-            .map(text_of)
-            .collect::<Vec<_>>()
-            .join("\n"),
+        Value::Array(blocks) => {
+            blocks.iter().filter_map(Value::as_object).filter_map(|b| b.get("text").filter(|t| !t.is_null())).map(text_of).collect::<Vec<_>>().join("\n")
+        }
         _ => String::new(),
     }
 }
@@ -319,7 +315,8 @@ impl TranscriptReader {
                         item.insert("result".into(), json!(format!("{GUARD_EXIT_LABEL} · [{rule}] {reason}")));
                     }
                 }
-            } else if kind == Some("text") && !text_field(block, "text").trim().is_empty() && !text_field(block, "text").trim_start().starts_with(SYSTEM_REMINDER_PREFIX) {
+            } else if kind == Some("text") && !text_field(block, "text").trim().is_empty() && !text_field(block, "text").trim_start().starts_with(SYSTEM_REMINDER_PREFIX)
+            {
                 let text = text_field(block, "text");
                 self.add_item(if self.prompt.is_some() { "user" } else { "sys" }, &text, moment);
                 if self.prompt.is_none() && self.last_action.is_none() {
@@ -452,7 +449,8 @@ pub fn read_turn_session_id(work_dir: &str, turn_number: u64) -> Option<String> 
 /// and a missing field.
 pub fn read_transcript_summary(path: &Path) -> Option<Value> {
     let bytes = std::fs::read(path).ok()?;
-    let (mut prompt, mut handback_return, mut last_text, mut last_stop_reason): (Option<String>, Option<String>, Option<String>, Option<String>) = (None, None, None, None);
+    let (mut prompt, mut handback_return, mut last_text, mut last_stop_reason): (Option<String>, Option<String>, Option<String>, Option<String>) =
+        (None, None, None, None);
     let mut actions: Vec<Value> = Vec::new();
     let append_action = |actions: &mut Vec<Value>, kind: &str, text: &str| {
         if actions.len() < LOG_ITEMS_LIMIT {
@@ -550,7 +548,12 @@ impl ClaudeTranscriptRepository {
     }
 
     pub fn with_cache_limit(transcripts_dir: &str, cache_limit: usize) -> Self {
-        ClaudeTranscriptRepository { transcripts_dir: PathBuf::from(pycompat::nt_abspath(transcripts_dir)), cache_limit, cache: Mutex::new(Vec::new()), parse_count: 0.into() }
+        ClaudeTranscriptRepository {
+            transcripts_dir: PathBuf::from(pycompat::nt_abspath(transcripts_dir)),
+            cache_limit,
+            cache: Mutex::new(Vec::new()),
+            parse_count: 0.into(),
+        }
     }
 
     /// Parsed transcript with a cache by (mtime, size). `None` = missing or unreadable.
@@ -641,7 +644,10 @@ mod tests {
         std::fs::write(&path, sample()).unwrap();
         let repository = ClaudeTranscriptRepository::new(&dir.path().display().to_string());
         let result = repository.read_transcript(&path).unwrap();
-        assert_eq!((result["feature"].clone(), result["tokens"].clone(), result["duration_s"].clone(), result["final"].clone()), (json!("login-page"), json!(15), json!(60), json!(true)));
+        assert_eq!(
+            (result["feature"].clone(), result["tokens"].clone(), result["duration_s"].clone(), result["final"].clone()),
+            (json!("login-page"), json!(15), json!(60), json!(true))
+        );
         assert_eq!((result["return_status"].clone(), result["failed"].clone()), (json!("DONE"), json!(false)));
         assert_eq!(result["decision"], "all good token=[redacted]");
         let log = result["log"].as_array().unwrap();

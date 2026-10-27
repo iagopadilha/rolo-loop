@@ -138,7 +138,10 @@ fn add_dependency_clarity(features: &mut [Map<String, Value>], parsed: &loop_sta
     for feature in features.iter_mut() {
         let id = str_of(feature, "id").to_string();
         let (slugs, folders) = loop_state::split_deps(parsed.get(&id).unwrap());
-        feature.insert("depends_on".into(), json!(slugs.iter().map(|d| json!({"id": d, "status": status_by_id.get(d).cloned().unwrap_or(Value::Null)})).collect::<Vec<_>>()));
+        feature.insert(
+            "depends_on".into(),
+            json!(slugs.iter().map(|d| json!({"id": d, "status": status_by_id.get(d).cloned().unwrap_or(Value::Null)})).collect::<Vec<_>>()),
+        );
         feature.insert("dep_dirs".into(), json!(folders));
         for dependency in &slugs {
             if let Some(list) = unblocked.get_mut(dependency) {
@@ -183,7 +186,11 @@ fn add_wave_summary(features: &mut [Map<String, Value>], parsed: &loop_state::Fe
                 let paths: Vec<Vec<String>> = members.iter().map(|m| path_list(parsed.get(m).unwrap())).collect();
                 let disjoint = paths.iter().all(|p| !p.is_empty())
                     && !(0..members.len()).any(|i| (i + 1..members.len()).any(|j| paths[i].iter().any(|x| paths[j].iter().any(|y| are_paths_overlapping(x, y)))));
-                if independent && disjoint { WAVE_REASON_DISJOINT.to_string() } else { WAVE_REASON_TOGETHER.to_string() }
+                if independent && disjoint {
+                    WAVE_REASON_DISJOINT.to_string()
+                } else {
+                    WAVE_REASON_TOGETHER.to_string()
+                }
             } else {
                 match feature.get("regression").and_then(Value::as_str).filter(|r| !r.is_empty()) {
                     Some(regression) => format!("runs alone in the wave (regression={regression})"),
@@ -236,7 +243,12 @@ impl RoadmapViewService<'_> {
         let number_by_label: HashMap<&str, i64> = labels
             .iter()
             .enumerate()
-            .map(|(index, label)| (label.as_str(), if !label.is_empty() && label.chars().all(|c| c.is_ascii_digit()) { label.parse().unwrap_or(index as i64 + 1) } else { index as i64 + 1 }))
+            .map(|(index, label)| {
+                (
+                    label.as_str(),
+                    if !label.is_empty() && label.chars().all(|c| c.is_ascii_digit()) { label.parse().unwrap_or(index as i64 + 1) } else { index as i64 + 1 },
+                )
+            })
             .collect();
         let mut stages: Vec<Map<String, Value>> = Vec::new();
         for label in &labels {
@@ -293,8 +305,14 @@ impl RoadmapViewService<'_> {
             counts.insert(status.to_string(), json!(features.iter().filter(|f| str_of(f, "status") == status).count()));
         }
         counts.insert("total".into(), json!(features.len()));
-        let edges: Vec<Value> = parsed.iter().flat_map(|(slug, fields)| loop_state::split_deps(fields).0.into_iter().filter(|d| parsed.contains(d)).map(move |d| json!([d, slug]))).collect();
-        (stages.into_iter().map(Value::Object).collect(), features.into_iter().map(Value::Object).collect(), Value::Object(counts), json!({"nodes": slugs, "edges": edges}))
+        let edges: Vec<Value> =
+            parsed.iter().flat_map(|(slug, fields)| loop_state::split_deps(fields).0.into_iter().filter(|d| parsed.contains(d)).map(move |d| json!([d, slug]))).collect();
+        (
+            stages.into_iter().map(Value::Object).collect(),
+            features.into_iter().map(Value::Object).collect(),
+            Value::Object(counts),
+            json!({"nodes": slugs, "edges": edges}),
+        )
     }
 
     /// Readable name of a feature: the `title="..."` of its ROADMAP line (what the user approved), else the first heading of its spec.md (without
@@ -421,13 +439,24 @@ impl RoadmapViewService<'_> {
         Value::Object(closing)
     }
 
-    fn add_stage_summaries(&self, work_dir: &str, stages: &mut [Map<String, Value>], features: &[Map<String, Value>], text: &str, waves: &[(u64, Vec<String>)], labels: &[String]) {
+    fn add_stage_summaries(
+        &self,
+        work_dir: &str,
+        stages: &mut [Map<String, Value>],
+        features: &[Map<String, Value>],
+        text: &str,
+        waves: &[(u64, Vec<String>)],
+        labels: &[String],
+    ) {
         let by_id: HashMap<&str, &Map<String, Value>> = features.iter().map(|f| (str_of(f, "id"), f)).collect();
         let descriptions = extract_stage_descriptions(text);
         for (stage, label) in stages.iter_mut().zip(labels) {
             let member_ids: Vec<String> = list_of(stage, "features").iter().map(|s| s.as_str().unwrap_or("").to_string()).collect();
             let members: Vec<&Map<String, Value>> = member_ids.iter().filter_map(|s| by_id.get(s.as_str()).copied()).collect();
-            let current = members.iter().find(|f| IN_PROGRESS_STATUSES.contains(&str_of(f, "status"))).or_else(|| members.iter().find(|f| !CLOSED_STATUSES.contains(&str_of(f, "status"))));
+            let current = members
+                .iter()
+                .find(|f| IN_PROGRESS_STATUSES.contains(&str_of(f, "status")))
+                .or_else(|| members.iter().find(|f| !CLOSED_STATUSES.contains(&str_of(f, "status"))));
             let stage_waves: Vec<Value> = waves
                 .iter()
                 .filter(|(_, slugs)| slugs.iter().any(|s| member_ids.contains(s)))
@@ -459,7 +488,10 @@ mod tests {
         std::fs::create_dir_all(&work).unwrap();
         let (stages, features, counts, graph) = app.roadmap_view().build_roadmap_view(&work.display().to_string(), ROADMAP, None);
         assert_eq!(stages.len(), 2);
-        assert_eq!((stages[0]["title"].clone(), stages[0]["n"].clone(), stages[0]["summary"]["progress"].clone()), (json!("Stage 1 base"), json!(1), json!({"verified": 1, "blocked": 0, "total": 2})));
+        assert_eq!(
+            (stages[0]["title"].clone(), stages[0]["n"].clone(), stages[0]["summary"]["progress"].clone()),
+            (json!("Stage 1 base"), json!(1), json!({"verified": 1, "blocked": 0, "total": 2}))
+        );
         assert_eq!(stages[0]["summary"]["description"], "Foundation text.");
         assert_eq!(stages[0]["summary"]["current_feature"], "b");
         assert_eq!((features[0]["name"].clone(), features[0]["unblocks"].clone()), (json!("Feature A"), json!(["b", "c"])));
@@ -477,7 +509,11 @@ mod tests {
         let work = dir.path().join("w");
         let feature_dir = work.join(".specs/features/a");
         std::fs::create_dir_all(&feature_dir).unwrap();
-        std::fs::write(feature_dir.join("spec.md"), "# Spec: a - Nice name\nSCOPE: Large\n\n## Goal\nDo the thing well.\n\n| REQ-1 | x |\n| REQ-1 | y |\n| REQ-2 | z |\n").unwrap();
+        std::fs::write(
+            feature_dir.join("spec.md"),
+            "# Spec: a - Nice name\nSCOPE: Large\n\n## Goal\nDo the thing well.\n\n| REQ-1 | x |\n| REQ-1 | y |\n| REQ-2 | z |\n",
+        )
+        .unwrap();
         let (_, features, _, _) = app.roadmap_view().build_roadmap_view(&work.display().to_string(), "- [a] status=pending\n", None);
         assert_eq!(features[0]["name"], "Nice name");
         assert_eq!(features[0]["summary"], json!({"goal": "Do the thing well.", "size": "Large", "requirements": 2, "source": "spec.md"}));

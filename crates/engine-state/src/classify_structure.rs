@@ -18,18 +18,11 @@ pub fn is_skipped(name: &str) -> bool {
 
 fn subdirs(path: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(path) else { return vec![] };
-    entries
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| !is_skipped(n))
-        .collect()
+    entries.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| !is_skipped(n)).collect()
 }
 
 fn files_with_extension(root: &Path, extension: &str) -> bool {
-    std::fs::read_dir(root)
-        .map(|r| r.flatten().any(|e| e.path().is_file() && e.file_name().to_string_lossy().to_lowercase().ends_with(extension)))
-        .unwrap_or(false)
+    std::fs::read_dir(root).map(|r| r.flatten().any(|e| e.path().is_file() && e.file_name().to_string_lossy().to_lowercase().ends_with(extension))).unwrap_or(false)
 }
 
 /// `(stack, verdict, evidence)`.
@@ -50,7 +43,10 @@ pub fn analyze(root: &str) -> (String, String, Vec<String>) {
             let found: Vec<&String> = top.iter().filter(|n| pattern.search(n).is_some()).collect();
             let mut label = layer.to_string();
             label[..1].make_ascii_uppercase();
-            evidence.push(format!("project/folder {label}: {}", if found.is_empty() { "NOT FOUND".to_string() } else { found.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ") }));
+            evidence.push(format!(
+                "project/folder {label}: {}",
+                if found.is_empty() { "NOT FOUND".to_string() } else { found.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ") }
+            ));
             all_found &= !found.is_empty();
         }
         if all_found {

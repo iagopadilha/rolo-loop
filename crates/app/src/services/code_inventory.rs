@@ -19,7 +19,11 @@ pub fn inventory_name(folder_relative: &str) -> String {
     let normalized = folder_relative.replace('\\', "/");
     let normalized = normalized.trim_matches('/');
     let normalized = if folder_relative.is_empty() { "" } else { normalized };
-    if normalized.is_empty() || normalized == "." { engine::ROOT_NAME.to_string() } else { normalized.replace('/', "-") }
+    if normalized.is_empty() || normalized == "." {
+        engine::ROOT_NAME.to_string()
+    } else {
+        normalized.replace('/', "-")
+    }
 }
 
 fn format_thousands(number: i64) -> String {
@@ -31,7 +35,11 @@ fn format_thousands(number: i64) -> String {
         }
         grouped.push(c);
     }
-    if number < 0 { format!("-{grouped}") } else { grouped }
+    if number < 0 {
+        format!("-{grouped}")
+    } else {
+        grouped
+    }
 }
 
 pub fn build_summary(files: i64, giant: i64) -> String {
@@ -45,7 +53,16 @@ pub fn relative_path(name: &str) -> String {
 }
 
 pub fn top_giants(document: &Value, limit: usize) -> Vec<Value> {
-    document.get("giant").and_then(Value::as_array).map(|g| g.iter().take(limit).map(|item| json!({"path": item.get("path").cloned().unwrap_or(json!("")), "lines": item.get("lines").cloned().unwrap_or(json!(0))})).collect()).unwrap_or_default()
+    document
+        .get("giant")
+        .and_then(Value::as_array)
+        .map(|g| {
+            g.iter()
+                .take(limit)
+                .map(|item| json!({"path": item.get("path").cloned().unwrap_or(json!("")), "lines": item.get("lines").cloned().unwrap_or(json!(0))}))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[derive(Clone, Debug)]
@@ -86,7 +103,11 @@ impl CodeInventoryService {
         let (giant_lines, giant_kb, threshold_note) = self.thresholds();
         let mut result = json!({"ok": false, "path": relative_path(&name), "files": 0, "giant": 0, "giant_list": [], "note": threshold_note, "summary": ""});
         let root = pycompat::nt_abspath(repo_root);
-        let folder = if folder_relative.is_empty() || folder_relative == "." { root.clone() } else { pycompat::nt_abspath(&Path::new(&root).join(folder_relative).display().to_string()) };
+        let folder = if folder_relative.is_empty() || folder_relative == "." {
+            root.clone()
+        } else {
+            pycompat::nt_abspath(&Path::new(&root).join(folder_relative).display().to_string())
+        };
         let document = engine::build_inventory(&folder, &root, giant_lines, giant_kb, &[]);
         let target = engine::inventory_path(&root, &name);
         if let Err(failure) = engine::write_atomically(&target, &document) {

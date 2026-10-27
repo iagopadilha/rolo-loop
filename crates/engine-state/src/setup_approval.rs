@@ -60,7 +60,8 @@ pub fn approve_setup(data_dir: &Path, primary_repo: &str, repo_path: &str, setup
 }
 
 pub fn is_setup_approved(data_dir: &Path, primary_repo: &str, repo_path: &str, setup: &str) -> bool {
-    load_approvals(data_dir).get(&normalize_key(primary_repo)).and_then(Value::as_object).and_then(|e| e.get(&normalize_key(repo_path))).and_then(Value::as_str) == Some(hash_setup(setup).as_str())
+    load_approvals(data_dir).get(&normalize_key(primary_repo)).and_then(Value::as_object).and_then(|e| e.get(&normalize_key(repo_path))).and_then(Value::as_str)
+        == Some(hash_setup(setup).as_str())
 }
 
 /// `""` when `repo` has no stored setup or the stored text is the approved one; else the refusal text (for the step line and the exit).

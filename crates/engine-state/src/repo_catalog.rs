@@ -26,8 +26,25 @@ static CAPABILITY_ID_PATTERN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[a-z0-9
 const DOCS_CODEBASE_PARTS: [&str; 2] = ["docs", "codebase"];
 const GIT_TIMEOUT_SECONDS: u64 = 20;
 const STACK_MARKER_FILES: [&str; 19] = [
-    "package.json", "tsconfig.json", "pyproject.toml", "requirements.txt", "setup.py", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts",
-    "composer.json", "Gemfile", "Dockerfile", "docker-compose.yml", "nest-cli.json", "vite.config.ts", "vite.config.js", "next.config.js", "angular.json",
+    "package.json",
+    "tsconfig.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "setup.py",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "composer.json",
+    "Gemfile",
+    "Dockerfile",
+    "docker-compose.yml",
+    "nest-cli.json",
+    "vite.config.ts",
+    "vite.config.js",
+    "next.config.js",
+    "angular.json",
 ];
 const STACK_MARKER_SUFFIXES: [&str; 3] = [".sln", ".csproj", ".fsproj"];
 const STACK_SCAN_DEPTH: usize = 2;
@@ -38,7 +55,11 @@ const STACK_MARKER_LIMIT: usize = 30;
 pub fn normalize_path(path: &str) -> String {
     let text = nt_abspath(path).replace('\\', "/");
     let trimmed = text.trim_end_matches('/');
-    if trimmed.is_empty() { "/".into() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        "/".into()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 pub fn catalog_file_path(env: &Env) -> PathBuf {
@@ -77,7 +98,11 @@ pub fn run_git(repo: &str, arguments: &[&str]) -> String {
     let mut args = vec!["-C", repo];
     args.extend_from_slice(arguments);
     let (code, out, _) = run_timeout_raw("git", &args, None, GIT_TIMEOUT_SECONDS);
-    if code == 0 { out.trim().to_string() } else { String::new() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        String::new()
+    }
 }
 
 pub fn read_head(repo: &str) -> String {
@@ -95,7 +120,11 @@ pub fn find_stack_markers(repo: &str) -> Vec<String> {
         let (mut folders, mut files): (Vec<String>, Vec<String>) = (vec![], vec![]);
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if entry.path().is_dir() { folders.push(name) } else { files.push(name) }
+            if entry.path().is_dir() {
+                folders.push(name)
+            } else {
+                files.push(name)
+            }
         }
         for name in files {
             if STACK_MARKER_FILES.contains(&name.as_str()) || STACK_MARKER_SUFFIXES.iter().any(|s| name.ends_with(s)) {
@@ -121,7 +150,8 @@ pub fn find_stack_markers(repo: &str) -> Vec<String> {
 pub fn scan(repo: &str) -> Value {
     let repo = nt_abspath(repo);
     let docs_folder = DOCS_CODEBASE_PARTS.iter().fold(PathBuf::from(&repo), |a, p| a.join(p));
-    let has_docs = docs_folder.is_dir() && std::fs::read_dir(&docs_folder).map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))).unwrap_or(false);
+    let has_docs =
+        docs_folder.is_dir() && std::fs::read_dir(&docs_folder).map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))).unwrap_or(false);
     json!({
         "name": pycompat::last_segment(repo.trim_end_matches(['\\', '/'])),
         "path": normalize_path(&repo),
@@ -164,7 +194,9 @@ pub fn validate_sheet_level(entry: &Value) -> Vec<Value> {
     let mut errors = Vec::new();
     match entry.get("purpose").and_then(Value::as_str).filter(|p| !p.trim().is_empty()) {
         None => errors.push(error("", "purpose is missing".into())),
-        Some(purpose) if purpose.chars().count() > PURPOSE_LIMIT => errors.push(error("", format!("purpose has {} characters (limit {PURPOSE_LIMIT})", purpose.chars().count()))),
+        Some(purpose) if purpose.chars().count() > PURPOSE_LIMIT => {
+            errors.push(error("", format!("purpose has {} characters (limit {PURPOSE_LIMIT})", purpose.chars().count())))
+        }
         Some(_) => {}
     }
     match entry.get("capabilities") {
@@ -258,7 +290,11 @@ pub fn index(env: &Env) -> Vec<Value> {
         .values()
         .filter(|e| e.is_object())
         .map(|entry| {
-            let ids: Vec<Value> = entry.get("capabilities").and_then(Value::as_array).map(|c| c.iter().filter(|i| i.is_object()).map(|i| i.get("id").cloned().unwrap_or(Value::Null)).collect()).unwrap_or_default();
+            let ids: Vec<Value> = entry
+                .get("capabilities")
+                .and_then(Value::as_array)
+                .map(|c| c.iter().filter(|i| i.is_object()).map(|i| i.get("id").cloned().unwrap_or(Value::Null)).collect())
+                .unwrap_or_default();
             json!({"name": entry.get("name").cloned().unwrap_or(json!("")), "purpose": entry.get("purpose").cloned().unwrap_or(json!("")), "capability_ids": ids})
         })
         .collect()
@@ -283,7 +319,16 @@ mod tests {
         let good = json!({"id": "pay-api", "description": "takes payments", "evidence": "src\\a.rs"});
         let sheet = json!({"purpose": "Payments", "capabilities": [good, {"id": "Bad_Id"}, {"id": "pay-api", "description": "dup", "evidence": "src/a.rs"}, {"id": "ghost", "description": "x", "evidence": "nope.rs"}, {"id": "abs", "description": "x", "evidence": "C:\\x.rs"}, "str"]});
         let reasons: Vec<String> = validate(&sheet, &repo_text).iter().map(|e| format!("{}|{}", e["id"].as_str().unwrap(), e["reason"].as_str().unwrap())).collect();
-        assert_eq!(reasons, ["|capability id must be kebab-case: Bad_Id", "pay-api|duplicate capability id", "ghost|evidence file not found: nope.rs", "abs|evidence file not found: C:\\x.rs", "|a capability is not an object"]);
+        assert_eq!(
+            reasons,
+            [
+                "|capability id must be kebab-case: Bad_Id",
+                "pay-api|duplicate capability id",
+                "ghost|evidence file not found: nope.rs",
+                "abs|evidence file not found: C:\\x.rs",
+                "|a capability is not an object"
+            ]
+        );
         let facts = scan(&repo_text);
         assert_eq!((facts["name"].clone(), facts["stack_files"].clone(), facts["has_docs_codebase"].clone()), (json!("repo"), json!(["package.json"]), json!(false)));
         let (entry, rejected) = build_entry(&facts, &sheet, &repo_text);
@@ -305,7 +350,11 @@ mod tests {
         let path = normalize_path(&repo.display().to_string());
         store_entry(&env, &json!({"name": "r", "path": path, "head": "abc", "purpose": "P", "capabilities": [{"id": "one"}, 5]})).unwrap();
         assert_eq!(get_entry(&env, &repo.display().to_string()).unwrap()["purpose"], "P");
-        assert!(is_cached(&env, &repo.display().to_string(), Some("abc")) && !is_cached(&env, &repo.display().to_string(), Some("zzz")) && !is_cached(&env, &repo.display().to_string(), Some("")));
+        assert!(
+            is_cached(&env, &repo.display().to_string(), Some("abc"))
+                && !is_cached(&env, &repo.display().to_string(), Some("zzz"))
+                && !is_cached(&env, &repo.display().to_string(), Some(""))
+        );
         assert_eq!(index(&env), vec![json!({"name": "r", "purpose": "P", "capability_ids": ["one"]})]);
         std::fs::write(catalog_file_path(&env), "garbage").unwrap();
         assert!(index(&env).is_empty());

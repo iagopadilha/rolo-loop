@@ -70,7 +70,8 @@ pub fn referenced_names(doc_text: &str) -> Vec<String> {
 /// `values` plus TEST_USER_<n>_EMAIL/PASSWORD/ROLE and TEST_USER_COUNT taken from the `;` lists (same rule as credential_check).
 pub fn with_derived_users(values: &Values) -> Values {
     let mut result = values.clone();
-    let columns: Vec<(&str, Vec<String>)> = USER_COLUMNS.iter().map(|(plural, single)| (*single, split_values(values.get(&format!("TEST_USER_{plural}")).map(String::as_str).unwrap_or("")))).collect();
+    let columns: Vec<(&str, Vec<String>)> =
+        USER_COLUMNS.iter().map(|(plural, single)| (*single, split_values(values.get(&format!("TEST_USER_{plural}")).map(String::as_str).unwrap_or("")))).collect();
     let count = columns.iter().map(|(_, items)| items.len()).max().unwrap_or(0);
     for number in 1..=count {
         for (single, items) in &columns {
@@ -173,7 +174,11 @@ fn check_url_hosts(values: &Values, effective: &Effective) -> Vec<Value> {
         }
         let (allowed, _) = allows(effective, UNKNOWN_METHOD, value, false, Some(&effective.env_names));
         if !allowed {
-            problems.push(item("url_host_not_listed", name, format!("{name} points at host {host}, which is not in the network list: add it in the Network section of the Test environment tab")));
+            problems.push(item(
+                "url_host_not_listed",
+                name,
+                format!("{name} points at host {host}, which is not in the network list: add it in the Network section of the Test environment tab"),
+            ));
         }
     }
     problems
@@ -286,7 +291,11 @@ fn check_tokens(doc_text: &str, values: &Values, now: f64, loop_max_hours: f64) 
             match exp.as_f64().filter(|_| exp.is_number()) {
                 None => problems.push(item("jwt_exp_invalid", name, format!("{name} has an `exp` claim that is not a number"))),
                 Some(exp) if exp <= now => problems.push(item("jwt_expired", name, format!("{name} is expired: get a new token"))),
-                Some(exp) if exp < limit => problems.push(item("jwt_expiring", name, format!("{name} expires within the {} hour(s) a loop may run (loop_max_hours): get a longer-lived token", format_g(hours)))),
+                Some(exp) if exp < limit => problems.push(item(
+                    "jwt_expiring",
+                    name,
+                    format!("{name} expires within the {} hour(s) a loop may run (loop_max_hours): get a longer-lived token", format_g(hours)),
+                )),
                 Some(_) => {}
             }
         }
@@ -300,7 +309,11 @@ fn check_tokens(doc_text: &str, values: &Values, now: f64, loop_max_hours: f64) 
                 problems.push(item("jwt_claim_mismatch", name, format!("the `{claim}` claim of {name} does not match TEST-ENVIRONMENT.md (Expected token claims)")));
             } else if actual.iter().any(|i| !expected.contains(i)) {
                 let extra = actual.iter().filter(|i| !expected.contains(i)).count();
-                warnings.push(item("jwt_extra_scope", name, format!("the `{claim}` claim of {name} lists {extra} more value(s) than expected: the account has a wider scope than the test needs")));
+                warnings.push(item(
+                    "jwt_extra_scope",
+                    name,
+                    format!("the `{claim}` claim of {name} lists {extra} more value(s) than expected: the account has a wider scope than the test needs"),
+                ));
             }
         }
     }
@@ -404,7 +417,13 @@ mod tests {
     #[test]
     fn names_formats_lists_and_hosts() {
         let doc = "uses $API_URL and $TEST_USER_1_EMAIL and ${DB_PASSWORD} and $SAMPLE_ID; $NAME is prose";
-        let values = map(&[("API_URL", "https://api.dev.example.com/x"), ("TEST_USER_EMAILS", "a@b.co;bad"), ("TEST_USER_PASSWORDS", "p1;p2;p3"), ("OTHER_URL", "ftp://x"), ("DB_PASSWORD", " ")]);
+        let values = map(&[
+            ("API_URL", "https://api.dev.example.com/x"),
+            ("TEST_USER_EMAILS", "a@b.co;bad"),
+            ("TEST_USER_PASSWORDS", "p1;p2;p3"),
+            ("OTHER_URL", "ftp://x"),
+            ("DB_PASSWORD", " "),
+        ]);
         let result = validate(doc, &values, &effective(&["api.dev.example.com"]), 1_000.0, 24.0);
         let mut problems = codes(&result, "problems");
         problems.sort();
@@ -436,7 +455,19 @@ mod tests {
         assert_eq!(codes(&validate(doc, &map(&[("A_TOKEN", &wide)]), &effective(&[]), now, 24.0), "warnings"), ["jwt_extra_scope"]);
         assert_eq!(codes(&validate(doc, &map(&[("A_TOKEN", "abc.def.ghi")]), &effective(&[]), now, 24.0), "problems"), ["jwt_undecodable"]);
         assert_eq!(codes(&validate(doc, &map(&[("B_TOKEN", "plain")]), &effective(&[]), now, 24.0), "warnings"), ["token_not_jwt"]);
-        assert_eq!(codes(&validate(doc, &map(&[("A_TOKEN", &format!("Bearer {}", jwt(json!({"exp": "x", "aud": "app1", "roles": ["admin", "user"]}))))]), &effective(&[]), now, 24.0), "problems"), ["jwt_exp_invalid"]);
+        assert_eq!(
+            codes(
+                &validate(
+                    doc,
+                    &map(&[("A_TOKEN", &format!("Bearer {}", jwt(json!({"exp": "x", "aud": "app1", "roles": ["admin", "user"]}))))]),
+                    &effective(&[]),
+                    now,
+                    24.0
+                ),
+                "problems"
+            ),
+            ["jwt_exp_invalid"]
+        );
     }
 
     #[test]

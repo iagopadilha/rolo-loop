@@ -30,7 +30,8 @@ impl McpServersService<'_> {
         if project_id.is_empty() {
             return String::new();
         }
-        self.app.project_service().get_project_context(project_id).map(|c| c.repo_path().to_string()).unwrap_or_default() // an unknown project just means "no project scope"
+        self.app.project_service().get_project_context(project_id).map(|c| c.repo_path().to_string()).unwrap_or_default()
+        // an unknown project just means "no project scope"
     }
 
     fn read_policy(&self) -> mcp_policy::Policy {
@@ -119,7 +120,10 @@ mod tests {
         let none = service.get_servers("");
         assert_eq!((none["none_allowed"].clone(), none["allowed"].clone()), (json!(true), json!([])));
         let saved = service.save_servers(&json!({"grafana": {"allow": true, "kind": "other", "read_only": true}}), &json!(["mcp__grafana__query*"])).unwrap();
-        assert_eq!((saved["allowed"].clone(), saved["none_allowed"].clone(), saved["extra"].clone()), (json!(["grafana"]), json!(false), json!(["mcp__grafana__query*"])));
+        assert_eq!(
+            (saved["allowed"].clone(), saved["none_allowed"].clone(), saved["extra"].clone()),
+            (json!(["grafana"]), json!(false), json!(["mcp__grafana__query*"]))
+        );
         let row = saved["servers"].as_array().unwrap().iter().find(|s| s["name"] == "grafana").unwrap();
         assert_eq!((row["saved"].clone(), row["sources"].clone(), row["read_only"].clone()), (json!(true), json!(["manual"]), json!(true)));
         assert_eq!(service.save_servers(&json!({"x": {"bogus": 1}}), &json!([])).unwrap_err().kind, Kind::InvalidSetting);

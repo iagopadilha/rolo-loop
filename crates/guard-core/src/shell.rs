@@ -67,35 +67,14 @@ const WRAPPERS: &[&str] = &[
 ];
 const ESCAPABLE: &str = " \t\"'&;|()<>$`";
 const MAX_DEPTH: usize = 3;
-const GIT_OPTIONS_WITH_VALUE: &[&str] = &[
-    "-C",
-    "-c",
-    "--git-dir",
-    "--work-tree",
-    "--namespace",
-    "--super-prefix",
-    "--config-env",
-    "--attr-source",
-    "--exec-path",
-];
-const PUSH_OPTIONS_WITH_VALUE: &[&str] = &[
-    "--repo",
-    "-o",
-    "--push-option",
-    "--receive-pack",
-    "--exec",
-    "--recurse-submodules",
-];
+const GIT_OPTIONS_WITH_VALUE: &[&str] = &["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--attr-source", "--exec-path"];
+const PUSH_OPTIONS_WITH_VALUE: &[&str] = &["--repo", "-o", "--push-option", "--receive-pack", "--exec", "--recurse-submodules"];
 const GH_OPTIONS_WITH_VALUE: &[&str] = &["-R", "--repo", "--hostname", "-H", "--header"];
 
 /// `C:\Program Files\Git\bin\git.exe` -> `git`, `\rm` -> `rm`, `/usr/bin/gh` -> `gh`.
 pub fn executable_name(word: &str) -> String {
     let trimmed = word.trim_matches(|c| c == '"' || c == '\'');
-    let name = trimmed
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let name = trimmed.rsplit(['\\', '/']).next().unwrap_or("").to_lowercase();
     EXEC_SUFFIX.replace_lit(&name, "")
 }
 
@@ -157,8 +136,7 @@ impl<'a> Lexer<'a> {
     fn end_command(&mut self) {
         self.finish_word();
         if !self.words.is_empty() {
-            self.events
-                .push(Event::Cmd(std::mem::take(&mut self.words)));
+            self.events.push(Event::Cmd(std::mem::take(&mut self.words)));
         }
         self.words = vec![];
         for word in std::mem::take(&mut self.nested) {
@@ -192,19 +170,11 @@ impl<'a> Lexer<'a> {
         let mut index = 0;
         while index < size {
             let ch = self.text[index];
-            let skipped = if ch == '\\' || ch == '`' {
-                self.continuation(index)
-            } else {
-                0
-            };
+            let skipped = if ch == '\\' || ch == '`' { self.continuation(index) } else { 0 };
             if skipped > 0 {
                 index += skipped;
             } else if ch == '\'' {
-                let end = self.text[index + 1..]
-                    .iter()
-                    .position(|c| *c == '\'')
-                    .map(|p| p + index + 1)
-                    .unwrap_or(size);
+                let end = self.text[index + 1..].iter().position(|c| *c == '\'').map(|p| p + index + 1).unwrap_or(size);
                 let chunk: String = self.text[index + 1..end.min(size)].iter().collect();
                 self.buffer.push_str(&chunk);
                 self.in_word = true;
@@ -216,18 +186,10 @@ impl<'a> Lexer<'a> {
                 index += 1;
                 let mut chunk = String::new();
                 while index < size && self.text[index] != '"' {
-                    let pair = if self.text[index] == '\\' {
-                        self.continuation(index)
-                    } else {
-                        0
-                    };
+                    let pair = if self.text[index] == '\\' { self.continuation(index) } else { 0 };
                     if pair > 0 {
                         index += pair;
-                    } else if self.text[index] == '\\'
-                        && index + 1 < size
-                        && "\"\\$`".contains(self.text[index + 1])
-                        && !self.powershell
-                    {
+                    } else if self.text[index] == '\\' && index + 1 < size && "\"\\$`".contains(self.text[index + 1]) && !self.powershell {
                         chunk.push(self.text[index + 1]);
                         index += 2;
                     } else {
@@ -244,26 +206,11 @@ impl<'a> Lexer<'a> {
             } else if ch == ' ' || ch == '\t' || ch == '\r' {
                 self.finish_word();
                 index += 1;
-            } else if ch == '\n'
-                || ch == ';'
-                || ch == '`'
-                || self.starts_with(index, '&', '&')
-                || self.starts_with(index, '|', '|')
-            {
+            } else if ch == '\n' || ch == ';' || ch == '`' || self.starts_with(index, '&', '&') || self.starts_with(index, '|', '|') {
                 self.end_command();
-                index += if self.starts_with(index, '&', '&') || self.starts_with(index, '|', '|') {
-                    2
-                } else {
-                    1
-                };
-            } else if ch == '<'
-                || ch == '>'
-                || (ch == '&' && self.text.get(index + 1) == Some(&'>'))
-            {
-                if self.in_word
-                    && !self.buffer.is_empty()
-                    && self.buffer.chars().all(|c| c.is_ascii_digit())
-                {
+                index += if self.starts_with(index, '&', '&') || self.starts_with(index, '|', '|') { 2 } else { 1 };
+            } else if ch == '<' || ch == '>' || (ch == '&' && self.text.get(index + 1) == Some(&'>')) {
+                if self.in_word && !self.buffer.is_empty() && self.buffer.chars().all(|c| c.is_ascii_digit()) {
                     self.buffer.clear();
                     self.in_word = false;
                     self.quoted = false;
@@ -293,10 +240,7 @@ impl<'a> Lexer<'a> {
                 self.end_command();
                 self.events.push(Event::Close);
                 index += 1;
-            } else if (ch == '{' || ch == '}')
-                && !self.in_word
-                && (index + 1 >= size || " \t\r\n".contains(self.text[index + 1]))
-            {
+            } else if (ch == '{' || ch == '}') && !self.in_word && (index + 1 >= size || " \t\r\n".contains(self.text[index + 1])) {
                 self.end_command();
                 index += 1;
             } else {
@@ -343,9 +287,7 @@ pub fn command_starts(words: &[String]) -> Vec<usize> {
         return vec![];
     }
     let mut starts = vec![index];
-    if WRAPPERS.contains(&executable_name(&words[index]).as_str())
-        || WRAPPERS.contains(&words[index].as_str())
-    {
+    if WRAPPERS.contains(&executable_name(&words[index]).as_str()) || WRAPPERS.contains(&words[index].as_str()) {
         starts.extend(index + 1..words.len());
     }
     starts
@@ -380,16 +322,9 @@ impl GitCall {
             if PUSH_OPTIONS_WITH_VALUE.contains(&arg.as_str()) {
                 skip = true;
             } else if arg.starts_with('-') {
-                if arg == "--force"
-                    || arg.starts_with("--force-with-lease")
-                    || FORCE_SHORT.is_match(arg)
-                {
+                if arg == "--force" || arg.starts_with("--force-with-lease") || FORCE_SHORT.is_match(arg) {
                     force = true;
-                } else if arg == "--mirror"
-                    || arg == "--all"
-                    || arg.starts_with("--mirror=")
-                    || arg.starts_with("--all=")
-                {
+                } else if arg == "--mirror" || arg == "--all" || arg.starts_with("--mirror=") || arg.starts_with("--all=") {
                     mirror_all = true;
                 }
             } else if arg.starts_with('+') && arg.chars().count() > 1 {
@@ -460,10 +395,7 @@ fn parse_git(words: &[String], start: usize, assignments: &[String]) -> Option<G
     let mut alias_push = false;
     if let Some((_, alias_value)) = config.iter().find(|(k, _)| *k == format!("alias.{sub}")) {
         let stripped = alias_value.trim();
-        let first = split_ws(stripped)
-            .first()
-            .map(|s| s.to_lowercase())
-            .unwrap_or_default();
+        let first = split_ws(stripped).first().map(|s| s.to_lowercase()).unwrap_or_default();
         if stripped.starts_with('!') || first == "push" {
             alias_push = true;
         }
@@ -472,12 +404,7 @@ fn parse_git(words: &[String], start: usize, assignments: &[String]) -> Option<G
         }
     }
     if sub == "config" && args.iter().any(|a| ALIAS_KEY.is_match(a)) {
-        let value = args
-            .iter()
-            .filter(|a| !ALIAS_KEY.is_match(a) && !a.starts_with('-'))
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(" ");
+        let value = args.iter().filter(|a| !ALIAS_KEY.is_match(a) && !a.starts_with('-')).cloned().collect::<Vec<_>>().join(" ");
         let value = value.trim();
         let lowered = value.to_lowercase();
         let first_word = split_ws(&lowered).first().copied().unwrap_or("");
@@ -488,13 +415,7 @@ fn parse_git(words: &[String], start: usize, assignments: &[String]) -> Option<G
     if sub != "push" && config.iter().any(|(k, _)| DANGEROUS_CONFIG.is_match(k)) {
         sub = "config-exec".to_string();
     }
-    Some(GitCall {
-        sub,
-        args,
-        dirs_c,
-        extra_dirs,
-        alias_push,
-    })
+    Some(GitCall { sub, args, dirs_c, extra_dirs, alias_push })
 }
 
 /// A `GitCall` for every git invocation in one command's words (after assignments and wrappers).
@@ -502,11 +423,7 @@ pub fn git_calls_in(words: &[String]) -> Vec<GitCall> {
     let mut calls = Vec::new();
     for start in command_starts(words) {
         if executable_name(&words[start]) == "git" {
-            let assignments: Vec<String> = words[..start]
-                .iter()
-                .filter(|w| ASSIGNMENT_RE.is_match(w))
-                .cloned()
-                .collect();
+            let assignments: Vec<String> = words[..start].iter().filter(|w| ASSIGNMENT_RE.is_match(w)).cloned().collect();
             if let Some(call) = parse_git(words, start, &assignments) {
                 calls.push(call);
             }
@@ -534,11 +451,7 @@ pub fn gh_calls_in(words: &[String]) -> Vec<GhCall> {
         while index < words.len() && positional.len() < 2 {
             let word = &words[index];
             if word.starts_with('-') {
-                index += if GH_OPTIONS_WITH_VALUE.contains(&word.as_str()) {
-                    2
-                } else {
-                    1
-                };
+                index += if GH_OPTIONS_WITH_VALUE.contains(&word.as_str()) { 2 } else { 1 };
                 continue;
             }
             positional.push(word.to_lowercase());
@@ -568,10 +481,7 @@ pub fn gh_api_writes(args: &[String]) -> bool {
             method = Some(crate::pyre::partition(arg, "=").2.to_uppercase());
         } else if METHOD_SHORT.is_match(arg) {
             method = Some(arg[2..].to_uppercase());
-        } else if ["-f", "-F", "--field", "--raw-field", "--input"].contains(&arg.as_str())
-            || FIELD_EQ.is_match(arg)
-            || FIELD_SHORT.is_match(arg)
-        {
+        } else if ["-f", "-F", "--field", "--raw-field", "--input"].contains(&arg.as_str()) || FIELD_EQ.is_match(arg) || FIELD_SHORT.is_match(arg) {
             fields = true;
         }
     }
@@ -610,10 +520,7 @@ mod tests {
     use super::*;
 
     fn words(text: &str) -> Vec<Vec<String>> {
-        shell_events(text, false)
-            .into_iter()
-            .filter_map(|e| if let Event::Cmd(w) = e { Some(w) } else { None })
-            .collect()
+        shell_events(text, false).into_iter().filter_map(|e| if let Event::Cmd(w) = e { Some(w) } else { None }).collect()
     }
 
     fn calls(text: &str) -> Vec<GitCall> {
@@ -630,36 +537,22 @@ mod tests {
 
     #[test]
     fn options_wrappers_and_subshell() {
-        assert!(calls("git -C /x -c a=b push")
-            .first()
-            .is_some_and(GitCall::is_push));
-        assert!(calls("VAR=1 env git push")
-            .first()
-            .is_some_and(GitCall::is_push));
-        assert!(calls("echo $(git push)")
-            .first()
-            .is_some_and(GitCall::is_push));
-        assert!(calls("bash -c \"cd x && git push\"")
-            .first()
-            .is_some_and(GitCall::is_push));
+        assert!(calls("git -C /x -c a=b push").first().is_some_and(GitCall::is_push));
+        assert!(calls("VAR=1 env git push").first().is_some_and(GitCall::is_push));
+        assert!(calls("echo $(git push)").first().is_some_and(GitCall::is_push));
+        assert!(calls("bash -c \"cd x && git push\"").first().is_some_and(GitCall::is_push));
     }
 
     #[test]
     fn alias_push_counts() {
-        assert!(calls("git -c alias.p=push p")
-            .first()
-            .is_some_and(GitCall::is_push));
-        assert!(calls("git -c alias.x=!sh x")
-            .first()
-            .is_some_and(GitCall::is_push));
+        assert!(calls("git -c alias.p=push p").first().is_some_and(GitCall::is_push));
+        assert!(calls("git -c alias.x=!sh x").first().is_some_and(GitCall::is_push));
     }
 
     #[test]
     fn quoted_word_with_spaces_is_lexed_again_like_the_reference() {
         // a quoted word that holds blanks may be a command line (`bash -c "..."`), so the push inside is seen
-        assert!(calls("echo 'git push'")
-            .first()
-            .is_some_and(GitCall::is_push));
+        assert!(calls("echo 'git push'").first().is_some_and(GitCall::is_push));
         assert!(calls("echo 'git'").is_empty());
     }
 
@@ -682,25 +575,14 @@ mod tests {
         let w = words("gh -R x/y pr create");
         let g = gh_calls_in(&w[0]);
         assert_eq!((g[0].sub.as_str(), g[0].sub2.as_str()), ("pr", "create"));
-        assert!(gh_api_writes(&[
-            "repos/x".into(),
-            "-f".into(),
-            "a=b".into()
-        ]));
+        assert!(gh_api_writes(&["repos/x".into(), "-f".into(), "a=b".into()]));
         assert!(!gh_api_writes(&["repos/x".into()]));
-        assert!(!gh_api_writes(&[
-            "-X".into(),
-            "GET".into(),
-            "repos/x".into()
-        ]));
+        assert!(!gh_api_writes(&["-X".into(), "GET".into(), "repos/x".into()]));
     }
 
     #[test]
     fn executable_names() {
-        assert_eq!(
-            executable_name("C:\\Program Files\\Git\\bin\\git.exe"),
-            "git"
-        );
+        assert_eq!(executable_name("C:\\Program Files\\Git\\bin\\git.exe"), "git");
         assert_eq!(executable_name("\\rm"), "rm");
         assert_eq!(executable_name("/usr/bin/gh"), "gh");
     }

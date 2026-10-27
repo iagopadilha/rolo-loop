@@ -215,7 +215,11 @@ pub fn apply_suggestions(project_root: &str) -> Result<(Vec<String>, Vec<String>
             added.push(text.clone());
         }
     }
-    let allow = if added.is_empty() { current.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).collect() } else { write_project(project_root, &merged).map_err(|e| e.to_string())? };
+    let allow = if added.is_empty() {
+        current.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).collect()
+    } else {
+        write_project(project_root, &merged).map_err(|e| e.to_string())?
+    };
     let _ = std::fs::remove_file(suggested_path(project_root));
     Ok((added, allow))
 }
@@ -248,8 +252,15 @@ pub fn effective_from_json(content: &Value) -> Effective {
                 .collect()
         })
         .unwrap_or_default();
-    let strings = |k: &str| -> Vec<String> { content.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() };
-    Effective { allow, deny: strings("deny"), notes: strings("notes"), broken: content.get("broken").and_then(Value::as_str).unwrap_or("").to_string(), env_names: strings("env_names") }
+    let strings =
+        |k: &str| -> Vec<String> { content.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default() };
+    Effective {
+        allow,
+        deny: strings("deny"),
+        notes: strings("notes"),
+        broken: content.get("broken").and_then(Value::as_str).unwrap_or("").to_string(),
+        env_names: strings("env_names"),
+    }
 }
 
 /// Judges one request against an effective list with the engine's wording: `(allowed, reason)`.
@@ -265,7 +276,11 @@ pub fn allows(effective: &Effective, method: &str, url: &str, cred: bool) -> (bo
 pub fn describe(effective: &Effective, project_root: &str, data_dir: &Path) -> String {
     let mut lines = vec![format!("project: {project_root}"), format!("data dir: {}", data_dir.display()), "allow (origin, entry):".to_string()];
     for entry in &effective.allow {
-        let inactive = if !entry.if_missing.is_empty() && effective.env_names.contains(&entry.if_missing) { format!(" [inactive: {} is defined in .env.test]", entry.if_missing) } else { String::new() };
+        let inactive = if !entry.if_missing.is_empty() && effective.env_names.contains(&entry.if_missing) {
+            format!(" [inactive: {} is defined in .env.test]", entry.if_missing)
+        } else {
+            String::new()
+        };
         lines.push(format!("  {:<8} {}{}", entry.origin, entry.text, inactive));
     }
     lines.push("deny (egress_never, any port/path/method):".into());
@@ -323,7 +338,10 @@ mod tests {
         assert!(!suggested_path(&root).exists());
         assert!(!dismiss_suggestions(&root));
         std::fs::write(suggested_path(&root), "{").unwrap();
-        assert_eq!(apply_suggestions(&root).unwrap_err(), "NETWORK.suggested.json is unreadable JSON (JSONDecodeError)".replace("NETWORK.suggested.json", SUGGESTED_LABEL));
+        assert_eq!(
+            apply_suggestions(&root).unwrap_err(),
+            "NETWORK.suggested.json is unreadable JSON (JSONDecodeError)".replace("NETWORK.suggested.json", SUGGESTED_LABEL)
+        );
     }
 
     #[test]

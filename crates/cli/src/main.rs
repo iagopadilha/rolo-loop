@@ -13,11 +13,7 @@ mod state_cmd;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(
-    name = "harness",
-    version,
-    about = "claude-maestro: loop engineering for Claude Code"
-)]
+#[command(name = "harness", version, about = "claude-maestro: loop engineering for Claude Code")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

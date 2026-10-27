@@ -212,7 +212,8 @@ mod tests {
         let id = compute_project_id(&dir.path().display().to_string());
         assert_eq!(id.len(), 12);
         assert_eq!(id, compute_project_id(&dir.path().display().to_string().to_uppercase()));
-        let mut project = Project { id: id.clone(), name: "p".into(), repo_path: dir.path().display().to_string(), opened_at: "t".into(), last_opened_at: "t".into(), favorite: false };
+        let mut project =
+            Project { id: id.clone(), name: "p".into(), repo_path: dir.path().display().to_string(), opened_at: "t".into(), last_opened_at: "t".into(), favorite: false };
         repository.write_project(&project).unwrap();
         repository.write_project(&Project { id: "other".into(), ..project.clone() }).unwrap();
         project.favorite = true;

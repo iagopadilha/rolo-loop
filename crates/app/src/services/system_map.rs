@@ -58,7 +58,10 @@ fn read_system_stamp(folder: &str) -> Option<(u128, u64)> {
 
 /// `%Y-%m-%dT%H:%M:%SZ` of an epoch timestamp.
 fn format_time(timestamp: f64) -> String {
-    time::OffsetDateTime::from_unix_timestamp(timestamp as i64).ok().and_then(|t| t.format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z")).ok()).unwrap_or_default()
+    time::OffsetDateTime::from_unix_timestamp(timestamp as i64)
+        .ok()
+        .and_then(|t| t.format(time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z")).ok())
+        .unwrap_or_default()
 }
 
 /// Epoch seconds of an ISO text (a naive time counts as UTC); `None` when it does not parse.
@@ -142,14 +145,24 @@ impl SystemMapService<'_> {
         match started {
             Ok(job) => Ok(json!({"ok": true, "job": job})),
             Err(refusal) => {
-                self.app.log.info("map_refused", &[("project", json!(project_id)), ("scope", json!("system")), ("reason", json!(format!("{:?}", refusal.kind))), ("message", json!(refusal.message.chars().take(200).collect::<String>()))]);
+                self.app.log.info(
+                    "map_refused",
+                    &[
+                        ("project", json!(project_id)),
+                        ("scope", json!("system")),
+                        ("reason", json!(format!("{:?}", refusal.kind))),
+                        ("message", json!(refusal.message.chars().take(200).collect::<String>())),
+                    ],
+                );
                 Err(refusal)
             }
         }
     }
 
     fn check_allowed(&self, folder: &str, entry: Option<&Map<String, Value>>) -> Result<(), AppError> {
-        let Some(entry) = entry.filter(|e| e.get("monorepo") == Some(&Value::Bool(true))) else { return Err(AppError::invalid_request("only a monorepo has a system map")) };
+        let Some(entry) = entry.filter(|e| e.get("monorepo") == Some(&Value::Bool(true))) else {
+            return Err(AppError::invalid_request("only a monorepo has a system map"));
+        };
         if entry.get("confirmed") != Some(&Value::Bool(true)) {
             return Err(not_confirmed());
         }
@@ -171,20 +184,40 @@ impl SystemMapService<'_> {
             state.1 = read_system_stamp(&snapshot_folder);
             Ok(None)
         });
-        let options = CommandOptions { model: JOB_MODEL_CEILING.into(), budget_usd: None, no_mcp: true, prompt_argument: SYSTEM_MAP_PROMPT.into(), permission_mode: JOB_PERMISSION_MODE.into(), hook_profile: SYSTEM_HOOK_PROFILE.into(), ..Default::default() };
+        let options = CommandOptions {
+            model: JOB_MODEL_CEILING.into(),
+            budget_usd: None,
+            no_mcp: true,
+            prompt_argument: SYSTEM_MAP_PROMPT.into(),
+            permission_mode: JOB_PERMISSION_MODE.into(),
+            hook_profile: SYSTEM_HOOK_PROFILE.into(),
+            ..Default::default()
+        };
         let argv = self.app.claude.build_command(&options);
-        let (app, project_id, finish_folder, finish_context, finish_key) = (self.app.shared(), context.project.id.clone(), folder.to_string(), context.clone(), repo_key.map(String::from));
+        let (app, project_id, finish_folder, finish_context, finish_key) =
+            (self.app.shared(), context.project.id.clone(), folder.to_string(), context.clone(), repo_key.map(String::from));
         let mut command = ClaudeJobCommand::new(argv, "");
         command.work_dir = Some(folder.to_string());
         command.before_start = Some(before_start);
-        command.finalize = Some(Box::new(move |result| app.system_maps().finish(&project_id, &finish_folder, &holder, &allowed_folders, result, Some(&finish_context), finish_key.as_deref())));
+        command.finalize = Some(Box::new(move |result| {
+            app.system_maps().finish(&project_id, &finish_folder, &holder, &allowed_folders, result, Some(&finish_context), finish_key.as_deref())
+        }));
         self.app.jobs().start_job(folder, JOB_TYPE_MAP, command)
     }
 
     /// Runs in the job thread: undoes changes outside `.specs` and `SYSTEM.md`, fails when `SYSTEM.md` was not written and writes the root index. The
     /// root `CLAUDE.md` is never written.
     #[allow(clippy::too_many_arguments)]
-    fn finish(&self, project_id: &str, folder: &str, holder: &Arc<Mutex<(Option<WorkspaceSnapshot>, Option<(u128, u64)>)>>, allowed_folders: &[String], result: Value, context: Option<&ProjectContext>, repo_key: Option<&str>) -> Value {
+    fn finish(
+        &self,
+        project_id: &str,
+        folder: &str,
+        holder: &Arc<Mutex<(Option<WorkspaceSnapshot>, Option<(u128, u64)>)>>,
+        allowed_folders: &[String],
+        result: Value,
+        context: Option<&ProjectContext>,
+        repo_key: Option<&str>,
+    ) -> Value {
         let (snapshot, written_before) = {
             let state = holder.lock().unwrap_or_else(|e| e.into_inner());
             (state.0.clone(), state.1)
@@ -197,7 +230,16 @@ impl SystemMapService<'_> {
         let touched: Vec<String> = reverted.iter().chain(&removed).chain(&unrestorable).cloned().collect();
         if !touched.is_empty() {
             let head = |items: &[String]| json!(items.iter().take(50).collect::<Vec<_>>());
-            self.app.log.warn("map_guard_reverted", &[("project", json!(project_id)), ("scope", json!("system")), ("reverted", head(&reverted)), ("removed", head(&removed)), ("unrestorable", head(&unrestorable))]);
+            self.app.log.warn(
+                "map_guard_reverted",
+                &[
+                    ("project", json!(project_id)),
+                    ("scope", json!("system")),
+                    ("reverted", head(&reverted)),
+                    ("removed", head(&removed)),
+                    ("unrestorable", head(&unrestorable)),
+                ],
+            );
         }
         let mut result = result;
         if engine_state::notify_truthy(result.get("ok")) && !touched.is_empty() {

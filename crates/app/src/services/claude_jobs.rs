@@ -215,7 +215,6 @@ impl ClaudeJobService<'_> {
         Ok(Self::to_public(&record))
     }
 
-
     fn run_task_job(&self, record: Value, task: Task) {
         let record = std::sync::Mutex::new(record);
         let add_step = |step: Value| {
@@ -252,7 +251,9 @@ impl ClaudeJobService<'_> {
 
     fn try_write_record(&self, record: &Value) {
         if let Err(failure) = self.write_record(record["dir"].as_str().unwrap_or(""), record) {
-            self.app.log.error("claude_job_write_failed", &[("job", record["id"].clone()), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))]);
+            self.app
+                .log
+                .error("claude_job_write_failed", &[("job", record["id"].clone()), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))]);
         }
     }
 
@@ -308,7 +309,10 @@ impl ClaudeJobService<'_> {
         match before_start(&update) {
             Err(failure) => {
                 let message: String = if failure.message.is_empty() { "ClaudeJobError".to_string() } else { failure.message.chars().take(500).collect() };
-                self.app.log.error("claude_job_before_start_failed", &[("job", record.borrow()["id"].clone()), ("type", json!("ClaudeJobError")), ("message", json!(message.chars().take(200).collect::<String>()))]);
+                self.app.log.error(
+                    "claude_job_before_start_failed",
+                    &[("job", record.borrow()["id"].clone()), ("type", json!("ClaudeJobError")), ("message", json!(message.chars().take(200).collect::<String>()))],
+                );
                 let mut result = error_result(&message);
                 if let Some(hook) = command.on_prepare_failed.take() {
                     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hook(&failure))).is_err() {
@@ -375,7 +379,10 @@ impl ClaudeJobService<'_> {
         }
         self.try_write_record(&record);
         self.forget_job(record["id"].as_str().unwrap_or(""));
-        self.app.log.info("claude_job_finished", &[("job", record["id"].clone()), ("type", record["type"].clone()), ("state", record["state"].clone()), ("cost_usd", record["cost_usd"].clone())]);
+        self.app.log.info(
+            "claude_job_finished",
+            &[("job", record["id"].clone()), ("type", record["type"].clone()), ("state", record["state"].clone()), ("cost_usd", record["cost_usd"].clone())],
+        );
     }
 
     // ------------------------------------------------ read
@@ -651,11 +658,15 @@ mod tests {
         let (app, repo) = app_with(dir.path(), 0);
         let jobs = app.jobs();
         let started = jobs
-            .start_task_job(&repo, JOB_TYPE_WORKSPACE_CREATE, Box::new(|add_step| {
-                add_step(json!({"name": "one"}));
-                add_step(json!({"name": "two"}));
-                json!({"ok": true, "result": {"made": 2}, "error": ""})
-            }))
+            .start_task_job(
+                &repo,
+                JOB_TYPE_WORKSPACE_CREATE,
+                Box::new(|add_step| {
+                    add_step(json!({"name": "one"}));
+                    add_step(json!({"name": "two"}));
+                    json!({"ok": true, "result": {"made": 2}, "error": ""})
+                }),
+            )
             .unwrap();
         let id = started["id"].as_str().unwrap().to_string();
         wait_until(|| jobs.get_job(&repo, &id).map(|j| j["state"] == "ok").unwrap_or(false));

@@ -7,7 +7,10 @@
 //! and skip, a read-only `claude -p` job for the summary, a git restore of listed files for revert). Texts leave redacted.
 
 use super::agent_history::HISTORY_ID;
-use super::chat::{busy_jobs_error, is_number, ChatService, CHAT_ALLOWED_TOOLS, CHAT_BUDGET_USD, CHAT_DISALLOWED_TOOLS, CHAT_MODEL, CHAT_TIMEOUT_SECONDS, JOB_STATE_ERROR, JOB_STATE_OK, MAX_CONCURRENT_JOBS, READ_ONLY_PREFIX, REPLY_LIMIT, UNEXPECTED_FAILURE};
+use super::chat::{
+    busy_jobs_error, is_number, ChatService, CHAT_ALLOWED_TOOLS, CHAT_BUDGET_USD, CHAT_DISALLOWED_TOOLS, CHAT_MODEL, CHAT_TIMEOUT_SECONDS, JOB_STATE_ERROR, JOB_STATE_OK,
+    MAX_CONCURRENT_JOBS, READ_ONLY_PREFIX, REPLY_LIMIT, UNEXPECTED_FAILURE,
+};
 use super::loop_control::Reply;
 use super::loop_panel::QUARANTINE_OPTIONS;
 use super::loop_parsers::parse_failed_tests;
@@ -108,14 +111,25 @@ pub fn build_context_text(detail: &Value, work_dir: &str) -> String {
         lines.push("Failed attempts:".into());
         for attempt in &attempts {
             let out = attempt["out"].as_str().filter(|o| !o.is_empty()).unwrap_or("(no text)");
-            lines.push(format!("- turn {} {} {}: {out}", text_or_none(&attempt["turn"]), attempt["agent"].as_str().unwrap_or(""), attempt["status"].as_str().unwrap_or("")));
+            lines.push(format!(
+                "- turn {} {} {}: {out}",
+                text_or_none(&attempt["turn"]),
+                attempt["agent"].as_str().unwrap_or(""),
+                attempt["status"].as_str().unwrap_or("")
+            ));
         }
     }
     let tests = detail["failed_tests"].as_array().cloned().unwrap_or_default();
     if !tests.is_empty() {
         lines.push("Failed tests:".into());
         for test in &tests {
-            lines.push(format!("- {} | why: {} | expected: {} | got: {}", text_or_none(&test["name"]), text_or_none(&test["why"]), text_or_none(&test["expected"]), text_or_none(&test["got"])));
+            lines.push(format!(
+                "- {} | why: {} | expected: {} | got: {}",
+                text_or_none(&test["name"]),
+                text_or_none(&test["why"]),
+                text_or_none(&test["expected"]),
+                text_or_none(&test["got"])
+            ));
         }
     }
     let files: Vec<&str> = detail["uncommitted"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
@@ -260,7 +274,9 @@ impl QuarantineService<'_> {
         let thread = format!("{SUMMARY_JOB_THREAD_PREFIX}{slug}");
         let job_id = match self.app.chat_jobs.reserve_job(&context.project.id, Some(&thread), MAX_CONCURRENT_JOBS, None) {
             Ok(id) => id,
-            Err(reason) => return failure(409, if reason == THREAD_BUSY_REASON { "a summary of this feature is already being written".to_string() } else { busy_jobs_error() }),
+            Err(reason) => {
+                return failure(409, if reason == THREAD_BUSY_REASON { "a summary of this feature is already being written".to_string() } else { busy_jobs_error() })
+            }
         };
         self.app.log.info("quarantine_summary_started", &[("project", json!(context.project.id)), ("job", json!(job_id)), ("feature", json!(slug))]);
         let (app, job_context, job, feature) = (self.app.shared(), context.clone(), job_id.clone(), slug.to_string());
@@ -297,12 +313,17 @@ impl QuarantineService<'_> {
             }
             let text = redact_secrets(returned.get("reply").and_then(Value::as_str).unwrap_or(""), Some(REPLY_LIMIT)).trim().to_string();
             let cost = if is_number(returned.get("cost_usd")) { returned["cost_usd"].clone() } else { Value::Null };
-            write_summary(&work_dir, detail["id"].as_str().unwrap_or(""), &json!({
-                "text": text.chars().take(SUMMARY_LIMIT).collect::<String>(), "at": now_iso(), "failures": detail["failures"], "turn": detail["turn"], "cost_usd": cost,
-            }));
+            write_summary(
+                &work_dir,
+                detail["id"].as_str().unwrap_or(""),
+                &json!({
+                    "text": text.chars().take(SUMMARY_LIMIT).collect::<String>(), "at": now_iso(), "failures": detail["failures"], "turn": detail["turn"], "cost_usd": cost,
+                }),
+            );
             json!({"state": JOB_STATE_OK, "reply": text, "cost_usd": cost, "error": null, "thread": null})
         }));
-        let result = outcome.unwrap_or_else(|_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": null}));
+        let result =
+            outcome.unwrap_or_else(|_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": null}));
         self.app.chat_jobs.finish_job(job_id, result.as_object().unwrap());
         self.app.log.info("quarantine_summary_finished", &[("project", json!(context.project.id)), ("job", json!(job_id)), ("state", result["state"].clone())]);
     }
@@ -353,7 +374,9 @@ impl QuarantineService<'_> {
     // ------------------------------------------------ revert
     pub fn revert_files(&self, context: &ProjectContext, slug: &str, body: &Value) -> Reply {
         let paths = match body.get("paths") {
-            Some(Value::Array(list)) if !list.is_empty() && list.len() <= REVERT_PATHS_LIMIT && list.iter().all(|p| p.as_str().is_some_and(|s| !s.trim().is_empty())) => list.iter().filter_map(Value::as_str).collect::<Vec<_>>(),
+            Some(Value::Array(list)) if !list.is_empty() && list.len() <= REVERT_PATHS_LIMIT && list.iter().all(|p| p.as_str().is_some_and(|s| !s.trim().is_empty())) => {
+                list.iter().filter_map(Value::as_str).collect::<Vec<_>>()
+            }
             _ => return failure(400, format!("paths: a list of 1 to {REVERT_PATHS_LIMIT} file paths from the uncommitted list")),
         };
         if self.build_detail_or_none(context, slug).is_none() {
@@ -367,7 +390,10 @@ impl QuarantineService<'_> {
         let wanted: Vec<String> = paths.iter().map(|p| p.trim().replace('\\', "/").trim_start_matches("./").to_string()).collect();
         let outside: Vec<&String> = wanted.iter().filter(|p| !entries.iter().any(|e| &e.path == *p)).collect();
         if !outside.is_empty() {
-            return failure(400, format!("not in the uncommitted list: {}", outside.iter().take(5).map(|p| clip_redacted_text(p, OUT_LIMIT)).collect::<Vec<_>>().join(", ")));
+            return failure(
+                400,
+                format!("not in the uncommitted list: {}", outside.iter().take(5).map(|p| clip_redacted_text(p, OUT_LIMIT)).collect::<Vec<_>>().join(", ")),
+            );
         }
         let (mut reverted, mut failed): (Vec<String>, Vec<Value>) = (vec![], vec![]);
         let mut done_paths: Vec<&String> = Vec::new();
@@ -384,7 +410,10 @@ impl QuarantineService<'_> {
                 failed.push(json!({"path": path, "error": clip_redacted_text(&error, OUT_LIMIT)}));
             }
         }
-        self.app.log.info("quarantine_revert", &[("project", json!(context.project.id)), ("feature", json!(slug)), ("reverted", json!(reverted.len())), ("failed", json!(failed.len()))]);
+        self.app.log.info(
+            "quarantine_revert",
+            &[("project", json!(context.project.id)), ("feature", json!(slug)), ("reverted", json!(reverted.len())), ("failed", json!(failed.len()))],
+        );
         let mut out: Map<String, Value> = Map::new();
         out.insert("ok".into(), json!(failed.is_empty()));
         out.insert("reverted".into(), json!(reverted));
@@ -419,7 +448,9 @@ mod tests {
 
     #[test]
     fn dependents_are_transitive_and_skip_verified() {
-        let (features, _) = loop_state::parse_roadmap("- [a] status=blocked\n- [b] status=pending deps=a\n- [c] status=pending deps=b,dir:x\n- [d] status=verified deps=a\n- [e] status=pending\n");
+        let (features, _) = loop_state::parse_roadmap(
+            "- [a] status=blocked\n- [b] status=pending deps=a\n- [c] status=pending deps=b,dir:x\n- [d] status=verified deps=a\n- [e] status=pending\n",
+        );
         assert_eq!(list_transitive_dependents(&features, "a"), ["b", "c"]);
     }
 
@@ -430,7 +461,10 @@ mod tests {
         assert_eq!(service.get_detail(&context, "b"), failure(404, NOT_QUARANTINED_ERROR));
         let (status, detail) = service.get_detail(&context, "a");
         assert_eq!(status, 200);
-        assert_eq!((detail["failures"].clone(), detail["reason"].clone(), detail["skip_impact"].clone(), detail["step"].clone()), (json!(2), json!("flaky (2 failures)"), json!(["b"]), Value::Null));
+        assert_eq!(
+            (detail["failures"].clone(), detail["reason"].clone(), detail["skip_impact"].clone(), detail["step"].clone()),
+            (json!(2), json!("flaky (2 failures)"), json!(["b"]), Value::Null)
+        );
         assert_eq!(detail["summary"]["source"], "facts");
         assert_eq!(detail["summary"]["text"], "Feature a is in quarantine after 2 failed attempt(s). Skipping it also blocks: b.");
         write_summary(&context.work_dir(), "a", &json!({"text": "AI says", "at": "t", "failures": 2, "turn": null}));

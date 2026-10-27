@@ -161,7 +161,11 @@ fn find_refusal(files: &[Value], read_files: &[&Value], counts: &Value, limits: 
     if reason.is_empty() && total > limits.total_bytes {
         reason = format!("the .md files add up to {} KB: the limit is {} KB", total / 1024, limits.total_bytes / 1024);
     }
-    if reason.is_empty() { Value::Null } else { json!({"reason": reason, "counts": counts}) }
+    if reason.is_empty() {
+        Value::Null
+    } else {
+        json!({"reason": reason, "counts": counts})
+    }
 }
 
 // ------------------------------------------------ single-file helpers (kept for the older callers)
@@ -176,7 +180,12 @@ pub fn collect_from_folder(path: &str) -> Result<(Vec<(String, String)>, String)
     if !p.is_dir() {
         return Err(AppError::invalid_request(format!("folder not found: {path}")));
     }
-    let mut names: Vec<String> = std::fs::read_dir(p).map_err(|e| AppError::invalid_request(e.to_string()))?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.to_lowercase().ends_with(MARKDOWN_EXTENSION) && p.join(n).is_file()).collect();
+    let mut names: Vec<String> = std::fs::read_dir(p)
+        .map_err(|e| AppError::invalid_request(e.to_string()))?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.to_lowercase().ends_with(MARKDOWN_EXTENSION) && p.join(n).is_file())
+        .collect();
     names.sort();
     if !names.iter().any(|n| n == MAIN_SPEC_NAME) {
         return Err(AppError::invalid_request("the folder has no spec.md: pick the folder of a spec feature (spec.md, design.md, tasks.md)"));
@@ -199,7 +208,9 @@ pub fn read_markdown(path: &Path) -> Result<String> {
         return Err(AppError::invalid_request(format!("{label} is not a Markdown file (.md): only Markdown specs are imported")));
     }
     let mut raw = Vec::new();
-    std::fs::File::open(path).and_then(|f| f.take(MAX_FILE_BYTES as u64 + 1).read_to_end(&mut raw)).map_err(|e| AppError::invalid_request(format!("could not read {label}: {e}")))?;
+    std::fs::File::open(path)
+        .and_then(|f| f.take(MAX_FILE_BYTES as u64 + 1).read_to_end(&mut raw))
+        .map_err(|e| AppError::invalid_request(format!("could not read {label}: {e}")))?;
     let text = String::from_utf8_lossy(&raw).into_owned();
     let reason = file_content_problem(&label, raw.len(), &text, MAX_FILE_BYTES);
     if !reason.is_empty() {
@@ -212,7 +223,8 @@ pub fn read_markdown(path: &Path) -> Result<String> {
 
 /// What the read files hold, by regex and headings only. `files`: `[{relative_path, text}]`.
 pub fn detect_items(files: &[Value]) -> Value {
-    let texts: Vec<(String, String)> = files.iter().map(|e| (e["relative_path"].as_str().unwrap_or("").to_string(), e.get("text").and_then(Value::as_str).unwrap_or("").to_string())).collect();
+    let texts: Vec<(String, String)> =
+        files.iter().map(|e| (e["relative_path"].as_str().unwrap_or("").to_string(), e.get("text").and_then(Value::as_str).unwrap_or("").to_string())).collect();
     let joined = texts.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>().join("\n");
     let mut sections: Vec<(String, bool)> = CORE_SECTIONS.iter().map(|n| (n.to_string(), false)).collect();
     let (mut out_of_scope_rows, mut edge_cases, mut success_criteria) = (0usize, 0usize, 0usize);
@@ -332,13 +344,28 @@ fn count_list_items(body: &str) -> usize {
 
 /// The Preview warnings (strings).
 pub fn build_warnings(scan: &Value, items: &Value, project_conformance: &str) -> Vec<String> {
-    let texts: Vec<String> = scan.get("files").and_then(Value::as_array).into_iter().flatten().filter(|e| e["status"] == STATUS_READ).map(|e| e.get("text").and_then(Value::as_str).unwrap_or("").to_string()).collect();
+    let texts: Vec<String> = scan
+        .get("files")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|e| e["status"] == STATUS_READ)
+        .map(|e| e.get("text").and_then(Value::as_str).unwrap_or("").to_string())
+        .collect();
     let joined = texts.join("\n");
-    let mut warnings: Vec<String> = CORE_SECTIONS.iter().filter(|n| !items["sections"].get(**n).is_some_and(|v| engine_state::notify_truthy(Some(v)))).map(|n| format!("missing section: {n}")).collect();
+    let mut warnings: Vec<String> = CORE_SECTIONS
+        .iter()
+        .filter(|n| !items["sections"].get(**n).is_some_and(|v| engine_state::notify_truthy(Some(v))))
+        .map(|n| format!("missing section: {n}"))
+        .collect();
     if has_open_questions(&texts) {
         warnings.push("open questions are not empty: the AI will carry them to the ROADMAP".into());
     }
-    let unmapped: u64 = COVERAGE_LINE.find_all(&joined).iter().flat_map(|l| UNMAPPED_COUNT.find_all(l.group(0).unwrap_or("")).into_iter().filter_map(|m| m.group(1).and_then(|n| n.parse::<u64>().ok())).collect::<Vec<_>>()).sum();
+    let unmapped: u64 = COVERAGE_LINE
+        .find_all(&joined)
+        .iter()
+        .flat_map(|l| UNMAPPED_COUNT.find_all(l.group(0).unwrap_or("")).into_iter().filter_map(|m| m.group(1).and_then(|n| n.parse::<u64>().ok())).collect::<Vec<_>>())
+        .sum();
     if unmapped > 0 {
         warnings.push(format!("traceability reports {unmapped} unmapped requirements"));
     }

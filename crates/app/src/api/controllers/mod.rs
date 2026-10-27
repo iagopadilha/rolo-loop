@@ -47,7 +47,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = App::for_tests(dir.path());
         let router = build_router(&app);
-        let rows: Vec<String> = router.routes.iter().map(|r| format!("{} {} token={} activity={} limit={}", r.method, r.pattern, r.requires_token as u8, r.counts_as_activity as u8, r.body_limit_bytes)).collect();
+        let rows: Vec<String> = router
+            .routes
+            .iter()
+            .map(|r| format!("{} {} token={} activity={} limit={}", r.method, r.pattern, r.requires_token as u8, r.counts_as_activity as u8, r.body_limit_bytes))
+            .collect();
         let expected: Vec<&str> = include_str!("../../../tests/fixtures/routes.txt").lines().collect();
         assert_eq!(rows.len(), expected.len(), "route count");
         for (index, (got, want)) in rows.iter().zip(expected.iter()).enumerate() {

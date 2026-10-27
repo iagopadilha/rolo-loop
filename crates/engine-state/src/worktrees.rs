@@ -59,7 +59,11 @@ impl Ctx<'_> {
 /// `{slug: fields}` of the ROADMAP of `root` (empty when there is none or it is unreadable).
 pub fn roadmap_features(root: &str) -> Features {
     let path = Path::new(root).join(".specs").join("project").join("ROADMAP.md");
-    if path.exists() { parse_roadmap(&read(&path)).0 } else { Features::default() }
+    if path.exists() {
+        parse_roadmap(&read(&path)).0
+    } else {
+        Features::default()
+    }
 }
 
 /// The repos that get a worktree: the primary always, plus every NON-primary `edit` repo that a ROADMAP feature names in `paths=<repo>:`.
@@ -69,9 +73,12 @@ pub fn worktree_repos(repos: &[RepoRef], features: &Features, only: Option<&[Str
     let changed = project_repos::repos_changed_by_roadmap(&primary.name, features);
     project_repos::edit_repos(repos)
         .into_iter()
-        .filter(|item| item.primary || match only.filter(|o| !o.is_empty()) {
-            Some(only) => only.contains(&item.name),
-            None => changed.contains(&item.name),
+        .filter(|item| {
+            item.primary
+                || match only.filter(|o| !o.is_empty()) {
+                    Some(only) => only.contains(&item.name),
+                    None => changed.contains(&item.name),
+                }
         })
         .cloned()
         .collect()
@@ -127,7 +134,11 @@ pub fn choose_base(env: &mut Env, repo: &str, base_branch: &str) -> (String, Str
 }
 
 pub fn base_sha_of(repo: &str, base: &str) -> String {
-    if branch_exists(repo, base) { git(repo, &["rev-parse", "--short", &format!("refs/heads/{base}")]).1 } else { String::new() }
+    if branch_exists(repo, base) {
+        git(repo, &["rev-parse", "--short", &format!("refs/heads/{base}")]).1
+    } else {
+        String::new()
+    }
 }
 
 fn warn_line(tag: &str, text: &str) {
@@ -160,7 +171,11 @@ fn head(text: &str, n: usize) -> String {
 pub fn commit_carried_setup(work: &str, carried: &[String], tag: &str) -> bool {
     let (mut tracked, mut ignored): (Vec<String>, Vec<String>) = (vec![], vec![]);
     for path in carried {
-        if git(work, &["check-ignore", "-q", "--", path]).0 != 0 { tracked.push(path.clone()) } else { ignored.push(path.clone()) }
+        if git(work, &["check-ignore", "-q", "--", path]).0 != 0 {
+            tracked.push(path.clone())
+        } else {
+            ignored.push(path.clone())
+        }
     }
     tracked.retain(|path| !git(work, &["status", "--porcelain", "--", path]).1.trim().is_empty()); // unchanged = nothing to commit
     if !ignored.is_empty() {
@@ -198,7 +213,10 @@ pub fn carry_setup_into(repo: &str, work: &str, tag: &str, entry: Option<&Map<St
     commit_carried_setup(work, &to_commit, tag);
     let others = setup_files::list_other_changes(repo, &listed);
     if !others.is_empty() {
-        warn_line(tag, &format!("{} other changed file{} in your folder NOT carried: {}", others.len(), if others.len() == 1 { "" } else { "s" }, setup_files::shortened(&others)));
+        warn_line(
+            tag,
+            &format!("{} other changed file{} in your folder NOT carried: {}", others.len(), if others.len() == 1 { "" } else { "s" }, setup_files::shortened(&others)),
+        );
     }
     carried
 }
@@ -216,7 +234,11 @@ pub fn reattach_branch_of(primary_repo: &str, name: &str, repo: Option<&str>) ->
         return String::new();
     }
     let branch = recorded.get("branch").and_then(Value::as_str).unwrap_or("");
-    if branch_exists(repo.unwrap_or(primary_repo), branch) { branch.to_string() } else { String::new() }
+    if branch_exists(repo.unwrap_or(primary_repo), branch) {
+        branch.to_string()
+    } else {
+        String::new()
+    }
 }
 
 pub fn file_sha256(path: &Path) -> std::io::Result<String> {
@@ -257,7 +279,11 @@ pub fn copy_local_files(repo: &str, work: &str, names: &[String], tag: &str) -> 
 pub fn git_version_problem(cwd: &str) -> String {
     let Some(m) = VERSION.search(&git(cwd, &["--version"]).1) else { return "could not read the git version".into() };
     let version: (u32, u32) = (m.group(1).and_then(|s| s.parse().ok()).unwrap_or(0), m.group(2).and_then(|s| s.parse().ok()).unwrap_or(0));
-    if version >= MIN_GIT_WORKTREE_VERSION { String::new() } else { format!("git {}.{} is too old for worktrees (needs 2.5 or newer)", version.0, version.1) }
+    if version >= MIN_GIT_WORKTREE_VERSION {
+        String::new()
+    } else {
+        format!("git {}.{} is too old for worktrees (needs 2.5 or newer)", version.0, version.1)
+    }
 }
 
 /// True while no loop ran in the worktree: no LOOP.json, no turn record, no lock and `turns` 0 in meta.json (a bare worktree).
@@ -326,7 +352,8 @@ pub fn sync_untracked_map_files(repo: &str, work: &str) -> Vec<String> {
     let mut copied = Vec::new();
     let source_folder = SYNCED_INVENTORY[..5].iter().fold(PathBuf::from(repo), |acc, p| acc.join(p));
     if source_folder.is_dir() {
-        let mut names: Vec<String> = std::fs::read_dir(&source_folder).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+        let mut names: Vec<String> =
+            std::fs::read_dir(&source_folder).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
         names.sort();
         for name in names {
             let source = source_folder.join(&name);
@@ -427,7 +454,16 @@ fn copy_into_worktree(repo: &str, work: &str) -> Vec<String> {
 /// git-ignored files, their hashes are merged into `copy_hashes`; `setup` = the one-time command (`None` = the CLI --setup).
 /// `Err(message)` is what the script prints before exiting with 1.
 #[allow(clippy::too_many_arguments)]
-pub fn ensure_worktree(ctx: &mut Ctx, repo: &str, opts: &WtOpts, tag: &str, copy_files: &[String], copy_hashes: Option<&mut Map<String, Value>>, setup: Option<&str>, setup_auto: bool) -> Result<(String, Value), String> {
+pub fn ensure_worktree(
+    ctx: &mut Ctx,
+    repo: &str,
+    opts: &WtOpts,
+    tag: &str,
+    copy_files: &[String],
+    copy_hashes: Option<&mut Map<String, Value>>,
+    setup: Option<&str>,
+    setup_auto: bool,
+) -> Result<(String, Value), String> {
     let setup = setup.unwrap_or(&opts.setup).to_string();
     let work = worktree_of(repo);
     let meta_path = loop_path(&work, "meta.json");
@@ -483,14 +519,24 @@ pub fn ensure_worktree(ctx: &mut Ctx, repo: &str, opts: &WtOpts, tag: &str, copy
     let recorded_name = if tag.is_empty() { project_repos::short_name_of(repo) } else { tag.to_string() };
     let recorded = last_run_entry(repo, &recorded_name);
     let reattach = if opts.branch.is_empty() { reattach_branch_of(repo, &recorded_name, None) } else { String::new() };
-    let branch = if !reattach.is_empty() { reattach.clone() } else if !opts.branch.is_empty() { opts.branch.clone() } else { format!("loop/{}", now_stamp()) };
+    let branch = if !reattach.is_empty() {
+        reattach.clone()
+    } else if !opts.branch.is_empty() {
+        opts.branch.clone()
+    } else {
+        format!("loop/{}", now_stamp())
+    };
     if !reattach.is_empty() {
         if let Some(b) = recorded.get("base").and_then(Value::as_str).filter(|b| !b.is_empty()) {
             base = b.to_string();
         }
     }
     if opts.dry_run {
-        println!("[dry-run] git worktree add {}{work} {}", if reattach.is_empty() { format!("-b {branch} ") } else { String::new() }, if reattach.is_empty() { &base } else { &reattach });
+        println!(
+            "[dry-run] git worktree add {}{work} {}",
+            if reattach.is_empty() { format!("-b {branch} ") } else { String::new() },
+            if reattach.is_empty() { &base } else { &reattach }
+        );
         return Ok((work.clone(), json!({"branch": branch, "base": base, "worktree": work, "copied": []})));
     }
     if !reattach.is_empty() {
@@ -517,7 +563,8 @@ pub fn ensure_worktree(ctx: &mut Ctx, repo: &str, opts: &WtOpts, tag: &str, copy
     }
     let copied = copy_into_worktree(repo, &work);
     // the root CLAUDE.md copied whole (not "carried") is a setup file too when it holds an app block: it joins the setup commit
-    let copied_claude: Vec<String> = if copied.iter().any(|c| c == "CLAUDE.md") && setup_files::has_app_block(&work, "CLAUDE.md") { vec!["CLAUDE.md".into()] } else { vec![] };
+    let copied_claude: Vec<String> =
+        if copied.iter().any(|c| c == "CLAUDE.md") && setup_files::has_app_block(&work, "CLAUDE.md") { vec!["CLAUDE.md".into()] } else { vec![] };
     let entry = subprojects::load(repo, None).0;
     let carried = carry_setup_into(repo, &work, tag, entry.as_ref(), true, &copied_claude);
     loop_state::migrate_layout(&work); // .specs copied from a repo still in an older layout
@@ -541,7 +588,10 @@ pub fn ensure_worktree(ctx: &mut Ctx, repo: &str, opts: &WtOpts, tag: &str, copy
         names.extend(hashes.keys().cloned());
         step(tag, "copy", &if names.is_empty() { "nothing".to_string() } else { names.join(", ") });
     } else {
-        println!("[loop] worktree created: {work} (branch {branch}, base {base}; copied from the repo: {})", if copied.is_empty() { "nothing".to_string() } else { copied.join(", ") });
+        println!(
+            "[loop] worktree created: {work} (branch {branch}, base {base}; copied from the repo: {})",
+            if copied.is_empty() { "nothing".to_string() } else { copied.join(", ") }
+        );
     }
     if !setup.is_empty() {
         if !tag.is_empty() {
@@ -554,7 +604,10 @@ pub fn ensure_worktree(ctx: &mut Ctx, repo: &str, opts: &WtOpts, tag: &str, copy
             if !tag.is_empty() {
                 step(tag, "error", &format!("setup failed (code {code})"));
             }
-            return Err(format!("{}setup failed (code {code}); fix it and run again (the worktree already exists)", if tag.is_empty() { String::new() } else { format!("repo {tag}: ") }));
+            return Err(format!(
+                "{}setup failed (code {code}); fix it and run again (the worktree already exists)",
+                if tag.is_empty() { String::new() } else { format!("repo {tag}: ") }
+            ));
         }
     }
     if !tag.is_empty() {
@@ -579,7 +632,9 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
         let current = git(&work, &["branch", "--show-current"]).1;
         if current != branch {
             step(name, "error", &format!("folder {work} already exists but is not this loop's worktree (current branch: {current}, expected {branch})"));
-            return Err(format!("repo {name}: folder {work} already exists but is not this loop's worktree (current branch: {current}). Remove or rename it and run again."));
+            return Err(format!(
+                "repo {name}: folder {work} already exists but is not this loop's worktree (current branch: {current}). Remove or rename it and run again."
+            ));
         }
         let base = if known_base.is_empty() { git(&item.path, &["branch", "--show-current"]).1 } else { known_base };
         entry["base"] = json!(base);
@@ -614,7 +669,11 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
         entry["base"] = json!(base);
     }
     if opts.dry_run {
-        println!("[dry-run] [{name}] git worktree add {}{work} {}", if reattach { String::new() } else { format!("-b {branch} ") }, if reattach { branch } else { &base });
+        println!(
+            "[dry-run] [{name}] git worktree add {}{work} {}",
+            if reattach { String::new() } else { format!("-b {branch} ") },
+            if reattach { branch } else { &base }
+        );
         return Ok(entry);
     }
     let (mut code, mut err);
@@ -677,7 +736,11 @@ pub fn ensure_worktrees(ctx: &mut Ctx, repo: &str, opts: &mut WtOpts) -> Result<
     let (primary_setup, primary_auto) = resolve_setup(&primary, &opts.setup);
     let (work, mut meta) = ensure_worktree(ctx, repo, opts, &primary.name, &resolve_copy(&primary), Some(&mut hashes), Some(&primary_setup), primary_auto)?;
     let previous = meta.get("repos").and_then(Value::as_object).cloned().unwrap_or_default();
-    let primary_copied = if hashes.is_empty() { previous.get(&primary.name).and_then(|p| p.get("copied")).filter(|c| c.is_object()).cloned().unwrap_or(json!({})) } else { Value::Object(hashes) };
+    let primary_copied = if hashes.is_empty() {
+        previous.get(&primary.name).and_then(|p| p.get("copied")).filter(|c| c.is_object()).cloned().unwrap_or(json!({}))
+    } else {
+        Value::Object(hashes)
+    };
     let branch = meta["branch"].as_str().unwrap_or("").to_string();
     let mut entries: BTreeMap<String, Value> = BTreeMap::new();
     let mut order: Vec<String> = vec![primary.name.clone()];

@@ -29,7 +29,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 static RECOMMENDED_SEPARATOR: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\s*\|\s*recommended\s*:\s*"));
-pub const PLANNING_DOCUMENTS: [(&str, &str); 4] = [("project", ".specs/project/PROJECT.md"), ("roadmap", ".specs/project/ROADMAP.md"), ("flows", ".specs/project/FLOWS.md"), ("environment", ".specs/project/TEST-ENVIRONMENT.md")];
+pub const PLANNING_DOCUMENTS: [(&str, &str); 4] = [
+    ("project", ".specs/project/PROJECT.md"),
+    ("roadmap", ".specs/project/ROADMAP.md"),
+    ("flows", ".specs/project/FLOWS.md"),
+    ("environment", ".specs/project/TEST-ENVIRONMENT.md"),
+];
 pub const PLANNING_FIRST_PROMPT: &str = "/orchestrator plan --headless";
 pub const PLANNING_MODEL: &str = ""; // empty = the account's default model, as in the loop
 pub const PLANNING_BUDGET_USD: f64 = 2.0;
@@ -123,7 +128,12 @@ impl PlanningService<'_> {
             let path = relative.split('/').fold(PathBuf::from(context.work_dir()), |a, p| a.join(p));
             docs.insert(key.to_string(), self.app.specs.read_text(&path).map(Value::from).unwrap_or(Value::Null));
         }
-        let messages: Vec<Value> = thread["messages"].as_array().into_iter().flatten().map(|m| Value::Object(PUBLIC_MESSAGE_FIELDS.iter().map(|f| (f.to_string(), m.get(*f).cloned().unwrap_or(Value::Null))).collect())).collect();
+        let messages: Vec<Value> = thread["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|m| Value::Object(PUBLIC_MESSAGE_FIELDS.iter().map(|f| (f.to_string(), m.get(*f).cloned().unwrap_or(Value::Null))).collect()))
+            .collect();
         let roadmap = docs.get("roadmap").and_then(Value::as_str).unwrap_or("").to_string();
         json!({
             "required": self.app.planning_requirement().is_planning_required(context),
@@ -142,7 +152,13 @@ impl PlanningService<'_> {
         let facts = super::project_progress::ProjectProgressService::read_map_facts(&context.work_dir(), context.repo_path());
         let (relative, root) = run_hints::find_map_folder(&[&context.work_dir(), context.repo_path()]);
         let folder = relative.split('/').fold(PathBuf::from(root), |a, p| a.join(p));
-        let docs: serde_json::Map<String, Value> = facts["map_files"].as_array().into_iter().flatten().filter_map(Value::as_str).map(|name| (name.to_string(), self.app.specs.read_text(&folder.join(name)).map(Value::from).unwrap_or(Value::Null))).collect();
+        let docs: serde_json::Map<String, Value> = facts["map_files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(|name| (name.to_string(), self.app.specs.read_text(&folder.join(name)).map(Value::from).unwrap_or(Value::Null)))
+            .collect();
         json!({"folder": facts["map_folder"], "commit": facts["map_commit"], "docs": docs})
     }
 
@@ -184,10 +200,13 @@ impl PlanningService<'_> {
         }
         write_planning_thread(&work_dir, &mut thread);
         let snapshot: SnapshotSlot = Arc::new(Mutex::new(None));
-        let (prepare_app, prepare_context, prepare_session, prepare_message, prepare_slot) = (self.app.shared(), context.clone(), session.clone(), message.clone(), snapshot.clone());
-        let before_start: BeforeStart = Box::new(move |_update| prepare_app.planning().prepare_reply(&prepare_context, &prepare_session, &prepare_message, &prepare_slot).map(Some));
+        let (prepare_app, prepare_context, prepare_session, prepare_message, prepare_slot) =
+            (self.app.shared(), context.clone(), session.clone(), message.clone(), snapshot.clone());
+        let before_start: BeforeStart =
+            Box::new(move |_update| prepare_app.planning().prepare_reply(&prepare_context, &prepare_session, &prepare_message, &prepare_slot).map(Some));
         let (undo_app, undo_context, undo_message) = (self.app.shared(), context.clone(), message.clone());
-        let on_failed: Box<dyn FnOnce(&ClaudeJobError) + Send> = Box::new(move |failure| undo_app.planning().undo_unsent_message(&undo_context, &undo_message, on_prepare_failed, failure));
+        let on_failed: Box<dyn FnOnce(&ClaudeJobError) + Send> =
+            Box::new(move |failure| undo_app.planning().undo_unsent_message(&undo_context, &undo_message, on_prepare_failed, failure));
         let (finish_app, finish_context) = (self.app.shared(), context.clone());
         let mut command = ClaudeJobCommand::new(vec![], "");
         command.resumed_session = session.clone();
@@ -206,7 +225,9 @@ impl PlanningService<'_> {
             }
         };
         drop(guard);
-        self.app.log.info("planning_message_sent", &[("project", json!(context.project.id)), ("job", job["id"].clone()), ("resuming_session", json!(!session.is_empty()))]);
+        self.app
+            .log
+            .info("planning_message_sent", &[("project", json!(context.project.id)), ("job", job["id"].clone()), ("resuming_session", json!(!session.is_empty()))]);
         Ok(json!({"ok": true, "job_id": job["id"]}))
     }
 
@@ -316,7 +337,8 @@ impl PlanningService<'_> {
             }
         }
         if self.app.jobs().get_running_job(context.repo_path()).is_some() {
-            return Err(AppError::new(Kind::JobInProgress, "a reply (or another claude job) is already in progress in this project: wait for it to finish").with_code(PLANNING_BUSY_CODE));
+            return Err(AppError::new(Kind::JobInProgress, "a reply (or another claude job) is already in progress in this project: wait for it to finish")
+                .with_code(PLANNING_BUSY_CODE));
         }
         Ok(())
     }
@@ -326,7 +348,11 @@ impl PlanningService<'_> {
         if are_prerequisites_ok(gates) {
             return String::new();
         }
-        let failing: Vec<String> = gates.iter().filter(|g| PREREQUISITE_GATES.contains(&g["id"].as_str().unwrap_or("")) && g["ok"] != true && g["optional"] != true).map(|g| text_of(g.get("label"))).collect();
+        let failing: Vec<String> = gates
+            .iter()
+            .filter(|g| PREREQUISITE_GATES.contains(&g["id"].as_str().unwrap_or("")) && g["ok"] != true && g["optional"] != true)
+            .map(|g| text_of(g.get("label")))
+            .collect();
         format!("prerequisites missing before planning: {}", failing.join(", "))
     }
 
@@ -342,7 +368,10 @@ impl PlanningService<'_> {
         let touched: Vec<String> = reverted.iter().chain(&removed).chain(&unrestorable).cloned().collect();
         if !touched.is_empty() {
             let head = |items: &[String]| json!(items.iter().take(50).collect::<Vec<_>>());
-            self.app.log.warn("planning_guard_reverted", &[("project", json!(context.project.id)), ("reverted", head(&reverted)), ("removed", head(&removed)), ("unrestorable", head(&unrestorable))]);
+            self.app.log.warn(
+                "planning_guard_reverted",
+                &[("project", json!(context.project.id)), ("reverted", head(&reverted)), ("removed", head(&removed)), ("unrestorable", head(&unrestorable))],
+            );
         }
         self.restore_capabilities_region(context, &snapshot); // logged, no note: the rest of the document is the AI's and stays
         self.apply_reply_effects(context);
@@ -350,7 +379,10 @@ impl PlanningService<'_> {
         if engine_state::notify_truthy(result.get("ok")) {
             let mut reply = redact_secrets(&text_of(result.get("reply")), Some(PLANNING_REPLY_LIMIT));
             if !touched.is_empty() {
-                reply.push_str(&format!("\n\n(The app undid changes outside the planning documents: {})", touched.iter().take(GUARD_NOTE_FILES_SHOWN).cloned().collect::<Vec<_>>().join(", ")));
+                reply.push_str(&format!(
+                    "\n\n(The app undid changes outside the planning documents: {})",
+                    touched.iter().take(GUARD_NOTE_FILES_SHOWN).cloned().collect::<Vec<_>>().join(", ")
+                ));
             }
             result["reply"] = json!(reply);
         }
@@ -390,7 +422,10 @@ impl PlanningService<'_> {
         }
         let restored = replace_block(&current, &before_block);
         if let Err(failure) = std::fs::write(&path, restored.as_bytes()) {
-            self.app.log.warn("planning_capabilities_region_not_restored", &[("project", json!(context.project.id)), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))]);
+            self.app.log.warn(
+                "planning_capabilities_region_not_restored",
+                &[("project", json!(context.project.id)), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))],
+            );
             return false;
         }
         self.app.log.warn("planning_capabilities_region_restored", &[("project", json!(context.project.id))]);
@@ -402,12 +437,18 @@ impl PlanningService<'_> {
     fn apply_reply_effects(&self, context: &ProjectContext) {
         let steps: [(&str, Box<dyn Fn() + '_>); 3] = [
             ("repos", Box::new(|| drop(self.app.planning_repos().apply_suggested_repos(context)))),
-            ("capabilities", Box::new(|| {
-                let _ = self.app.capabilities().write(context);
-            })),
-            ("readiness", Box::new(|| {
-                let _ = self.app.readiness_schedule(context);
-            })),
+            (
+                "capabilities",
+                Box::new(|| {
+                    let _ = self.app.capabilities().write(context);
+                }),
+            ),
+            (
+                "readiness",
+                Box::new(|| {
+                    let _ = self.app.readiness_schedule(context);
+                }),
+            ),
         ];
         for (name, step) in steps {
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(step)).is_err() {
@@ -462,7 +503,10 @@ mod tests {
         assert_eq!(planning_disallowed_tools().len(), 4);
         assert_eq!(PlanningService::validate_text(&json!("  hi  ")).unwrap(), "hi");
         assert_eq!(PlanningService::validate_text(&json!("")).unwrap_err().message, "empty text");
-        assert_eq!(PlanningService::describe_missing_prerequisites(&[json!({"id": "git", "label": "Git repository", "ok": false, "optional": false})]), "prerequisites missing before planning: Git repository");
+        assert_eq!(
+            PlanningService::describe_missing_prerequisites(&[json!({"id": "git", "label": "Git repository", "ok": false, "optional": false})]),
+            "prerequisites missing before planning: Git repository"
+        );
         assert_eq!(PlanningService::describe_missing_prerequisites(&[json!({"id": "goal", "label": "x", "ok": false, "optional": false})]), "");
     }
 }

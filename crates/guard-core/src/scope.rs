@@ -3,9 +3,7 @@
 //! credential paths and broad reads, `specs-only` / `path-scope` / `repo-only` checks, shell write targets.
 
 use crate::paths::{inside_any, normalize_path, path_forms, temp_exempt, G};
-use crate::pyre::{
-    fnmatchcase, nt_dirname, nt_isabs, nt_join, posix_normpath, shlex_split_nonposix, split_ws, Re,
-};
+use crate::pyre::{fnmatchcase, nt_dirname, nt_isabs, nt_join, posix_normpath, shlex_split_nonposix, split_ws, Re};
 use crate::rules::*;
 use crate::shell::{command_starts, executable_name, quoted_ranges, ASSIGNMENT_RE};
 use crate::state::{alert, log, loop_file};
@@ -32,26 +30,15 @@ static TASK_MARK: LazyLock<Re> = LazyLock::new(|| Re::new(r"SCOPE_TASK:\s*([A-Za
 pub fn executor_slug(payload: &Value, task: bool) -> Option<String> {
     let mark: &Re = if task { &TASK_MARK } else { &SLUG_MARK };
     let agent_id = payload.get("agent_id").filter(|v| crate::state::truthy(v));
-    let mut transcript: Option<String> = payload
-        .get("agent_transcript_path")
-        .filter(|v| crate::state::truthy(v))
-        .map(crate::state::value_text);
+    let mut transcript: Option<String> = payload.get("agent_transcript_path").filter(|v| crate::state::truthy(v)).map(crate::state::value_text);
     if transcript.is_none() {
-        if let (Some(id), Some(base)) = (
-            agent_id,
-            payload
-                .get("transcript_path")
-                .filter(|v| crate::state::truthy(v)),
-        ) {
+        if let (Some(id), Some(base)) = (agent_id, payload.get("transcript_path").filter(|v| crate::state::truthy(v))) {
             let base = crate::state::value_text(base);
             let stem = match base.rfind('.') {
                 Some(i) if base[i..].find(['\\', '/']).is_none() => base[..i].to_string(),
                 _ => base,
             };
-            transcript = Some(nt_join(
-                &nt_join(&stem, "subagents"),
-                &format!("agent-{}.jsonl", crate::state::value_text(id)),
-            ));
+            transcript = Some(nt_join(&nt_join(&stem, "subagents"), &format!("agent-{}.jsonl", crate::state::value_text(id))));
         }
     }
     let transcript = crate::paths::long_path(&transcript?);
@@ -61,8 +48,7 @@ pub fn executor_slug(payload: &Value, task: bool) -> Option<String> {
     let bytes = std::fs::read(&transcript).ok()?;
     let text = String::from_utf8_lossy(&bytes).to_string();
     let head: String = text.chars().take(40000).collect();
-    mark.search(&head)
-        .and_then(|m| m.group(1).map(String::from))
+    mark.search(&head).and_then(|m| m.group(1).map(String::from))
 }
 
 // ---- SCOPE.json ----------------------------------------------------------------------------------------------------------------------
@@ -72,13 +58,7 @@ pub fn read_scope_file(specs_dir: &str) -> serde_json::Map<String, Value> {
         .ok()
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|v| {
-            if let Value::Object(m) = v {
-                Some(m)
-            } else {
-                None
-            }
-        })
+        .and_then(|v| if let Value::Object(m) = v { Some(m) } else { None })
         .unwrap_or_default()
 }
 
@@ -88,10 +68,7 @@ pub fn scope_file_state(specs_dir: &str) -> &'static str {
     if !Path::new(&path).exists() {
         return "absent";
     }
-    let parsed = std::fs::read(&path)
-        .ok()
-        .and_then(|b| String::from_utf8(b).ok())
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let parsed = std::fs::read(&path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok());
     match parsed {
         Some(data) if scope_shape_ok(&data) => "ok",
         _ => "unreadable",
@@ -127,10 +104,7 @@ pub fn scope_shape_ok(data: &Value) -> bool {
 
 fn strings(v: Option<&Value>) -> Vec<String> {
     match v {
-        Some(Value::Array(items)) => items
-            .iter()
-            .filter_map(|i| i.as_str().map(String::from))
-            .collect(),
+        Some(Value::Array(items)) => items.iter().filter_map(|i| i.as_str().map(String::from)).collect(),
         _ => vec![],
     }
 }
@@ -142,9 +116,7 @@ pub fn load_scope(specs_dir: &str, slug: Option<&str>, task: Option<&str>) -> Ve
         Some(Value::Object(m)) => m.clone(),
         _ => Default::default(),
     };
-    if let (Some(task), Some(Value::Object(tasks))) =
-        (task.filter(|t| !t.is_empty()), data.get("tasks"))
-    {
+    if let (Some(task), Some(Value::Object(tasks))) = (task.filter(|t| !t.is_empty()), data.get("tasks")) {
         if let Some(entries) = tasks.get(task) {
             return strings(Some(entries));
         }
@@ -173,11 +145,7 @@ pub fn project_roots(g: &G, specs_dir: &str) -> Vec<String> {
 
 /// Absolute, normalized paths of the config files copied into the worktrees.
 pub fn load_copied(g: &G, specs_dir: &str) -> Vec<String> {
-    strings(read_scope_file(specs_dir).get("copied"))
-        .into_iter()
-        .filter(|i| nt_isabs(i))
-        .map(|i| g.norm(&i))
-        .collect()
+    strings(read_scope_file(specs_dir).get("copied")).into_iter().filter(|i| nt_isabs(i)).map(|i| g.norm(&i)).collect()
 }
 
 static CANDIDATE_SPLIT: LazyLock<Re> = LazyLock::new(|| Re::new(r#"[\s"'`<>|;&(){},=]+"#));
@@ -185,17 +153,8 @@ static SECRET_TOKEN_SPLIT: LazyLock<Re> = LazyLock::new(|| Re::new(r#"[\s"'`<>|;
 static DOTSLASH: LazyLock<Re> = LazyLock::new(|| Re::new(r"[./\\]"));
 static PATHISH: LazyLock<Re> = LazyLock::new(|| Re::new(r"[./~$%]"));
 
-fn mentions_copied_normalized(
-    g: &G,
-    text: &str,
-    cwd: Option<&str>,
-    copied: &[String],
-    roots: &[String],
-) -> bool {
-    let base: Option<String> = cwd
-        .filter(|c| !c.is_empty())
-        .map(String::from)
-        .or_else(|| roots.first().cloned());
+fn mentions_copied_normalized(g: &G, text: &str, cwd: Option<&str>, copied: &[String], roots: &[String]) -> bool {
+    let base: Option<String> = cwd.filter(|c| !c.is_empty()).map(String::from).or_else(|| roots.first().cloned());
     let mut tails: Vec<String> = Vec::new();
     for path in copied {
         for root in roots {
@@ -224,12 +183,7 @@ fn mentions_copied_normalized(
 }
 
 /// True when `text` names a copied config file: by full path, or by its path inside the worktree when `cwd` is that worktree.
-pub fn mentions_copied_secret(
-    g: &G,
-    text: &str,
-    cwd: Option<&str>,
-    specs_dir: Option<&str>,
-) -> bool {
+pub fn mentions_copied_secret(g: &G, text: &str, cwd: Option<&str>, specs_dir: Option<&str>) -> bool {
     let Some(specs) = specs_dir.filter(|s| !s.is_empty()) else {
         return false;
     };
@@ -241,10 +195,7 @@ pub fn mentions_copied_secret(
         return false;
     }
     let flat = g.fold(&text.replace("\\\\", "/").replace('\\', "/"));
-    let here = cwd
-        .filter(|c| !c.is_empty())
-        .map(|c| g.norm(c))
-        .unwrap_or_default();
+    let here = cwd.filter(|c| !c.is_empty()).map(|c| g.norm(c)).unwrap_or_default();
     let roots = project_roots(g, specs);
     if mentions_copied_normalized(g, text, cwd, &copied, &roots) {
         return true;
@@ -256,8 +207,7 @@ pub fn mentions_copied_secret(
         for root in &roots {
             if let Some(relative) = path.strip_prefix(&format!("{root}/")) {
                 if here == *root || here.starts_with(&format!("{root}/")) {
-                    let pattern =
-                        format!(r"(?<![\w./-]){}(?![\w-])", crate::pyre::escape(relative));
+                    let pattern = format!(r"(?<![\w./-]){}(?![\w-])", crate::pyre::escape(relative));
                     if Re::new(&pattern).is_match(&flat) {
                         return true;
                     }
@@ -270,30 +220,16 @@ pub fn mentions_copied_secret(
 
 // ---- credentials --------------------------------------------------------------------------------------------------------------------
 
-const BUILTIN_SECRET_FILES: [&str; 8] = [
-    "~/.claude.json",
-    "~/.claude/.credentials.json",
-    "~/.npmrc",
-    "~/.netrc",
-    "~/.git-credentials",
-    "~/.docker/config.json",
-    "~/.kube/config",
-    "~/.config/gh/hosts.yml",
-];
+const BUILTIN_SECRET_FILES: [&str; 8] =
+    ["~/.claude.json", "~/.claude/.credentials.json", "~/.npmrc", "~/.netrc", "~/.git-credentials", "~/.docker/config.json", "~/.kube/config", "~/.config/gh/hosts.yml"];
 const BUILTIN_SECRET_FOLDERS: [&str; 2] = ["~/.ssh", "~/.aws"];
 
 pub fn builtin_secret_paths(g: &G) -> Vec<String> {
-    BUILTIN_SECRET_FILES
-        .iter()
-        .map(|i| normalize_path(g, &g.expanduser(i), None, None))
-        .collect()
+    BUILTIN_SECRET_FILES.iter().map(|i| normalize_path(g, &g.expanduser(i), None, None)).collect()
 }
 
 fn builtin_secret_folders(g: &G) -> Vec<String> {
-    BUILTIN_SECRET_FOLDERS
-        .iter()
-        .map(|i| normalize_path(g, &g.expanduser(i), None, None))
-        .collect()
+    BUILTIN_SECRET_FOLDERS.iter().map(|i| normalize_path(g, &g.expanduser(i), None, None)).collect()
 }
 
 /// `GUARD_SECRET_PATHS` (comma-separated files or folders) from the environment, else from the app `.env`; normalized.
@@ -321,12 +257,7 @@ pub fn expand_braces(pattern: &str) -> Vec<String> {
     };
     let mut options = Vec::new();
     for alternative in found.group(1).unwrap_or("").split(',') {
-        options.extend(expand_braces(&format!(
-            "{}{}{}",
-            &pattern[..found.start],
-            alternative,
-            &pattern[found.end..]
-        )));
+        options.extend(expand_braces(&format!("{}{}{}", &pattern[..found.start], alternative, &pattern[found.end..])));
     }
     options
 }
@@ -352,9 +283,7 @@ fn glob_regex(pattern: &str) -> String {
             out.push_str("[^/]");
             index += 1;
         } else if c == '[' && chars.len() > index + 2 && chars[index + 2..].contains(&']') {
-            let end = (index + 2..chars.len())
-                .find(|&i| chars[i] == ']')
-                .unwrap_or(index + 2);
+            let end = (index + 2..chars.len()).find(|&i| chars[i] == ']').unwrap_or(index + 2);
             let body: String = chars[index + 1..end].iter().collect();
             out.push('[');
             out.push_str(&body.replace('\\', "\\\\"));
@@ -393,24 +322,13 @@ pub fn secret_path_hit(g: &G, text: &str, cwd: Option<&str>) -> bool {
             continue;
         }
         let absolute = normalize_path(g, &g.expand_user_path(&token), cwd, None);
-        if secret_files.contains(&absolute)
-            || secret_folders
-                .iter()
-                .any(|f| absolute.starts_with(&format!("{f}/")))
-            || secret_folders.contains(&absolute)
-        {
+        if secret_files.contains(&absolute) || secret_folders.iter().any(|f| absolute.starts_with(&format!("{f}/"))) || secret_folders.contains(&absolute) {
             return true;
         }
-        if builtin_folders
-            .iter()
-            .any(|f| absolute == *f || absolute.starts_with(&format!("{f}/")))
-            && !absolute.ends_with(".example")
-        {
+        if builtin_folders.iter().any(|f| absolute == *f || absolute.starts_with(&format!("{f}/"))) && !absolute.ends_with(".example") {
             return true;
         }
-        if GLOB_CHARS.is_match(&absolute)
-            && secret_files.iter().any(|s| glob_matches(g, &absolute, s))
-        {
+        if GLOB_CHARS.is_match(&absolute) && secret_files.iter().any(|s| glob_matches(g, &absolute, s)) {
             return true;
         }
     }
@@ -418,11 +336,7 @@ pub fn secret_path_hit(g: &G, text: &str, cwd: Option<&str>) -> bool {
 }
 
 pub fn secret_target_hit(g: &G, target: &str, cwd: Option<&str>, specs_dir: Option<&str>) -> bool {
-    path_forms(g, target, cwd)
-        .iter()
-        .any(|f| SECRET_HINT.is_match(f))
-        || secret_path_hit(g, target, cwd)
-        || mentions_copied_secret(g, target, cwd, specs_dir)
+    path_forms(g, target, cwd).iter().any(|f| SECRET_HINT.is_match(f)) || secret_path_hit(g, target, cwd) || mentions_copied_secret(g, target, cwd, specs_dir)
 }
 
 fn value_str(v: Option<&Value>) -> Option<&str> {
@@ -430,12 +344,7 @@ fn value_str(v: Option<&Value>) -> Option<&str> {
 }
 
 /// Why a Grep/Glob call can hit a Claude credential file without naming it; empty otherwise.
-pub fn search_reaches_credentials(
-    g: &G,
-    tool_name: &str,
-    input: &Value,
-    cwd: Option<&str>,
-) -> String {
+pub fn search_reaches_credentials(g: &G, tool_name: &str, input: &Value, cwd: Option<&str>) -> String {
     if !input.is_object() || (tool_name != "Grep" && tool_name != "Glob") {
         return String::new();
     }
@@ -457,20 +366,10 @@ pub fn search_reaches_credentials(
         };
         let expanded = g.expand_user_path(pattern).replace('\\', "/");
         static ABS: LazyLock<Re> = LazyLock::new(|| Re::new(r"^(?:[a-zA-Z]:)?/"));
-        let full = if ABS.is_match(&expanded) {
-            normalize_path(g, &expanded, None, None)
-        } else {
-            format!("{root}/{}", expanded.trim_start_matches('/'))
-        };
-        return if secrets.iter().any(|s| glob_matches(g, &full, s)) {
-            "Glob pattern that matches a Claude credential file".into()
-        } else {
-            String::new()
-        };
+        let full = if ABS.is_match(&expanded) { normalize_path(g, &expanded, None, None) } else { format!("{root}/{}", expanded.trim_start_matches('/')) };
+        return if secrets.iter().any(|s| glob_matches(g, &full, s)) { "Glob pattern that matches a Claude credential file".into() } else { String::new() };
     }
-    let file_type = value_str(input.get("type"))
-        .map(|t| t.to_lowercase())
-        .unwrap_or_default();
+    let file_type = value_str(input.get("type")).map(|t| t.to_lowercase()).unwrap_or_default();
     if !file_type.is_empty() && file_type != "json" {
         return String::new();
     }
@@ -480,16 +379,10 @@ pub fn search_reaches_credentials(
             continue;
         }
         if let Some(gl) = glob.filter(|gl| !gl.trim().is_empty() && !gl.trim().starts_with('!')) {
-            let matched = expand_braces(&gl.trim().replace('\\', "/"))
-                .into_iter()
-                .any(|option| {
-                    let pattern = if !option.contains('/') {
-                        format!("**/{option}")
-                    } else {
-                        option
-                    };
-                    glob_matches(g, &format!("{root}/{pattern}"), secret)
-                });
+            let matched = expand_braces(&gl.trim().replace('\\', "/")).into_iter().any(|option| {
+                let pattern = if !option.contains('/') { format!("**/{option}") } else { option };
+                glob_matches(g, &format!("{root}/{pattern}"), secret)
+            });
             if !matched {
                 continue;
             }
@@ -501,36 +394,18 @@ pub fn search_reaches_credentials(
 
 // ---- broad reads -----------------------------------------------------------------------------------------------------------------------
 
-static IGNORE_OFF_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"\s(?:--no-ignore\S*|--unrestricted|-[a-zA-Z]*u[a-zA-Z]*)(?=\s|\z)"));
-static IGNORE_AWARE_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"(?:^|[\s|(])(?:rg|ripgrep|ag|ack)(?:\.exe)?\s"));
-static GREP_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"(?:^|[\s|(])(?:grep|egrep|fgrep|ugrep|ug)(?:\.exe)?\s"));
-static GREP_RECURSIVE_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::new(
-        r"\s(?:--recursive|--dereference-recursive|-d\s*recurse|-[a-zA-Z]*[rR][a-zA-Z]*)(?=\s|\z)",
-    )
-});
+static IGNORE_OFF_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\s(?:--no-ignore\S*|--unrestricted|-[a-zA-Z]*u[a-zA-Z]*)(?=\s|\z)"));
+static IGNORE_AWARE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|[\s|(])(?:rg|ripgrep|ag|ack)(?:\.exe)?\s"));
+static GREP_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|[\s|(])(?:grep|egrep|fgrep|ugrep|ug)(?:\.exe)?\s"));
+static GREP_RECURSIVE_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"\s(?:--recursive|--dereference-recursive|-d\s*recurse|-[a-zA-Z]*[rR][a-zA-Z]*)(?=\s|\z)"));
 const READ_TOOLS: &str = "(?:cat|grep|egrep|fgrep|head|tail|less|more|strings|xxd|od|base64|cp|sed|awk|type|rg|bat|tac|nl)";
 static FIND_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|[\s|(])find(?:\.exe)?\s"));
-static FIND_READ_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(
-        r"(?:-exec(?:dir)?|-ok(?:dir)?|\|\s*xargs(?:\s+-\S+)*)\s+(?:\S*[\\/])?{READ_TOOLS}\b"
-    ))
-});
-static GCI_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(r"(?:^|[\s|(])(?:Get-ChildItem|gci|dir|ls)(?:\s[^|]*?)?\s-(?:Recurse|r)(?=\s|\z)")
-});
-static PIPE_READER_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(
-        r"\b(?:Select-String|sls|Get-Content|gc|cat|type|findstr|xargs|grep|egrep|rg|head|tail|more|less|ForEach-Object|foreach)\b|\|\s*%",
-    )
-});
-static FINDSTR_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"(?:^|[\s|(])findstr(?:\s[^|]*?)?\s/[a-z]*s[a-z]*(?=\s|\z)"));
-static WILDCARD_READER_RE: LazyLock<Re> =
-    LazyLock::new(|| Re::ci(r"\b(?:Select-String|sls|Get-Content|gc|findstr)\b"));
+static FIND_READ_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(&format!(r"(?:-exec(?:dir)?|-ok(?:dir)?|\|\s*xargs(?:\s+-\S+)*)\s+(?:\S*[\\/])?{READ_TOOLS}\b")));
+static GCI_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|[\s|(])(?:Get-ChildItem|gci|dir|ls)(?:\s[^|]*?)?\s-(?:Recurse|r)(?=\s|\z)"));
+static PIPE_READER_RE: LazyLock<Re> =
+    LazyLock::new(|| Re::ci(r"\b(?:Select-String|sls|Get-Content|gc|cat|type|findstr|xargs|grep|egrep|rg|head|tail|more|less|ForEach-Object|foreach)\b|\|\s*%"));
+static FINDSTR_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(?:^|[\s|(])findstr(?:\s[^|]*?)?\s/[a-z]*s[a-z]*(?=\s|\z)"));
+static WILDCARD_READER_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\b(?:Select-String|sls|Get-Content|gc|findstr)\b"));
 static COPY_TREE_RE: LazyLock<Re> = LazyLock::new(|| {
     Re::ci(
         r"(?:^|[\s|(])(?:(?:cp|rsync)(?:\.exe)?(?:\s[^|]*?)?\s(?:--recursive|--archive|-[a-zA-Z]*[rRa][a-zA-Z]*)(?=\s|\z)|Copy-Item(?:\s[^|]*?)?\s-Recurse\b|xcopy(?:\s[^|]*?)?\s/[se]\b|robocopy\s|zip\s|Compress-Archive\s|tar\s+-?[a-zA-Z]*c)",
@@ -543,32 +418,20 @@ static TOKENS_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r#""[^"]*"|'[^']*'|[^\
 
 fn last_segment_fold(g: &G, pattern: &str) -> String {
     let stripped = pattern.trim_matches(|c| c == '"' || c == '\'');
-    g.fold(
-        SEP_SPLIT
-            .split(stripped)
-            .last()
-            .map(String::as_str)
-            .unwrap_or(""),
-    )
+    g.fold(SEP_SPLIT.split(stripped).last().map(String::as_str).unwrap_or(""))
 }
 
 fn glob_covers(g: &G, pattern: &str, names: &[String]) -> bool {
-    expand_braces(&last_segment_fold(g, pattern))
-        .iter()
-        .any(|option| names.iter().any(|name| fnmatchcase(name, option)))
+    expand_braces(&last_segment_fold(g, pattern)).iter().any(|option| names.iter().any(|name| fnmatchcase(name, option)))
 }
 
 fn glob_names_copied(g: &G, pattern: &str, names: &[String], quoted: bool) -> bool {
-    if pattern
-        .trim_matches(|c| c == '"' || c == '\'')
-        .starts_with('!')
-    {
+    if pattern.trim_matches(|c| c == '"' || c == '\'').starts_with('!') {
         return false;
     }
     for option in expand_braces(&last_segment_fold(g, pattern)) {
         let literal = GLOB_CHARS.replace_lit(&option, "");
-        let specific =
-            Re::new(r"[a-z0-9]").is_match(&literal) || (option.starts_with('.') && !quoted);
+        let specific = Re::new(r"[a-z0-9]").is_match(&literal) || (option.starts_with('.') && !quoted);
         if specific && names.iter().any(|name| fnmatchcase(name, &option)) {
             return true;
         }
@@ -582,11 +445,7 @@ fn option_values(plain: &[String], long_names: &[&str], short_names: &[&str]) ->
         let lowered = token.to_lowercase();
         for name in long_names {
             if lowered.starts_with(&format!("{name}=")) {
-                values.push(
-                    token[name.len() + 1..]
-                        .trim_matches(|c| c == '"' || c == '\'')
-                        .to_string(),
-                );
+                values.push(token[name.len() + 1..].trim_matches(|c| c == '"' || c == '\'').to_string());
             } else if lowered == *name && index + 1 < plain.len() {
                 values.push(plain[index + 1].clone());
             }
@@ -603,14 +462,7 @@ pub fn resolve_dir(g: &G, path: &str, cwd: Option<&str>) -> String {
     if nt_isabs(&path) {
         g.norm(&path)
     } else {
-        let base = cwd
-            .filter(|c| !c.is_empty())
-            .map(String::from)
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_default()
-            });
+        let base = cwd.filter(|c| !c.is_empty()).map(String::from).unwrap_or_else(|| std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
         g.norm(&nt_join(&base, &path))
     }
 }
@@ -638,14 +490,7 @@ fn target_dirs(g: &G, tokens: &[String], cwd: Option<&str>) -> Vec<String> {
         let raw = if nt_isabs(&raw) {
             raw
         } else {
-            let base = cwd
-                .filter(|c| !c.is_empty())
-                .map(String::from)
-                .unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default()
-                });
+            let base = cwd.filter(|c| !c.is_empty()).map(String::from).unwrap_or_else(|| std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
             nt_join(&base, &raw)
         };
         if Path::new(&raw).is_dir() {
@@ -674,10 +519,7 @@ fn broad_reader(g: &G, statement: &str, plain: &[String], names: &[String]) -> S
         if IGNORE_OFF_RE.is_match(statement) {
             return "search with the ignore rules switched off (rg --no-ignore/-u/-uu) reads git-ignored config copies".into();
         }
-        if option_values(plain, &["--glob", "--iglob"], &["-g"])
-            .iter()
-            .any(|gl| glob_names_copied(g, gl, names, false))
-        {
+        if option_values(plain, &["--glob", "--iglob"], &["-g"]).iter().any(|gl| glob_names_copied(g, gl, names, false)) {
             return "search whose --glob singles out a git-ignored config copy".into();
         }
     }
@@ -687,9 +529,7 @@ fn broad_reader(g: &G, statement: &str, plain: &[String], names: &[String]) -> S
     if GREP_RE.is_match(statement) && GREP_RECURSIVE_RE.is_match(statement) {
         let includes = option_values(plain, &["--include"], &[]);
         let excludes = option_values(plain, &["--exclude"], &[]);
-        if (!includes.is_empty() && !includes.iter().any(|i| glob_covers(g, i, names)))
-            || excludes.iter().any(|i| glob_covers(g, i, names))
-        {
+        if (!includes.is_empty() && !includes.iter().any(|i| glob_covers(g, i, names))) || excludes.iter().any(|i| glob_covers(g, i, names)) {
             return String::new();
         }
         return "recursive grep over a folder that holds a config copy".into();
@@ -705,24 +545,13 @@ fn broad_reader(g: &G, statement: &str, plain: &[String], names: &[String]) -> S
     if GCI_RE.is_match(statement) && PIPE_READER_RE.is_match(statement) {
         let includes = option_values(plain, &["-include", "-filter"], &[]);
         let excludes = option_values(plain, &["-exclude"], &[]);
-        if (!includes.is_empty() && !includes.iter().any(|i| glob_covers(g, i, names)))
-            || excludes.iter().any(|i| glob_covers(g, i, names))
-        {
+        if (!includes.is_empty() && !includes.iter().any(|i| glob_covers(g, i, names))) || excludes.iter().any(|i| glob_covers(g, i, names)) {
             return String::new();
         }
-        return "recursive listing piped into a reader over a folder that holds a config copy"
-            .into();
+        return "recursive listing piped into a reader over a folder that holds a config copy".into();
     }
     if FINDSTR_RE.is_match(statement) {
-        let masks: Vec<&String> = plain
-            .iter()
-            .filter(|t| {
-                !t.is_empty()
-                    && !t.starts_with('/')
-                    && !t.starts_with('-')
-                    && GLOB_CHARS.is_match(t)
-            })
-            .collect();
+        let masks: Vec<&String> = plain.iter().filter(|t| !t.is_empty() && !t.starts_with('/') && !t.starts_with('-') && GLOB_CHARS.is_match(t)).collect();
         if !masks.is_empty() && !masks.iter().any(|m| glob_covers(g, m, names)) {
             return String::new();
         }
@@ -735,15 +564,8 @@ fn broad_reader(g: &G, statement: &str, plain: &[String], names: &[String]) -> S
 }
 
 fn tokenize(statement: &str) -> (Vec<String>, Vec<String>) {
-    let tokens: Vec<String> = TOKENS_RE
-        .find_all(statement)
-        .into_iter()
-        .map(|m| m.text().to_string())
-        .collect();
-    let plain = tokens
-        .iter()
-        .map(|t| t.trim_matches(|c| c == '"' || c == '\'').to_string())
-        .collect();
+    let tokens: Vec<String> = TOKENS_RE.find_all(statement).into_iter().map(|m| m.text().to_string()).collect();
+    let plain = tokens.iter().map(|t| t.trim_matches(|c| c == '"' || c == '\'').to_string()).collect();
     (tokens, plain)
 }
 
@@ -751,10 +573,7 @@ fn tokenize(statement: &str) -> (Vec<String>, Vec<String>) {
 pub fn credential_dir_read(g: &G, statement: &str, cwd: Option<&str>) -> String {
     let (_, plain) = tokenize(statement);
     let secrets = builtin_secret_paths(g)[..2].to_vec();
-    let names: Vec<String> = secrets
-        .iter()
-        .map(|s| s.rsplit('/').next().unwrap_or("").to_string())
-        .collect();
+    let names: Vec<String> = secrets.iter().map(|s| s.rsplit('/').next().unwrap_or("").to_string()).collect();
     let mut how = broad_reader(g, statement, &plain, &names);
     if how.is_empty() && IGNORE_AWARE_RE.is_match(statement) && HIDDEN_RE.is_match(statement) {
         how = "search with --hidden reads dot files such as the Claude credentials".into();
@@ -765,9 +584,7 @@ pub fn credential_dir_read(g: &G, statement: &str, cwd: Option<&str>) -> String 
     static FOLDERISH: LazyLock<Re> = LazyLock::new(|| Re::new(r"[\\/~$%]|^\.\.?\z"));
     let mut folders: Vec<String> = plain
         .iter()
-        .filter(|t| {
-            !t.is_empty() && !t.starts_with('-') && FOLDERISH.is_match(t) && !GLOB_CHARS.is_match(t)
-        })
+        .filter(|t| !t.is_empty() && !t.starts_with('-') && FOLDERISH.is_match(t) && !GLOB_CHARS.is_match(t))
         .map(|t| normalize_path(g, &g.expand_user_path(t), cwd, None))
         .collect();
     if folders.is_empty() {
@@ -775,11 +592,7 @@ pub fn credential_dir_read(g: &G, statement: &str, cwd: Option<&str>) -> String 
             folders.push(normalize_path(g, c, None, None));
         }
     }
-    if folders.iter().any(|f| {
-        secrets
-            .iter()
-            .any(|s| s.starts_with(&format!("{}/", f.trim_end_matches('/'))))
-    }) {
+    if folders.iter().any(|f| secrets.iter().any(|s| s.starts_with(&format!("{}/", f.trim_end_matches('/'))))) {
         how
     } else {
         String::new()
@@ -787,30 +600,15 @@ pub fn credential_dir_read(g: &G, statement: &str, cwd: Option<&str>) -> String 
 }
 
 /// Reason when one statement reaches a copied config file without naming it; empty otherwise. Best effort.
-pub fn broad_secret_read(
-    g: &G,
-    statement: &str,
-    cwd: Option<&str>,
-    specs_dir: Option<&str>,
-) -> String {
-    let copied = specs_dir
-        .filter(|s| !s.is_empty())
-        .map(|s| load_copied(g, s))
-        .unwrap_or_default();
+pub fn broad_secret_read(g: &G, statement: &str, cwd: Option<&str>, specs_dir: Option<&str>) -> String {
+    let copied = specs_dir.filter(|s| !s.is_empty()).map(|s| load_copied(g, s)).unwrap_or_default();
     if copied.is_empty() {
         return String::new();
     }
-    let names: Vec<String> = copied
-        .iter()
-        .map(|p| p.rsplit('/').next().unwrap_or("").to_string())
-        .collect();
+    let names: Vec<String> = copied.iter().map(|p| p.rsplit('/').next().unwrap_or("").to_string()).collect();
     let (tokens, plain) = tokenize(statement);
     let how = broad_reader(g, statement, &plain, &names);
-    if !how.is_empty()
-        && target_dirs(g, &tokens, cwd)
-            .iter()
-            .any(|f| folder_has_copied(f, &copied))
-    {
+    if !how.is_empty() && target_dirs(g, &tokens, cwd).iter().any(|f| folder_has_copied(f, &copied)) {
         return how;
     }
     for (token, bare) in tokens.iter().zip(plain.iter()) {
@@ -819,28 +617,13 @@ pub fn broad_secret_read(
         }
         let parts = SEP_SPLIT.split(bare);
         let last = parts.last().cloned().unwrap_or_default();
-        let folder = bare[..bare.len() - last.len()]
-            .trim_end_matches(['\\', '/'])
-            .to_string();
+        let folder = bare[..bare.len() - last.len()].trim_end_matches(['\\', '/']).to_string();
         let any_folder = GLOB_CHARS.is_match(&folder);
-        let where_ = if any_folder {
-            String::new()
-        } else {
-            resolve_dir(g, if folder.is_empty() { "." } else { &folder }, cwd)
-        };
-        if !(any_folder
-            || copied
-                .iter()
-                .any(|p| p.rsplit_once('/').map(|(d, _)| d) == Some(where_.as_str())))
-        {
+        let where_ = if any_folder { String::new() } else { resolve_dir(g, if folder.is_empty() { "." } else { &folder }, cwd) };
+        if !(any_folder || copied.iter().any(|p| p.rsplit_once('/').map(|(d, _)| d) == Some(where_.as_str()))) {
             continue;
         }
-        if glob_names_copied(
-            g,
-            bare,
-            &names,
-            token.starts_with('"') || token.starts_with('\''),
-        ) {
+        if glob_names_copied(g, bare, &names, token.starts_with('"') || token.starts_with('\'')) {
             return "glob that matches a config copy".into();
         }
         if (last == "*" || last == "*.*") && WILDCARD_READER_RE.is_match(statement) {
@@ -851,38 +634,20 @@ pub fn broad_secret_read(
 }
 
 /// Grep/Glob: a `glob` that names the copied file whitelists it, and an ignore-bypass option reads it.
-pub fn tool_broad_secret(
-    g: &G,
-    tool_name: &str,
-    input: &Value,
-    cwd: Option<&str>,
-    specs_dir: Option<&str>,
-) -> String {
-    let copied = specs_dir
-        .filter(|s| !s.is_empty())
-        .map(|s| load_copied(g, s))
-        .unwrap_or_default();
+pub fn tool_broad_secret(g: &G, tool_name: &str, input: &Value, cwd: Option<&str>, specs_dir: Option<&str>) -> String {
+    let copied = specs_dir.filter(|s| !s.is_empty()).map(|s| load_copied(g, s)).unwrap_or_default();
     if copied.is_empty() || !input.is_object() {
         return String::new();
     }
-    let names: Vec<String> = copied
-        .iter()
-        .map(|p| p.rsplit('/').next().unwrap_or("").to_string())
-        .collect();
-    let path = value_str(input.get("path"))
-        .filter(|p| !p.is_empty())
-        .unwrap_or(".");
+    let names: Vec<String> = copied.iter().map(|p| p.rsplit('/').next().unwrap_or("").to_string()).collect();
+    let path = value_str(input.get("path")).filter(|p| !p.is_empty()).unwrap_or(".");
     if !folder_has_copied(&resolve_dir(g, path, cwd), &copied) {
         return String::new();
     }
     if tool_name == "Grep" {
         if let Value::Object(map) = input {
-            if map
-                .iter()
-                .any(|(k, v)| NOIGNORE_KEY.is_match(k) && crate::state::truthy(v))
-            {
-                return "Grep with the ignore rules switched off reads git-ignored config copies"
-                    .into();
+            if map.iter().any(|(k, v)| NOIGNORE_KEY.is_match(k) && crate::state::truthy(v)) {
+                return "Grep with the ignore rules switched off reads git-ignored config copies".into();
             }
         }
         if let Some(gl) = value_str(input.get("glob")) {
@@ -909,21 +674,9 @@ pub fn note_identity_gap(g: &G, specs_dir: &str, profile: &str, payload: &Value)
             return;
         }
     }
-    let mut keys: Vec<String> = payload
-        .as_object()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
+    let mut keys: Vec<String> = payload.as_object().map(|m| m.keys().cloned().collect()).unwrap_or_default();
     keys.sort();
-    log(
-        g,
-        Some(specs_dir),
-        profile,
-        "scope-identity",
-        "info",
-        &format!("no executor identity; hook fields: {}", keys.join(",")),
-        None,
-        None,
-    );
+    log(g, Some(specs_dir), profile, "scope-identity", "info", &format!("no executor identity; hook fields: {}", keys.join(",")), None, None);
 }
 
 // ---- specs-only, scope, shell targets ----------------------------------------------------------------------------------------------------
@@ -934,15 +687,8 @@ const SUBPROJECTS_SUGGESTED_PATH: &str = ".specs/project/SUBPROJECTS-SUGGESTED.j
 const SYSTEM_MAP_PATH: &str = "docs/codebase/SYSTEM.md";
 
 fn confirmed_subproject_map_folders(specs_dir: &str) -> Vec<String> {
-    let path = nt_join(
-        &nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project"),
-        "SUBPROJECTS.json",
-    );
-    let Some(data) = std::fs::read(path)
-        .ok()
-        .and_then(|b| String::from_utf8(b).ok())
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-    else {
+    let path = nt_join(&nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project"), "SUBPROJECTS.json");
+    let Some(data) = std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
         return vec![];
     };
     let mut folders = Vec::new();
@@ -950,36 +696,19 @@ fn confirmed_subproject_map_folders(specs_dir: &str) -> Vec<String> {
         return folders;
     };
     for entry in repos.values() {
-        if !(entry.get("monorepo") == Some(&Value::Bool(true))
-            && entry.get("confirmed") == Some(&Value::Bool(true)))
-        {
+        if !(entry.get("monorepo") == Some(&Value::Bool(true)) && entry.get("confirmed") == Some(&Value::Bool(true))) {
             continue;
         }
-        for project in entry
-            .get("projects")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
+        for project in entry.get("projects").and_then(Value::as_array).into_iter().flatten() {
             if !project.is_object() || project.get("skip") == Some(&Value::Bool(true)) {
                 continue;
             }
-            let path = project
-                .get("path")
-                .map(crate::state::value_text)
-                .filter(|p| p != "None")
-                .unwrap_or_default()
-                .replace('\\', "/");
+            let path = project.get("path").map(crate::state::value_text).filter(|p| p != "None").unwrap_or_default().replace('\\', "/");
             if path.starts_with('/') {
                 continue;
             }
             let path = path.trim_matches('/').to_string();
-            if !path.is_empty()
-                && path != "."
-                && !path.starts_with("..")
-                && !format!("/{path}/").contains("/../")
-                && !path.contains(':')
-            {
+            if !path.is_empty() && path != "." && !path.starts_with("..") && !format!("/{path}/").contains("/../") && !path.contains(':') {
                 folders.push(format!("{}/{MAP_DOCS_FOLDER}", posix_normpath(&path)));
             }
         }
@@ -988,13 +717,7 @@ fn confirmed_subproject_map_folders(specs_dir: &str) -> Vec<String> {
 }
 
 /// Spec and map agents write only inside `.specs/`, `.regression/` or `docs/codebase/` of the repo.
-pub fn check_specs_only(
-    g: &G,
-    target: &str,
-    rules: &[String],
-    specs_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> Hits {
+pub fn check_specs_only(g: &G, target: &str, rules: &[String], specs_dir: Option<&str>, cwd: Option<&str>) -> Hits {
     let Some(specs) = specs_dir.filter(|s| !s.is_empty()) else {
         return vec![];
     };
@@ -1002,21 +725,12 @@ pub fn check_specs_only(
         return vec![];
     }
     let root = g.norm(&nt_dirname(specs));
-    let absolute = normalize_path(
-        g,
-        target,
-        Some(cwd.filter(|c| !c.is_empty()).unwrap_or(&root)),
-        None,
-    );
+    let absolute = normalize_path(g, target, Some(cwd.filter(|c| !c.is_empty()).unwrap_or(&root)), None);
     let inside_repo = absolute.starts_with(&format!("{root}/"));
     if !inside_repo && temp_exempt(g, &absolute) {
         return vec![];
     }
-    let relative = if inside_repo {
-        absolute[root.len() + 1..].to_string()
-    } else {
-        absolute.clone()
-    };
+    let relative = if inside_repo { absolute[root.len() + 1..].to_string() } else { absolute.clone() };
     let narrow = has_rule(rules, "subprojects-only") || has_rule(rules, "system-only");
     if !narrow && SPECS_ONLY_FOLDERS.iter().any(|f| relative.starts_with(f)) {
         return vec![];
@@ -1026,53 +740,23 @@ pub fn check_specs_only(
         if relative == g.fold(SUBPROJECTS_SUGGESTED_PATH) {
             return vec![];
         }
-        return vec![h(
-            "subprojects-only",
-            format!(
-                "the subproject validation writes only {SUBPROJECTS_SUGGESTED_PATH}: {}",
-                short(&relative)
-            ),
-        )];
+        return vec![h("subprojects-only", format!("the subproject validation writes only {SUBPROJECTS_SUGGESTED_PATH}: {}", short(&relative)))];
     }
     if has_rule(rules, "system-only") {
         if relative == g.fold(SYSTEM_MAP_PATH) {
             return vec![];
         }
-        return vec![h(
-            "system-only",
-            format!(
-                "the system map writes only {SYSTEM_MAP_PATH}: {}",
-                short(&relative)
-            ),
-        )];
+        return vec![h("system-only", format!("the system map writes only {SYSTEM_MAP_PATH}: {}", short(&relative)))];
     }
-    if has_rule(rules, "map-docs")
-        && (relative.starts_with(MAP_DOCS_FOLDER)
-            || confirmed_subproject_map_folders(specs)
-                .iter()
-                .any(|f| relative.starts_with(&g.fold(f))))
+    if has_rule(rules, "map-docs") && (relative.starts_with(MAP_DOCS_FOLDER) || confirmed_subproject_map_folders(specs).iter().any(|f| relative.starts_with(&g.fold(f))))
     {
         return vec![];
     }
-    vec![h(
-        "specs-only",
-        format!(
-            "spec and map agents write only inside .specs/ and docs/codebase/ (never code): {}",
-            short(&relative)
-        ),
-    )]
+    vec![h("specs-only", format!("spec and map agents write only inside .specs/ and docs/codebase/ (never code): {}", short(&relative)))]
 }
 
 /// Edits only inside the PATHS of the executor's feature (or, without identity, of the in-flight features) and only inside the repo.
-pub fn check_scope(
-    g: &G,
-    target: &str,
-    rules: &[String],
-    specs_dir: Option<&str>,
-    slug: Option<&str>,
-    cwd: Option<&str>,
-    task: Option<&str>,
-) -> Hits {
+pub fn check_scope(g: &G, target: &str, rules: &[String], specs_dir: Option<&str>, slug: Option<&str>, cwd: Option<&str>, task: Option<&str>) -> Hits {
     let mut hits = Vec::new();
     let Some(specs) = specs_dir.filter(|s| !s.is_empty()) else {
         return hits;
@@ -1081,62 +765,28 @@ pub fn check_scope(
         return hits;
     }
     let root = g.norm(&nt_dirname(specs));
-    let absolute = normalize_path(
-        g,
-        target,
-        Some(cwd.filter(|c| !c.is_empty()).unwrap_or(&root)),
-        None,
-    );
+    let absolute = normalize_path(g, target, Some(cwd.filter(|c| !c.is_empty()).unwrap_or(&root)), None);
     let inside_repo = inside_any(&absolute, &project_roots(g, specs));
     if !inside_repo && temp_exempt(g, &absolute) {
         return hits;
     }
     if has_rule(rules, "repo-only") && !inside_repo {
-        hits.push(h(
-            "repo-only",
-            "file outside the project's worktrees: only repository code",
-        ));
+        hits.push(h("repo-only", "file outside the project's worktrees: only repository code"));
         return hits;
     }
     if absolute.starts_with(&format!("{root}/.regression/")) {
         return hits;
     }
-    if has_rule(rules, "path-scope")
-        && has_rule(rules, "scope-unreadable")
-        && scope_file_state(specs) == "unreadable"
-    {
-        alert(
-            g,
-            Some(specs),
-            "executor",
-            "SCOPE.json unreadable: executor writes blocked",
-        );
+    if has_rule(rules, "path-scope") && has_rule(rules, "scope-unreadable") && scope_file_state(specs) == "unreadable" {
+        alert(g, Some(specs), "executor", "SCOPE.json unreadable: executor writes blocked");
         hits.push(h("scope-unreadable", "SCOPE.json is unreadable: executor writes are blocked until the orchestrator rewrites it"));
         return hits;
     }
     let scope = load_scope(specs, slug, task);
     if has_rule(rules, "path-scope") && !scope.is_empty() {
-        let allowed: Vec<String> = scope
-            .iter()
-            .map(|item| {
-                g.norm(&if nt_isabs(item) {
-                    item.clone()
-                } else {
-                    nt_join(&root, item)
-                })
-            })
-            .collect();
-        if !allowed.iter().any(|item| {
-            absolute == *item || absolute.starts_with(&format!("{}/", item.trim_end_matches('/')))
-        }) {
-            let shown: Vec<String> = allowed
-                .iter()
-                .map(|item| {
-                    item.strip_prefix(&format!("{root}/"))
-                        .unwrap_or(item)
-                        .to_string()
-                })
-                .collect();
+        let allowed: Vec<String> = scope.iter().map(|item| g.norm(&if nt_isabs(item) { item.clone() } else { nt_join(&root, item) })).collect();
+        if !allowed.iter().any(|item| absolute == *item || absolute.starts_with(&format!("{}/", item.trim_end_matches('/')))) {
+            let shown: Vec<String> = allowed.iter().map(|item| item.strip_prefix(&format!("{root}/")).unwrap_or(item).to_string()).collect();
             let joined: String = shown.join(", ").chars().take(120).collect();
             hits.push(h("path-scope", format!("outside the feature's PATHS ({joined}). Need a file outside the scope? Return NEEDS_CONFIRM")));
         }
@@ -1172,11 +822,7 @@ pub fn split_statements(command: &str, pipes: bool) -> Vec<String> {
     let mut index = 0;
     while index < chars.len() {
         let c = chars[index];
-        let prev = if index > 0 {
-            Some(chars[index - 1])
-        } else {
-            None
-        };
+        let prev = if index > 0 { Some(chars[index - 1]) } else { None };
         let next = chars.get(index + 1).copied();
         if let Some(q) = quote {
             if c == q {
@@ -1189,12 +835,7 @@ pub fn split_statements(command: &str, pipes: bool) -> Vec<String> {
         } else if (c == '&' && next == Some('&')) || (c == '|' && next == Some('|')) {
             statements.push(std::mem::take(&mut current));
             index += 1;
-        } else if c == ';'
-            || c == '\n'
-            || (pipes
-                && ((c == '|' && prev != Some('>'))
-                    || (c == '&' && next != Some('>') && prev != Some('>'))))
-        {
+        } else if c == ';' || c == '\n' || (pipes && ((c == '|' && prev != Some('>')) || (c == '&' && next != Some('>') && prev != Some('>')))) {
             statements.push(std::mem::take(&mut current));
         } else {
             current.push(c);
@@ -1215,23 +856,14 @@ pub fn confined_write_targets(statement: &str) -> Vec<String> {
             if spans.iter().any(|(s, e)| *s < start && start < *e) {
                 continue;
             }
-            let target = m
-                .group(1)
-                .unwrap_or("")
-                .trim_matches(|c| c == '"' || c == '\'')
-                .to_string();
+            let target = m.group(1).unwrap_or("").trim_matches(|c| c == '"' || c == '\'').to_string();
             if !target.is_empty() && !NULL_TARGETS.contains(&target.to_lowercase().as_str()) {
                 found.push(target);
             }
         }
     }
     if SET_CONTENT_WORD.is_match(statement) {
-        found.extend(PS_PATH_RE.find_all(statement).into_iter().map(|m| {
-            m.group(1)
-                .unwrap_or("")
-                .trim_matches(|c| c == '"' || c == '\'')
-                .to_string()
-        }));
+        found.extend(PS_PATH_RE.find_all(statement).into_iter().map(|m| m.group(1).unwrap_or("").trim_matches(|c| c == '"' || c == '\'').to_string()));
     }
     found
 }
@@ -1241,11 +873,7 @@ pub fn shell_write_targets(command: &str) -> Vec<String> {
     let mut found = Vec::new();
     for pattern in [&*REDIRECT_RE, &*CMD_TARGET_RE, &*SED_INPLACE_RE] {
         for m in pattern.find_all(command) {
-            let target = m
-                .group(1)
-                .unwrap_or("")
-                .trim_matches(|c| c == '"' || c == '\'')
-                .to_string();
+            let target = m.group(1).unwrap_or("").trim_matches(|c| c == '"' || c == '\'').to_string();
             if !target.is_empty() && !NULL_TARGETS.contains(&target.to_lowercase().as_str()) {
                 found.push(target);
             }
@@ -1254,50 +882,20 @@ pub fn shell_write_targets(command: &str) -> Vec<String> {
     found
 }
 
-const LEADING_WRAPPERS: [&str; 8] = [
-    "env", "command", "exec", "sudo", "doas", "nohup", "time", "builtin",
-];
+const LEADING_WRAPPERS: [&str; 8] = ["env", "command", "exec", "sudo", "doas", "nohup", "time", "builtin"];
 const DELETE_COMMANDS: [&str; 7] = ["rm", "rmdir", "del", "erase", "rd", "remove-item", "ri"];
-const COPY_MOVE_COMMANDS: [&str; 9] = [
-    "cp",
-    "mv",
-    "copy",
-    "move",
-    "xcopy",
-    "copy-item",
-    "cpi",
-    "move-item",
-    "mi",
-];
+const COPY_MOVE_COMMANDS: [&str; 9] = ["cp", "mv", "copy", "move", "xcopy", "copy-item", "cpi", "move-item", "mi"];
 const CREATE_COMMANDS: [&str; 4] = ["new-item", "ni", "mkdir", "md"];
-const OPTION_WITH_VALUE: [&str; 13] = [
-    "-include",
-    "-exclude",
-    "-filter",
-    "-stream",
-    "-credential",
-    "-depth",
-    "-itemtype",
-    "-value",
-    "-name",
-    "-m",
-    "--mode",
-    "-erroraction",
-    "-errorvariable",
-];
+const OPTION_WITH_VALUE: [&str; 13] =
+    ["-include", "-exclude", "-filter", "-stream", "-credential", "-depth", "-itemtype", "-value", "-name", "-m", "--mode", "-erroraction", "-errorvariable"];
 static TOKEN_END_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^(?:\||&|\d*>|<)"));
 static CMD_SWITCH_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^/[A-Za-z]{1,2}\z"));
 
 /// Folders and files a shell delete, copy/move destination or create names as its target.
 pub fn file_command_targets(statement: &str) -> Vec<String> {
     let trimmed = statement.trim();
-    let mut tokens: Vec<String> = shlex_split_nonposix(trimmed)
-        .unwrap_or_else(|_| split_ws(trimmed).into_iter().map(String::from).collect());
-    while !tokens.is_empty()
-        && (tokens[0] == "&"
-            || ASSIGNMENT_RE.is_match(&tokens[0])
-            || LEADING_WRAPPERS.contains(&executable_name(&tokens[0]).as_str()))
-    {
+    let mut tokens: Vec<String> = shlex_split_nonposix(trimmed).unwrap_or_else(|_| split_ws(trimmed).into_iter().map(String::from).collect());
+    while !tokens.is_empty() && (tokens[0] == "&" || ASSIGNMENT_RE.is_match(&tokens[0]) || LEADING_WRAPPERS.contains(&executable_name(&tokens[0]).as_str())) {
         let wrapper = LEADING_WRAPPERS.contains(&executable_name(&tokens[0]).as_str());
         tokens.remove(0);
         while wrapper && !tokens.is_empty() && tokens[0].starts_with('-') {
@@ -1309,11 +907,7 @@ pub fn file_command_targets(statement: &str) -> Vec<String> {
     }
     let command = executable_name(&tokens[0]);
     let robocopy = command == "robocopy";
-    if !(DELETE_COMMANDS.contains(&command.as_str())
-        || COPY_MOVE_COMMANDS.contains(&command.as_str())
-        || CREATE_COMMANDS.contains(&command.as_str())
-        || robocopy)
-    {
+    if !(DELETE_COMMANDS.contains(&command.as_str()) || COPY_MOVE_COMMANDS.contains(&command.as_str()) || CREATE_COMMANDS.contains(&command.as_str()) || robocopy) {
         return vec![];
     }
     let mut positional: Vec<String> = Vec::new();
@@ -1323,44 +917,24 @@ pub fn file_command_targets(statement: &str) -> Vec<String> {
     if let Some(position) = arguments.iter().position(|t| TOKEN_END_RE.is_match(t)) {
         arguments.truncate(position);
     }
-    let splits_on_comma =
-        DELETE_COMMANDS.contains(&command.as_str()) || CREATE_COMMANDS.contains(&command.as_str());
+    let splits_on_comma = DELETE_COMMANDS.contains(&command.as_str()) || CREATE_COMMANDS.contains(&command.as_str());
     let mut index = 0;
     while index < arguments.len() {
-        let token = arguments[index]
-            .trim_matches(|c| c == '"' || c == '\'')
-            .to_string();
+        let token = arguments[index].trim_matches(|c| c == '"' || c == '\'').to_string();
         let lowered = token.to_lowercase();
-        let value = arguments
-            .get(index + 1)
-            .map(|v| v.trim_matches(|c| c == '"' || c == '\'').to_string());
+        let value = arguments.get(index + 1).map(|v| v.trim_matches(|c| c == '"' || c == '\'').to_string());
         index += 1;
-        if ["-destination", "-dest", "-t", "--target-directory"].contains(&lowered.as_str())
-            && value.is_some()
-        {
+        if ["-destination", "-dest", "-t", "--target-directory"].contains(&lowered.as_str()) && value.is_some() {
             destination.push(value.unwrap_or_default());
             index += 1;
         } else if lowered.starts_with("--target-directory=") {
-            destination.push(
-                token
-                    .split_once('=')
-                    .map(|(_, v)| v.to_string())
-                    .unwrap_or_default(),
-            );
+            destination.push(token.split_once('=').map(|(_, v)| v.to_string()).unwrap_or_default());
         } else if ["-path", "-literalpath"].contains(&lowered.as_str()) && value.is_some() {
-            path_values.extend(
-                value
-                    .unwrap_or_default()
-                    .split(',')
-                    .filter(|p| !p.is_empty())
-                    .map(String::from),
-            );
+            path_values.extend(value.unwrap_or_default().split(',').filter(|p| !p.is_empty()).map(String::from));
             index += 1;
         } else if OPTION_WITH_VALUE.contains(&lowered.as_str()) && value.is_some() {
             index += 1;
-        } else if lowered.starts_with('-')
-            || (command != "cp" && command != "mv" && CMD_SWITCH_RE.is_match(&lowered))
-        {
+        } else if lowered.starts_with('-') || (command != "cp" && command != "mv" && CMD_SWITCH_RE.is_match(&lowered)) {
             continue;
         } else if !token.is_empty() {
             if splits_on_comma {
@@ -1406,18 +980,10 @@ pub fn check_shell_target(
     let Some(specs) = specs_dir.filter(|s| !s.is_empty()) else {
         return vec![];
     };
-    if !["path-scope", "repo-only", "specs-only"]
-        .iter()
-        .any(|r| has_rule(rules, r))
-    {
+    if !["path-scope", "repo-only", "specs-only"].iter().any(|r| has_rule(rules, r)) {
         return vec![];
     }
-    if target.starts_with("/dev/")
-        || target.starts_with('$')
-        || target.starts_with('%')
-        || target.contains("$(")
-        || target.contains('`')
-    {
+    if target.starts_with("/dev/") || target.starts_with('$') || target.starts_with('%') || target.contains("$(") || target.contains('`') {
         return vec![];
     }
     let mut path = g.expanduser(target);
@@ -1425,41 +991,22 @@ pub fn check_shell_target(
         static GIT_BASH: LazyLock<Re> = LazyLock::new(|| Re::new(r"^/([a-zA-Z])/"));
         path = GIT_BASH.replace_all(&path, |m| format!("{}:/", m.group(1).unwrap_or("")));
     }
-    let base = cwd
-        .filter(|c| !c.is_empty())
-        .map(String::from)
-        .unwrap_or_else(|| nt_dirname(specs));
-    let absolute = g.norm(&if nt_isabs(&path) {
-        path
-    } else {
-        nt_join(&base, &path)
-    });
+    let base = cwd.filter(|c| !c.is_empty()).map(String::from).unwrap_or_else(|| nt_dirname(specs));
+    let absolute = g.norm(&if nt_isabs(&path) { path } else { nt_join(&base, &path) });
     let roots = project_roots(g, specs);
     if inside_any(&absolute, &roots) {
         let mut sorted = roots.clone();
         sorted.sort_by_key(|r| std::cmp::Reverse(r.len()));
-        if let Some(relative) = sorted
-            .iter()
-            .find_map(|r| absolute.strip_prefix(&format!("{r}/")).map(String::from))
-        {
+        if let Some(relative) = sorted.iter().find_map(|r| absolute.strip_prefix(&format!("{r}/")).map(String::from)) {
             let parts: Vec<&str> = relative.split('/').collect();
-            let used: &[&str] = if whole_path_is_build_output {
-                &parts
-            } else {
-                &parts[..parts.len().saturating_sub(1)]
-            };
-            if used
-                .iter()
-                .any(|p| BUILD_OUTPUT_DIRS.contains(&g.fold(p).as_str()))
-            {
+            let used: &[&str] = if whole_path_is_build_output { &parts } else { &parts[..parts.len().saturating_sub(1)] };
+            if used.iter().any(|p| BUILD_OUTPUT_DIRS.contains(&g.fold(p).as_str())) {
                 return vec![];
             }
         }
     }
     let mut hits = check_specs_only(g, &absolute, rules, specs_dir, None);
-    hits.extend(check_scope(
-        g, &absolute, rules, specs_dir, slug, None, task,
-    ));
+    hits.extend(check_scope(g, &absolute, rules, specs_dir, slug, None, task));
     hits
 }
 
@@ -1471,19 +1018,11 @@ pub fn cd_target(words: &[String]) -> Option<String> {
     if !CD_NAMES.contains(&executable_name(&words[first]).as_str()) {
         return None;
     }
-    let mut args: Vec<&String> = words[first + 1..]
-        .iter()
-        .filter(|w| !["/d", "-l", "-p"].contains(&w.to_lowercase().as_str()))
-        .collect();
-    if args
-        .first()
-        .is_some_and(|a| ["-path", "-literalpath"].contains(&a.to_lowercase().as_str()))
-    {
+    let mut args: Vec<&String> = words[first + 1..].iter().filter(|w| !["/d", "-l", "-p"].contains(&w.to_lowercase().as_str())).collect();
+    if args.first().is_some_and(|a| ["-path", "-literalpath"].contains(&a.to_lowercase().as_str())) {
         args.remove(0);
     }
-    args.first()
-        .filter(|a| a.as_str() != "-")
-        .map(|a| (*a).clone())
+    args.first().filter(|a| a.as_str() != "-").map(|a| (*a).clone())
 }
 
 #[cfg(test)]
@@ -1492,19 +1031,13 @@ mod tests {
     use cfg::Env;
 
     fn g_for(dir: &Path) -> G {
-        G::new(Env::from_pairs([
-            ("USERPROFILE", dir.join("home").display().to_string()),
-            ("LOOP_DATA_DIR", dir.join("data").display().to_string()),
-        ]))
+        G::new(Env::from_pairs([("USERPROFILE", dir.join("home").display().to_string()), ("LOOP_DATA_DIR", dir.join("data").display().to_string())]))
     }
 
     #[test]
     fn statements_split_outside_quotes() {
         assert_eq!(split_statements("a && b; c", false), vec!["a ", " b", " c"]);
-        assert_eq!(
-            split_statements("sed -i 's/a/b/; s/c/d/' f", false),
-            vec!["sed -i 's/a/b/; s/c/d/' f"]
-        );
+        assert_eq!(split_statements("sed -i 's/a/b/; s/c/d/' f", false), vec!["sed -i 's/a/b/; s/c/d/' f"]);
         assert_eq!(split_statements("echo x | rm -rf /o", true).len(), 2);
         assert_eq!(split_statements("a 2>&1", true).len(), 1);
     }
@@ -1519,10 +1052,7 @@ mod tests {
         assert_eq!(file_command_targets("cp -t out a b"), vec!["out"]);
         assert_eq!(file_command_targets("mkdir -p x/y"), vec!["x/y"]);
         // shlex(posix=False) closes a quote at once, so `'a','b'` is two tokens and the second keeps a stray quote: same as the reference
-        assert_eq!(
-            file_command_targets("Remove-Item -Path 'a','b'"),
-            vec!["'b", "a"]
-        );
+        assert_eq!(file_command_targets("Remove-Item -Path 'a','b'"), vec!["'b", "a"]);
         assert!(file_command_targets("ls -la").is_empty());
         assert_eq!(file_command_targets("sudo rm x"), vec!["x"]);
     }
@@ -1530,21 +1060,9 @@ mod tests {
     #[test]
     fn globs_follow_the_reference() {
         let g = g_for(Path::new("C:\\x"));
-        assert!(glob_matches(
-            &g,
-            "c:/users/x/.claude/*.json",
-            "c:/users/x/.claude/a.json"
-        ));
-        assert!(!glob_matches(
-            &g,
-            "c:/users/x/.claude/*.json",
-            "c:/users/x/.claude/sub/a.json"
-        ));
-        assert!(glob_matches(
-            &g,
-            "c:/users/x/**/a.json",
-            "c:/users/x/a/b/a.json"
-        ));
+        assert!(glob_matches(&g, "c:/users/x/.claude/*.json", "c:/users/x/.claude/a.json"));
+        assert!(!glob_matches(&g, "c:/users/x/.claude/*.json", "c:/users/x/.claude/sub/a.json"));
+        assert!(glob_matches(&g, "c:/users/x/**/a.json", "c:/users/x/a/b/a.json"));
         assert!(glob_matches(&g, "c:/u/{a,b}.txt", "c:/u/b.txt"));
         assert!(!glob_matches(&g, "c:/u/[z-a].txt", "c:/u/q.txt"));
     }
@@ -1552,9 +1070,7 @@ mod tests {
     #[test]
     fn scope_shapes() {
         use serde_json::json;
-        assert!(scope_shape_ok(
-            &json!({"features": {"a": ["x"]}, "roots": ["C:/r"]})
-        ));
+        assert!(scope_shape_ok(&json!({"features": {"a": ["x"]}, "roots": ["C:/r"]})));
         assert!(!scope_shape_ok(&json!({"features": ["a"]})));
         assert!(!scope_shape_ok(&json!({"features": {"a": null}})));
         assert!(!scope_shape_ok(&json!([])));
@@ -1565,11 +1081,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let g = g_for(dir.path());
         let home = g.home();
-        assert!(secret_path_hit(
-            &g,
-            &format!("cat {home}\\.claude\\.credentials.json"),
-            None
-        ));
+        assert!(secret_path_hit(&g, &format!("cat {home}\\.claude\\.credentials.json"), None));
         assert!(secret_path_hit(&g, "cat ~/.ssh/id_rsa", None));
         assert!(!secret_path_hit(&g, "cat ~/.ssh/config.example", None));
         assert!(!secret_path_hit(&g, "cat ./README.md", None));
@@ -1582,55 +1094,15 @@ mod tests {
         let root = dir.path().join("proj");
         std::fs::create_dir_all(root.join(".specs/project/loop/json")).unwrap();
         let env_local = root.join(".env.local");
-        std::fs::write(
-            root.join(".specs/project/loop/json/SCOPE.json"),
-            serde_json::json!({"copied": [env_local.display().to_string()], "features": {}})
-                .to_string(),
-        )
-        .unwrap();
+        std::fs::write(root.join(".specs/project/loop/json/SCOPE.json"), serde_json::json!({"copied": [env_local.display().to_string()], "features": {}}).to_string())
+            .unwrap();
         let g = g_for(dir.path());
         let specs = root.join(".specs").display().to_string();
-        assert!(mentions_copied_secret(
-            &g,
-            &format!("cat {}", env_local.display()),
-            None,
-            Some(&specs)
-        ));
-        assert!(mentions_copied_secret(
-            &g,
-            "cat .env.local",
-            Some(&root.display().to_string()),
-            Some(&specs)
-        ));
-        assert!(!mentions_copied_secret(
-            &g,
-            "cat README.md",
-            Some(&root.display().to_string()),
-            Some(&specs)
-        ));
-        assert!(!broad_secret_read(
-            &g,
-            "rg --no-ignore token",
-            Some(&root.display().to_string()),
-            Some(&specs)
-        )
-        .is_empty());
-        assert!(!broad_secret_read(
-            &g,
-            "grep -r token .",
-            Some(&root.display().to_string()),
-            Some(&specs)
-        )
-        .is_empty());
-        assert!(
-            broad_secret_read(
-                &g,
-                "grep -r token docs",
-                Some(&root.display().to_string()),
-                Some(&specs)
-            )
-            .is_empty()
-                || true
-        );
+        assert!(mentions_copied_secret(&g, &format!("cat {}", env_local.display()), None, Some(&specs)));
+        assert!(mentions_copied_secret(&g, "cat .env.local", Some(&root.display().to_string()), Some(&specs)));
+        assert!(!mentions_copied_secret(&g, "cat README.md", Some(&root.display().to_string()), Some(&specs)));
+        assert!(!broad_secret_read(&g, "rg --no-ignore token", Some(&root.display().to_string()), Some(&specs)).is_empty());
+        assert!(!broad_secret_read(&g, "grep -r token .", Some(&root.display().to_string()), Some(&specs)).is_empty());
+        assert!(broad_secret_read(&g, "grep -r token docs", Some(&root.display().to_string()), Some(&specs)).is_empty() || true);
     }
 }

@@ -263,6 +263,9 @@ mod tests {
             std::fs::write(path, json!({"caveman": n % 2 == 0, "total_cost_usd": n as f64}).to_string()).unwrap();
         }
         let comparison = app.app_settings().build_caveman_comparison();
-        assert_eq!((comparison["enough_data"].clone(), comparison["on"]["turns"].clone(), comparison["off"]["average_cost_usd"].clone()), (json!(true), json!(3), json!(3.0)));
+        assert_eq!(
+            (comparison["enough_data"].clone(), comparison["on"]["turns"].clone(), comparison["off"]["average_cost_usd"].clone()),
+            (json!(true), json!(3), json!(3.0))
+        );
     }
 }

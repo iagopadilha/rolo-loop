@@ -167,7 +167,8 @@ mod tests {
         std::fs::write(&source, "A_KEY=one\nB_KEY=two words\nC_KEY=\n").unwrap();
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("config.json"), format!("{{\"env_sources\": [{}]}}", pycompat::json::py_json_dumps(&json!(source.display().to_string()), true))).unwrap();
+        std::fs::write(data.join("config.json"), format!("{{\"env_sources\": [{}]}}", pycompat::json::py_json_dumps(&json!(source.display().to_string()), true)))
+            .unwrap();
         let env = Env::from_pairs([("LOOP_DATA_DIR", data.to_str().unwrap()), ("LOOP_CLAUDE_HOME", data.to_str().unwrap())]);
         let root = dir.path().join("proj").display().to_string();
         std::fs::create_dir_all(&root).unwrap();

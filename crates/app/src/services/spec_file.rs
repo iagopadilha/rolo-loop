@@ -152,7 +152,11 @@ impl SpecFileService<'_> {
         let (relative, target) = self.resolve_markdown(context, path)?;
         let (editable, reason) = evaluate_edit(&relative, self.app.progress().is_loop_running(context));
         if !editable {
-            return Err(if reason == LOOP_RUNNING_REASON { AppError::loop_running(reason) } else { AppError::new(Kind::FileEditRefused, format!("{relative}: {reason}")) });
+            return Err(if reason == LOOP_RUNNING_REASON {
+                AppError::loop_running(reason)
+            } else {
+                AppError::new(Kind::FileEditRefused, format!("{relative}: {reason}"))
+            });
         }
         let current = self.app.specs.read_bytes(&target);
         Self::check_version(&relative, current.as_deref(), version)?;

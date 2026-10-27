@@ -32,7 +32,8 @@ const AGENT_FAILED_STATE: &str = "failed";
 /// Cut off with its turn: no return while the task is still running.
 const AGENT_INTERRUPTED_STATE: &str = "interrupted";
 /// The last four: command and sign-in inherited from the turn.
-const EXECUTOR_FIELDS: [&str; 13] = ["agent_id", "role", "turn", "state", "return_status", "duration_s", "tokens", "started_at", "finished_at", "claude", "auth_method", "auth_email", "cc_account"];
+const EXECUTOR_FIELDS: [&str; 13] =
+    ["agent_id", "role", "turn", "state", "return_status", "duration_s", "tokens", "started_at", "finished_at", "claude", "auth_method", "auth_email", "cc_account"];
 
 fn name_by_pipeline_step(step: usize) -> &'static str {
     match step {
@@ -287,7 +288,10 @@ mod tests {
         let service = app.feature_detail();
         assert!(service.build_feature_detail(&context, "zzz").is_none());
         let detail = service.build_feature_detail(&context, "b").unwrap();
-        assert_eq!((detail["wave"].clone(), detail["deps"].clone(), detail["current_step"].clone(), detail["claude"].clone()), (json!(2), json!(["a"]), json!("spec"), Value::Null));
+        assert_eq!(
+            (detail["wave"].clone(), detail["deps"].clone(), detail["current_step"].clone(), detail["claude"].clone()),
+            (json!(2), json!(["a"]), json!("spec"), Value::Null)
+        );
         assert_eq!(service.build_feature_detail(&context, "a").unwrap()["current_step"], "gate");
     }
 }

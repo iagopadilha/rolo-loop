@@ -40,7 +40,11 @@ fn as_turn_number(value: Option<&Value>) -> Value {
 }
 
 fn or_null(text: String) -> Value {
-    if text.is_empty() { Value::Null } else { json!(text) }
+    if text.is_empty() {
+        Value::Null
+    } else {
+        json!(text)
+    }
 }
 
 pub struct ErrorEventSyncService<'a> {
@@ -57,7 +61,8 @@ impl ErrorEventSyncService<'_> {
     /// Stores what the sources hold now and returns every known event (oldest first), each with its best-known turn.
     pub fn sync_events(&self, work_dir: &str, timeline: &TurnTimeline, launches: &[Launch]) -> Vec<Map<String, Value>> {
         let mut events: Vec<Map<String, Value>> = self.app.error_events.read_events(work_dir);
-        let mut index: HashMap<String, usize> = events.iter().enumerate().filter_map(|(i, e)| e.get("id").and_then(Value::as_str).map(|id| (id.to_string(), i))).collect();
+        let mut index: HashMap<String, usize> =
+            events.iter().enumerate().filter_map(|(i, e)| e.get("id").and_then(Value::as_str).map(|id| (id.to_string(), i))).collect();
         let mut writes: Vec<Value> = Vec::new();
         let derived = self.derive_guard_events(work_dir).into_iter().chain(self.derive_launch_events(launches));
         for mut event in derived {
@@ -90,7 +95,11 @@ impl ErrorEventSyncService<'_> {
             return None;
         }
         let when = text_or_empty(event.get("t"));
-        if when.is_empty() { None } else { timeline.turn_at(parse_epoch(&when)) }
+        if when.is_empty() {
+            None
+        } else {
+            timeline.turn_at(parse_epoch(&when))
+        }
     }
 
     fn derive_guard_events(&self, work_dir: &str) -> Vec<Map<String, Value>> {

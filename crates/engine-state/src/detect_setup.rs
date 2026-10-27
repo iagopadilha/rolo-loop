@@ -18,7 +18,8 @@ const SETUP_BY_LOCKFILE: [(&str, &str); 4] = [
     ("package-lock.json", "npm ci"),
     ("package.json", "npm install"),
 ];
-const SETUP_BY_REQUIREMENTS: [(&str, &str); 3] = [("requirements.txt", "python -m pip install -r requirements.txt"), ("poetry.lock", "poetry install"), ("go.mod", "go mod download")];
+const SETUP_BY_REQUIREMENTS: [(&str, &str); 3] =
+    [("requirements.txt", "python -m pip install -r requirements.txt"), ("poetry.lock", "poetry install"), ("go.mod", "go mod download")];
 
 fn has_project_file(folder: &Path) -> bool {
     std::fs::read_dir(folder).map(|d| d.flatten().any(|e| is_project_name(&e.file_name().to_string_lossy()))).unwrap_or(false)
@@ -35,7 +36,9 @@ pub fn has_dotnet_project(folder: &str) -> bool {
     if has_project_file(root) {
         return true;
     }
-    std::fs::read_dir(root).map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.') && e.path().is_dir() && has_project_file(&e.path()))).unwrap_or(false)
+    std::fs::read_dir(root)
+        .map(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.') && e.path().is_dir() && has_project_file(&e.path())))
+        .unwrap_or(false)
 }
 
 /// The one-line setup command for the repo at `folder` (first match only), or `None`. Looks only at root files.

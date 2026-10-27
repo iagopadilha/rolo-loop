@@ -32,7 +32,8 @@ pub const REFINE_ROADMAP_PREFIX: &str = "Continue in this session's `/orchestrat
 pub const ROADMAP_PERMISSION_MODE: &str = "dontAsk";
 /// Guard profile: Write/Edit only inside .specs/.
 pub const ROADMAP_HOOK_PROFILE: &str = "planning";
-pub const ROADMAP_EDITABLE_PATHS: [&str; 5] = [".specs/project/ROADMAP.md", ".specs/project/FLOWS.md", ".specs/project/PROJECT.md", ".specs/project/RULES.md", ".specs/project/TEST-ENVIRONMENT.md"];
+pub const ROADMAP_EDITABLE_PATHS: [&str; 5] =
+    [".specs/project/ROADMAP.md", ".specs/project/FLOWS.md", ".specs/project/PROJECT.md", ".specs/project/RULES.md", ".specs/project/TEST-ENVIRONMENT.md"];
 /// Map-first variant: Phase 1 dispatches brownfield-mapper agents (Agent) and sizes them with `harness scale` (Bash), and writes docs/codebase/.
 /// The guard profile still confines the writes: `planning` rules + `map-docs`, and must exist in the plugin's guard profiles.
 pub const ROADMAP_MAP_FIRST_HOOK_PROFILE: &str = "roadmapmap";
@@ -56,7 +57,8 @@ pub fn roadmap_allowed_tools(map_first: bool) -> Vec<String> {
 }
 
 pub fn roadmap_disallowed_tools(map_first: bool) -> Vec<String> {
-    let names: &[&str] = if map_first { &["PowerShell", "NotebookEdit", "WebFetch", "WebSearch"] } else { &["Bash", "PowerShell", "NotebookEdit", "Agent", "WebFetch", "WebSearch"] };
+    let names: &[&str] =
+        if map_first { &["PowerShell", "NotebookEdit", "WebFetch", "WebSearch"] } else { &["Bash", "PowerShell", "NotebookEdit", "Agent", "WebFetch", "WebSearch"] };
     names.iter().map(|s| s.to_string()).collect()
 }
 
@@ -163,7 +165,9 @@ impl RoadmapService<'_> {
         if failing.is_empty() {
             return Ok(());
         }
-        self.app.log.info("roadmap_approval_refused", &[("project", json!(context.project.id)), ("gates", json!(failing.iter().map(|g| g["id"].clone()).collect::<Vec<_>>()))]);
+        self.app
+            .log
+            .info("roadmap_approval_refused", &[("project", json!(context.project.id)), ("gates", json!(failing.iter().map(|g| g["id"].clone()).collect::<Vec<_>>()))]);
         let parts: Vec<String> = failing
             .iter()
             .map(|g| {
@@ -190,7 +194,11 @@ impl RoadmapService<'_> {
         self.app.log.info("roadmap_approval_refused", &[("project", json!(context.project.id)), ("gates", json!([GATE_READY]))]);
         let mut gates: Vec<Value> = self.app.progress().build_planning_gates(context).into_iter().filter(|g| g["id"] != GATE_READY).collect();
         gates.push(gate.clone());
-        Err(AppError::planning_gates(format!("the roadmap cannot be approved yet: {} ({})", gate["label"].as_str().unwrap_or(""), gate["detail"].as_str().unwrap_or("")), json!(gates), PLANNING_GATES_CODE))
+        Err(AppError::planning_gates(
+            format!("the roadmap cannot be approved yet: {} ({})", gate["label"].as_str().unwrap_or(""), gate["detail"].as_str().unwrap_or("")),
+            json!(gates),
+            PLANNING_GATES_CODE,
+        ))
     }
 
     fn write_capabilities(&self, context: &ProjectContext) {
@@ -268,7 +276,10 @@ impl RoadmapService<'_> {
         let report = WorkspaceFileGuard::default().revert_unexpected_changes(&snapshot, &allowed);
         let list = |key: &str| -> Vec<Value> { report[key].as_array().cloned().unwrap_or_default() };
         if !list("reverted").is_empty() || !list("removed").is_empty() || !list("unrestorable").is_empty() {
-            self.app.log.warn("roadmap_guard_reverted", &[("reverted", json!(list("reverted").iter().take(50).collect::<Vec<_>>())), ("removed", json!(list("removed").iter().take(50).collect::<Vec<_>>()))]);
+            self.app.log.warn(
+                "roadmap_guard_reverted",
+                &[("reverted", json!(list("reverted").iter().take(50).collect::<Vec<_>>())), ("removed", json!(list("removed").iter().take(50).collect::<Vec<_>>()))],
+            );
         }
         let map_dir = run_hints::MAP_FOLDER.split('/').fold(std::path::PathBuf::from(repo_path), |a, p| a.join(p));
         if map_first && engine_state::notify_truthy(result.get("ok")) && !run_hints::list_map_documents(&map_dir).is_empty() {
@@ -284,7 +295,14 @@ impl RoadmapService<'_> {
     pub fn map_codebase(&self, context: &ProjectContext) -> Result<Value, AppError> {
         self.app.log.info("map_requested", &[("project", json!(context.project.id))]);
         if let Err(refusal) = self.ensure_repo_free_for_job(context) {
-            self.app.log.info("map_refused", &[("project", json!(context.project.id)), ("reason", json!(format!("{:?}", refusal.kind))), ("message", json!(refusal.message.chars().take(200).collect::<String>()))]);
+            self.app.log.info(
+                "map_refused",
+                &[
+                    ("project", json!(context.project.id)),
+                    ("reason", json!(format!("{:?}", refusal.kind))),
+                    ("message", json!(refusal.message.chars().take(200).collect::<String>())),
+                ],
+            );
             return Err(refusal);
         }
         self.app.map_jobs().start(MapStart::new(context.repo_path(), &context.project.id))
@@ -297,7 +315,13 @@ impl RoadmapService<'_> {
             return Err(AppError::loop_running("loop running: generate or refine the roadmap with the loop stopped"));
         }
         if pycompat::nt_normcase(&context.work_dir()) != pycompat::nt_normcase(context.repo_path()) {
-            return Err(AppError::new(Kind::LoopWorktreeExists, format!("the loop worktree already exists ({}): the loop roadmap lives there; edit it in Files or remove the worktree before generating another one", context.work_dir())));
+            return Err(AppError::new(
+                Kind::LoopWorktreeExists,
+                format!(
+                    "the loop worktree already exists ({}): the loop roadmap lives there; edit it in Files or remove the worktree before generating another one",
+                    context.work_dir()
+                ),
+            ));
         }
         if self.app.jobs().get_running_job(context.repo_path()).is_some() {
             return Err(AppError::new(Kind::JobInProgress, "a claude job is already running in this project: wait for it to finish"));
@@ -307,7 +331,8 @@ impl RoadmapService<'_> {
 
     fn write_goal(&self, repo_path: &str, goal_text: &str, map_first: bool) {
         let path = loop_state::internal_dir(repo_path).join(GOAL_FILE_NAME);
-        let content = format!("# Roadmap goal\n\n{}\n\n---\nMap first: {}\nWritten by the harness app on {}\n", goal_text.trim(), if map_first { "yes" } else { "no" }, now_iso());
+        let content =
+            format!("# Roadmap goal\n\n{}\n\n---\nMap first: {}\nWritten by the harness app on {}\n", goal_text.trim(), if map_first { "yes" } else { "no" }, now_iso());
         let _ = self.app.specs.write_text_atomic(&path, &content);
     }
 

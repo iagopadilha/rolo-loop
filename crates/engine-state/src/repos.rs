@@ -79,18 +79,10 @@ pub fn single_repo(primary_repo: &str) -> Vec<RepoRef> {
 
 /// The raw file: `(repos, scope_defined, scope_source)`; absent or broken = nothing defined.
 pub fn read_repos_file(primary_repo: &str) -> (Vec<Map<String, Value>>, bool, String) {
-    let data = std::fs::read(repos_file_path(primary_repo))
-        .ok()
-        .and_then(|b| String::from_utf8(b).ok())
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let data = std::fs::read(repos_file_path(primary_repo)).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok());
     let Some(Value::Object(map)) = data else { return (vec![], false, String::new()) };
     let Some(Value::Array(items)) = map.get("repos") else { return (vec![], false, String::new()) };
-    let repos: Vec<Map<String, Value>> = items
-        .iter()
-        .filter_map(|i| i.as_object())
-        .filter(|o| o.get("path").is_some_and(truthy))
-        .cloned()
-        .collect();
+    let repos: Vec<Map<String, Value>> = items.iter().filter_map(|i| i.as_object()).filter(|o| o.get("path").is_some_and(truthy)).cloned().collect();
     let scope_defined = map.get("scope_defined").is_some_and(truthy);
     let scope_source = map.get("scope_source").filter(|v| truthy(v)).map(text_of).unwrap_or_default();
     (repos, scope_defined, scope_source)

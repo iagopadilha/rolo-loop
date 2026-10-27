@@ -106,7 +106,15 @@ impl RepoRegistryService<'_> {
 
     // ------------------------------------------------ write
     /// Adds a repository (the chat or the Workspace dialog). `role` defaults to `edit`; `reason` = one sentence: why it is in the project.
-    pub fn add_repo(&self, context: &ProjectContext, path: &Value, copy: Option<&Value>, setup: Option<&Value>, role: Option<&Value>, reason: Option<&Value>) -> Result<Value, AppError> {
+    pub fn add_repo(
+        &self,
+        context: &ProjectContext,
+        path: &Value,
+        copy: Option<&Value>,
+        setup: Option<&Value>,
+        role: Option<&Value>,
+        reason: Option<&Value>,
+    ) -> Result<Value, AppError> {
         if let Some(role) = role.filter(|r| !r.is_null()) {
             if ![ROLE_EDIT, ROLE_REFERENCE].iter().any(|r| role.as_str() == Some(r)) {
                 return Err(AppError::invalid_request("role must be edit or reference"));
@@ -138,7 +146,9 @@ impl RepoRegistryService<'_> {
     /// `PATCH repos/<name>` `{"role"}`: `edit` or `reference`. The primary is always edit; `edit` -> `reference` is refused while a loop worktree
     /// exists for the repo ("close the loop first"). Persists and returns the listing.
     pub fn set_role(&self, context: &ProjectContext, name: &str, role: &Value) -> Result<Value, AppError> {
-        let Some(role) = role.as_str().filter(|r| *r == ROLE_EDIT || *r == ROLE_REFERENCE) else { return Err(AppError::invalid_request("role must be edit or reference")) };
+        let Some(role) = role.as_str().filter(|r| *r == ROLE_EDIT || *r == ROLE_REFERENCE) else {
+            return Err(AppError::invalid_request("role must be edit or reference"));
+        };
         let (_, mut stored) = self.read_stored(context);
         let index = stored.iter().position(|r| r.name == name).ok_or_else(|| not_found(name))?;
         if stored[index].primary && role != ROLE_EDIT {
@@ -268,7 +278,8 @@ impl RepoRegistryService<'_> {
     /// Git-ignored files that look like local configuration; heavy folders are never listed.
     pub fn list_copy_suggestions(&self, context: &ProjectContext, name: &str) -> Result<Value, AppError> {
         let target = self.resolve(context, name)?;
-        let (code, output, _) = if Path::new(&target.path).is_dir() { self.app.git.run_git(&target.path, &IGNORED_FILES_ARGUMENTS) } else { (1, String::new(), String::new()) };
+        let (code, output, _) =
+            if Path::new(&target.path).is_dir() { self.app.git.run_git(&target.path, &IGNORED_FILES_ARGUMENTS) } else { (1, String::new(), String::new()) };
         let mut suggestions = detect_setup::suggest_copy_files(&target.path, if code == 0 { &output } else { "" });
         for item in suggestions.iter_mut() {
             // never configured: everything suggested is copied automatically, so it shows ticked
@@ -350,7 +361,9 @@ impl RepoRegistryService<'_> {
 
     fn validate_copy_list(copy: &Value) -> Result<Vec<String>, AppError> {
         let invalid = |message: String| AppError::new(Kind::InvalidRepo, message);
-        let Some(list) = copy.as_array().filter(|l| l.iter().all(|e| e.as_str().is_some_and(|s| !s.trim().is_empty()))) else { return Err(invalid("copy must be a list of file paths".into())) };
+        let Some(list) = copy.as_array().filter(|l| l.iter().all(|e| e.as_str().is_some_and(|s| !s.trim().is_empty()))) else {
+            return Err(invalid("copy must be a list of file paths".into()));
+        };
         let mut cleaned: Vec<String> = Vec::new();
         for entry in list.iter().filter_map(Value::as_str) {
             let mut relative = to_relative_posix(entry);
@@ -394,7 +407,14 @@ mod tests {
     }
 
     fn context(path: &str) -> ProjectContext {
-        ProjectContext::new(Project { id: "p".into(), name: "main".into(), repo_path: path.into(), opened_at: String::new(), last_opened_at: String::new(), favorite: false })
+        ProjectContext::new(Project {
+            id: "p".into(),
+            name: "main".into(),
+            repo_path: path.into(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        })
     }
 
     #[test]
@@ -413,8 +433,12 @@ mod tests {
         assert!(service.add_repo(&ctx, &json!(plain.display().to_string()), None, None, None, None).unwrap_err().message.starts_with("not a git repository: "));
         assert_eq!(service.add_repo(&ctx, &json!(""), None, None, None, None).unwrap_err().message, "give the repo folder");
         assert_eq!(service.add_repo(&ctx, &json!(lib), None, None, Some(&json!("boss")), None).unwrap_err().kind, Kind::InvalidRequest);
-        let added = service.add_repo(&ctx, &json!(lib), Some(&json!([".env", "./cfg/local.json"])), Some(&json!(" npm ci ")), None, Some(&json!("  shared   code "))).unwrap();
-        assert_eq!((added["repo"]["name"].clone(), added["repo"]["copy"].clone(), added["repo"]["setup"].clone(), added["repo"]["reason"].clone()), (json!("lib"), json!([".env", "cfg/local.json"]), json!("npm ci"), json!("shared code")));
+        let added =
+            service.add_repo(&ctx, &json!(lib), Some(&json!([".env", "./cfg/local.json"])), Some(&json!(" npm ci ")), None, Some(&json!("  shared   code "))).unwrap();
+        assert_eq!(
+            (added["repo"]["name"].clone(), added["repo"]["copy"].clone(), added["repo"]["setup"].clone(), added["repo"]["reason"].clone()),
+            (json!("lib"), json!([".env", "cfg/local.json"]), json!("npm ci"), json!("shared code"))
+        );
         assert_eq!(added["multi"], true);
         assert_eq!(service.add_repo(&ctx, &json!(lib), None, None, None, None).unwrap_err().code.as_deref(), Some("already_listed"));
         assert_eq!(service.set_role(&ctx, "main-app", &json!("reference")).unwrap_err().code.as_deref(), Some("primary"));
@@ -425,7 +449,10 @@ mod tests {
         let updated = service.update_repo(&ctx, "lib", Some(&json!("edit")), Some(&json!(""))).unwrap();
         assert_eq!((updated["repos"][1]["role"].clone(), updated["repos"][1]["reason"].clone()), (json!("edit"), Value::Null));
         assert_eq!(service.set_copy_list(&ctx, "lib", &json!(["../x"])).unwrap_err().kind, Kind::InvalidRepo);
-        assert_eq!(service.set_copy_list(&ctx, "lib", &json!(["node_modules/a"])).unwrap_err().message, "never copy files from node_modules/bin/obj/dist: node_modules/a");
+        assert_eq!(
+            service.set_copy_list(&ctx, "lib", &json!(["node_modules/a"])).unwrap_err().message,
+            "never copy files from node_modules/bin/obj/dist: node_modules/a"
+        );
         assert_eq!(service.set_copy_list(&ctx, "lib", &Value::Null).unwrap()["copy_configured"], false);
         assert_eq!(service.set_setup(&ctx, "lib", &json!("a\nb")).unwrap_err().message, "setup must be a single-line command");
         assert_eq!(service.set_setup(&ctx, "lib", &json!("")).unwrap()["setup"], Value::Null);

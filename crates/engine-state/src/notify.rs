@@ -32,10 +32,12 @@ options:
   --body-file BODY_FILE
   --channels CHANNELS   overrides LOOP_NOTIFY_CHANNELS (e.g. email,console)
 ";
-const CHAT_NOTE: &str = "Se você está numa CONVERSA NORMAL (chat do Claude com /orchestrator): NÃO rode o script. Responda direto no chat; o orquestrador segue normalmente.";
+const CHAT_NOTE: &str =
+    "Se você está numa CONVERSA NORMAL (chat do Claude com /orchestrator): NÃO rode o script. Responda direto no chat; o orquestrador segue normalmente.";
 const CRITICAL_DECISION: &str = "critical decision: ";
 
-static DIRTY_TREE: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?s)dirty tree outside \.specs/ (?:in repo (\S+) )?before turn (\d+)[^:]*:\s*(.*?)(?:\.\s*In the panel use.*)?\z"));
+static DIRTY_TREE: LazyLock<Re> =
+    LazyLock::new(|| Re::new(r"(?s)dirty tree outside \.specs/ (?:in repo (\S+) )?before turn (\d+)[^:]*:\s*(.*?)(?:\.\s*In the panel use.*)?\z"));
 static TURN_TIMEOUT: LazyLock<Re> = LazyLock::new(|| Re::new(r"turn (\d+) exceeded (\d+) min"));
 static COST_CAP: LazyLock<Re> = LazyLock::new(|| Re::new(r"total cost cap exceeded: US\$ ([\d.]+) > ([\d.]+)"));
 static COST_CAP_PAUSE: LazyLock<Re> = LazyLock::new(|| Re::new(r"cost cap reached: US\$ ([\d.]+) of ([\d.]+)"));
@@ -83,11 +85,19 @@ fn event(ctx: &Value) -> &str {
 }
 
 fn string_list(ctx: &Value, key: &str) -> Vec<String> {
-    ctx.get(key).and_then(Value::as_array).map(|a| a.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| py_json_dumps(v, false))).collect()).unwrap_or_default()
+    ctx.get(key)
+        .and_then(Value::as_array)
+        .map(|a| a.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| py_json_dumps(v, false))).collect())
+        .unwrap_or_default()
 }
 
 fn command_base(ctx: &Value) -> String {
-    format!("python \"{}\" \"{}\"{}", ctx.get("script").and_then(Value::as_str).unwrap_or("<run_loop.py>"), ctx.get("repo").and_then(Value::as_str).unwrap_or("<repo>"), s(ctx, "flags"))
+    format!(
+        "python \"{}\" \"{}\"{}",
+        ctx.get("script").and_then(Value::as_str).unwrap_or("<run_loop.py>"),
+        ctx.get("repo").and_then(Value::as_str).unwrap_or("<repo>"),
+        s(ctx, "flags")
+    )
 }
 
 /// The default: a notice says WHY the loop stopped and sends the reader to the panel. LOOP_NOTIFY_CONTINUE=commands brings back the long form.
@@ -133,7 +143,11 @@ fn subject_of(ctx: &Value) -> String {
 fn loop_id(ctx: &Value) -> String {
     let branch = s(ctx, "branch");
     let tail = branch.split_once('/').map(|(_, t)| t).unwrap_or(branch);
-    if tail.is_empty() { "-".into() } else { tail.to_string() }
+    if tail.is_empty() {
+        "-".into()
+    } else {
+        tail.to_string()
+    }
 }
 
 const FEATURE_GROUPS: [(&str, &[&str]); 6] = [
@@ -147,19 +161,24 @@ const FEATURE_GROUPS: [(&str, &[&str]); 6] = [
 
 /// `(closed, total, [(label, count)])`.
 fn feature_counts(ctx: &Value) -> (usize, usize, Vec<(&'static str, usize)>) {
-    let statuses: Vec<String> = ctx
-        .get("features")
-        .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|p| p.get(1).and_then(Value::as_str).map(String::from)).collect())
-        .unwrap_or_default();
-    let groups: Vec<(&str, usize)> = FEATURE_GROUPS.iter().map(|(l, names)| (*l, statuses.iter().filter(|s| names.contains(&s.as_str())).count())).filter(|(_, n)| *n > 0).collect();
+    let statuses: Vec<String> =
+        ctx.get("features").and_then(Value::as_array).map(|a| a.iter().filter_map(|p| p.get(1).and_then(Value::as_str).map(String::from)).collect()).unwrap_or_default();
+    let groups: Vec<(&str, usize)> =
+        FEATURE_GROUPS.iter().map(|(l, names)| (*l, statuses.iter().filter(|s| names.contains(&s.as_str())).count())).filter(|(_, n)| *n > 0).collect();
     (statuses.iter().filter(|s| *s == "verified").count(), statuses.len(), groups)
 }
 
 fn explain_reason(reason: &str) -> (String, Vec<String>) {
     let text = reason.trim();
     if let Some(d) = DIRTY_TREE.search(text) {
-        let files: Vec<String> = d.group(3).unwrap_or("").split(';').map(str::trim).filter(|r| !r.is_empty()).map(|r| PORCELAIN.replace_all(r, |m| m.group(1).unwrap_or("").to_string())).collect();
+        let files: Vec<String> = d
+            .group(3)
+            .unwrap_or("")
+            .split(';')
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(|r| PORCELAIN.replace_all(r, |m| m.group(1).unwrap_or("").to_string()))
+            .collect();
         let where_ = d.group(1).filter(|g| !g.is_empty()).map(|g| format!(" no repositório {g}")).unwrap_or_default();
         let mut bullets = vec!["Arquivos com alterações não commitadas:".to_string()];
         bullets.extend(files);
@@ -169,13 +188,34 @@ fn explain_reason(reason: &str) -> (String, Vec<String>) {
         );
     }
     if let Some(t) = TURN_TIMEOUT.search(text) {
-        return (format!("O turno {} passou do limite de {} minutos e foi encerrado. Aumente o tempo do turno ou divida a feature.", t.group(1).unwrap_or(""), t.group(2).unwrap_or("")), vec![]);
+        return (
+            format!(
+                "O turno {} passou do limite de {} minutos e foi encerrado. Aumente o tempo do turno ou divida a feature.",
+                t.group(1).unwrap_or(""),
+                t.group(2).unwrap_or("")
+            ),
+            vec![],
+        );
     }
     if let Some(r) = COST_CAP_PAUSE.search(text) {
-        return (format!("O loop foi pausado: o custo total (US$ {}) atingiu o limite de US$ {}. Nada foi perdido; aumente o limite no painel para continuar.", r.group(1).unwrap_or(""), r.group(2).unwrap_or("")), vec![]);
+        return (
+            format!(
+                "O loop foi pausado: o custo total (US$ {}) atingiu o limite de US$ {}. Nada foi perdido; aumente o limite no painel para continuar.",
+                r.group(1).unwrap_or(""),
+                r.group(2).unwrap_or("")
+            ),
+            vec![],
+        );
     }
     if let Some(c) = COST_CAP.search(text) {
-        return (format!("O custo total (US$ {}) passou do limite configurado (US$ {}). Aumente o limite se quiser continuar.", c.group(1).unwrap_or(""), c.group(2).unwrap_or("")), vec![]);
+        return (
+            format!(
+                "O custo total (US$ {}) passou do limite configurado (US$ {}). Aumente o limite se quiser continuar.",
+                c.group(1).unwrap_or(""),
+                c.group(2).unwrap_or("")
+            ),
+            vec![],
+        );
     }
     (clip(text, 1500), vec![])
 }
@@ -214,7 +254,11 @@ fn compose_notice(ctx: &Value) -> Notice {
     if truthy(ctx.get("monitor_url")) && !needs_continue_block(ctx) {
         session.push(("Painel".into(), s(ctx, "monitor_url").to_string()));
     }
-    let progress = if total > 0 && ev != "test" { Some((format!("Status das features ({closed} de {total} concluídas)"), groups.iter().map(|(l, n)| format!("{n} {l}")).collect())) } else { None };
+    let progress = if total > 0 && ev != "test" {
+        Some((format!("Status das features ({closed} de {total} concluídas)"), groups.iter().map(|(l, n)| format!("{n} {l}")).collect()))
+    } else {
+        None
+    };
     let mut notice = Notice { session, progress, sections: vec![], how: None };
     let reason = s(ctx, "reason");
     match ev {
@@ -241,7 +285,11 @@ fn compose_notice(ctx: &Value) -> Notice {
             }
             notice.sections.push(("Resultado".into(), Some("Todas as features foram concluídas ou bloqueadas.".into()), lines));
             if truthy(ctx.get("validate")) {
-                notice.sections.push(("Para você validar (decidido sem parar você)".into(), None, string_list(ctx, "validate").iter().take(8).map(|i| clip(i, 200)).collect()));
+                notice.sections.push((
+                    "Para você validar (decidido sem parar você)".into(),
+                    None,
+                    string_list(ctx, "validate").iter().take(8).map(|i| clip(i, 200)).collect(),
+                ));
             }
             if truthy(ctx.get("commits")) {
                 notice.sections.push(("Commits".into(), None, string_list(ctx, "commits").iter().take(8).map(|i| clip(i, 120)).collect()));
@@ -253,7 +301,14 @@ fn compose_notice(ctx: &Value) -> Notice {
         notice.sections.push(("Conferir antes de responder".into(), None, string_list(ctx, "to_check").iter().take(8).map(|i| clip(i, 200)).collect()));
     }
     if needs_continue_block(ctx) {
-        notice.how = Some(if truthy(ctx.get("monitor_url")) { "Para resolver, responder, retomar ou aprovar, acesse o painel de controle:" } else { "Para continuar, acesse o painel de controle abrindo-o com o comando:" }.to_string());
+        notice.how = Some(
+            if truthy(ctx.get("monitor_url")) {
+                "Para resolver, responder, retomar ou aprovar, acesse o painel de controle:"
+            } else {
+                "Para continuar, acesse o painel de controle abrindo-o com o comando:"
+            }
+            .to_string(),
+        );
     }
     notice
 }
@@ -298,7 +353,11 @@ pub fn build(env: &Env, ctx: &Value) -> (String, String) {
             out.extend([String::new(), "Como continuar".into(), how.clone(), panel_value(ctx)]);
         }
     } else if !commands.is_empty() {
-        out.extend([String::new(), "Como continuar".into(), "1) Loop pelo script: rode um dos comandos marcados com >> no seu PC. O primeiro responde pelo NÚMERO da opção; o segundo aceita texto livre.".into()]);
+        out.extend([
+            String::new(),
+            "Como continuar".into(),
+            "1) Loop pelo script: rode um dos comandos marcados com >> no seu PC. O primeiro responde pelo NÚMERO da opção; o segundo aceita texto livre.".into(),
+        ]);
         out.extend(commands.iter().map(|c| format!(">> {c}")));
         out.extend([String::new(), format!("2) {CHAT_NOTE}")]);
         if truthy(ctx.get("monitor_url")) {
@@ -322,11 +381,15 @@ pub fn build_html(env: &Env, ctx: &Value) -> (String, String) {
     let subject = subject_of(ctx);
     let heading = |t: &str| format!("<h3 style=\"margin:18px 0 6px;font-size:15px;color:#111827\">{}</h3>", esc(t));
     let para = |t: &str| format!("<p style=\"margin:0 0 8px;line-height:1.45\">{}</p>", esc(t));
-    let bullets = |items: &[String]| format!("<ul style=\"margin:0 0 8px;padding-left:20px\">{}</ul>", items.iter().map(|i| format!("<li>{}</li>", esc(i))).collect::<String>());
+    let bullets =
+        |items: &[String]| format!("<ul style=\"margin:0 0 8px;padding-left:20px\">{}</ul>", items.iter().map(|i| format!("<li>{}</li>", esc(i))).collect::<String>());
     let code = |lines: &[String]| {
         format!("<pre style=\"background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:6px;font-family:Consolas,Menlo,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-all;margin:6px 0 10px\">{}</pre>", esc(&lines.join("\n")))
     };
-    let mut out: Vec<String> = vec!["<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2937;max-width:680px\">".into(), format!("<h2 style=\"margin:0 0 8px;font-size:18px\">{}</h2>", esc(&subject))];
+    let mut out: Vec<String> = vec![
+        "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2937;max-width:680px\">".into(),
+        format!("<h2 style=\"margin:0 0 8px;font-size:18px\">{}</h2>", esc(&subject)),
+    ];
     if ev == "custom" {
         out.push(format!("<div style=\"white-space:pre-wrap;line-height:1.45\">{}</div>", esc(s(ctx, "extra_body"))));
         out.push(heading("Como continuar"));
@@ -359,7 +422,11 @@ pub fn build_html(env: &Env, ctx: &Value) -> (String, String) {
     let commands = command_set(ctx);
     if continue_in_panel(env) {
         if let Some(how) = &n.how {
-            let link = if truthy(ctx.get("monitor_url")) { format!("<p style=\"margin:0 0 8px\"><a href=\"{u}\">{u}</a></p>", u = esc(s(ctx, "monitor_url"))) } else { String::new() };
+            let link = if truthy(ctx.get("monitor_url")) {
+                format!("<p style=\"margin:0 0 8px\"><a href=\"{u}\">{u}</a></p>", u = esc(s(ctx, "monitor_url")))
+            } else {
+                String::new()
+            };
             out.push(heading("Como continuar"));
             out.push(para(how));
             out.push(if link.is_empty() { code(&[panel_value(ctx)]) } else { link });
@@ -391,7 +458,8 @@ pub fn build_short(env: &Env, ctx: &Value) -> (String, String) {
     let n = compose_notice(ctx);
     let (closed, total, _) = feature_counts(ctx);
     let compose = |size: usize, with_extra: bool| -> String {
-        let mut lines: Vec<String> = vec![format!("*{title}*"), n.session.iter().filter(|p| p.0 != "Quando").map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" | ")];
+        let mut lines: Vec<String> =
+            vec![format!("*{title}*"), n.session.iter().filter(|p| p.0 != "Quando").map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" | ")];
         if total > 0 && ev != "test" {
             lines.push(format!("Features: {closed} de {total} concluídas"));
         }
@@ -479,7 +547,14 @@ fn channel_toast(subject: &str, body: &str, ctx: &Value) -> (bool, String) {
     );
     match std::process::Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", &script]).stdin(std::process::Stdio::null()).output() {
         Ok(out) if out.status.success() => (true, "ok".into()),
-        Ok(out) => (false, format!("powershell exited with code {}: {}", out.status.code().unwrap_or(1), String::from_utf8_lossy(&out.stderr).trim().chars().take(100).collect::<String>())),
+        Ok(out) => (
+            false,
+            format!(
+                "powershell exited with code {}: {}",
+                out.status.code().unwrap_or(1),
+                String::from_utf8_lossy(&out.stderr).trim().chars().take(100).collect::<String>()
+            ),
+        ),
         Err(e) => (false, e.to_string().chars().take(100).collect()),
     }
 }
@@ -531,7 +606,11 @@ pub fn dispatch(env: &mut Env, ctx: &Value, work: &str, only: Option<Vec<String>
     let short = build_short(env, ctx);
     let names: Vec<String> = only.filter(|o| !o.is_empty()).unwrap_or_else(|| {
         let listed: Vec<String> = env.text("LOOP_NOTIFY_CHANNELS").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-        if listed.is_empty() { vec!["console".into(), "toast".into(), "file".into()] } else { listed }
+        if listed.is_empty() {
+            vec!["console".into(), "toast".into(), "file".into()]
+        } else {
+            listed
+        }
     });
     let mut results = Vec::new();
     for name in names {
@@ -568,7 +647,7 @@ pub fn run_cli(args: &[String], env: &mut Env) -> (i32, String, String) {
     load_all(env);
     let only: Vec<String> = opt("--channels").split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
     let only = if only.is_empty() { None } else { Some(only) };
-    
+
     let ctx = if args.iter().any(|a| a == "--test") {
         json!({"event": "test", "project": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "script": "run_loop.py", "repo": "/path/to/project",
                      "flags": " --wave 1", "worktree": "/path/to/project-worktree-loop", "features": [["example-feature", "verified"], ["other-feature", "pending"]]})

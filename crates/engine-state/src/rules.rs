@@ -13,7 +13,8 @@ use serde_json::{json, Map, Value};
 use std::path::Path;
 use std::sync::LazyLock;
 
-const NEUTRAL: [(&str, &str); 6] = [("bash", "ls"), ("bash", "git status"), ("bash", "dotnet build"), ("path", "src/app.ts"), ("path", "README.md"), ("path", "docs/guide.md")];
+const NEUTRAL: [(&str, &str); 6] =
+    [("bash", "ls"), ("bash", "git status"), ("bash", "dotnet build"), ("path", "src/app.ts"), ("path", "README.md"), ("path", "docs/guide.md")];
 static ID_RE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^R-\d+\n?\z"));
 
 fn project_dir(root: &str) -> std::path::PathBuf {
@@ -27,7 +28,11 @@ fn loop_file(root: &str, name: &str) -> std::path::PathBuf {
         return current;
     }
     let legacy = project_dir(root).join(name);
-    if legacy.exists() { legacy } else { current }
+    if legacy.exists() {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn load_object(path: &Path) -> Map<String, Value> {
@@ -88,10 +93,20 @@ fn evaluate(permissions: &Value, must_block: &[String], must_pass: &[String]) ->
             let (ok, detail);
             if expected == "block" {
                 ok = code == 2 && stderr.contains("project-deny");
-                detail = if ok { "blocked by the rule".to_string() } else if code == 2 { "blocked by ANOTHER rule, not this one".into() } else { "was NOT blocked".into() };
+                detail = if ok {
+                    "blocked by the rule".to_string()
+                } else if code == 2 {
+                    "blocked by ANOTHER rule, not this one".into()
+                } else {
+                    "was NOT blocked".into()
+                };
             } else {
                 ok = code == 0;
-                detail = if ok { "passed".to_string() } else { format!("was blocked (rule too wide or another rule): {}", stderr.trim().chars().take(120).collect::<String>()) };
+                detail = if ok {
+                    "passed".to_string()
+                } else {
+                    format!("was blocked (rule too wide or another rule): {}", stderr.trim().chars().take(120).collect::<String>())
+                };
             }
             results.push(CaseResult { example: example.clone(), expected: if expected == "block" { "block" } else { "pass" }, ok, detail });
         }
@@ -299,7 +314,9 @@ fn cmd_check(a: &Args, write: bool) -> (i32, String) {
     show(&results, &mut out);
     let mut broken: Vec<CaseResult> = Vec::new();
     for (rule_id, data) in &tests {
-        let list = |k: &str| -> Vec<String> { data.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default() };
+        let list = |k: &str| -> Vec<String> {
+            data.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+        };
         for mut r in evaluate(&perms, &list("block"), &list("pass")) {
             r.example = format!("[{rule_id}] {}", r.example);
             if !r.ok {
@@ -321,10 +338,7 @@ fn cmd_check(a: &Args, write: bool) -> (i32, String) {
     }
     let day = today();
     save_json(&loop_file(&root, "PERMISSIONS.json"), &perms);
-    tests.insert(
-        a.id.clone(),
-        json!({"phrase": a.phrase.trim(), "bash": a.bash, "path": a.path, "block": a.block, "pass": a.pass, "created": day}),
-    );
+    tests.insert(a.id.clone(), json!({"phrase": a.phrase.trim(), "bash": a.bash, "path": a.path, "block": a.block, "pass": a.pass, "created": day}));
     save_json(&tests_path, &Value::Object(tests));
     let how = if a.how.is_empty() { "Blocked by the hook (project-deny); the subagent returns NEEDS_CONFIRM" } else { a.how.as_str() };
     let rule_text = if a.rule.is_empty() { &a.phrase } else { &a.rule };
@@ -345,7 +359,9 @@ fn cmd_test(a: &Args) -> (i32, String) {
     let mut out = String::new();
     let mut failed = 0;
     for (rule_id, data) in &tests {
-        let list = |k: &str| -> Vec<String> { data.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default() };
+        let list = |k: &str| -> Vec<String> {
+            data.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+        };
         let results = evaluate(&perms, &list("block"), &list("pass"));
         let bad: Vec<&CaseResult> = results.iter().filter(|r| !r.ok).collect();
         failed += bad.len();

@@ -60,9 +60,7 @@ fn dedup_push(list: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 fn mtime(path: &Path) -> std::time::SystemTime {
-    std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .unwrap_or(std::time::UNIX_EPOCH)
+    std::fs::metadata(path).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH)
 }
 
 impl Locator {
@@ -79,10 +77,7 @@ impl Locator {
 
     /// `installPath` of every `<plugin_name>@<marketplace>` entry of `installed_plugins.json`.
     pub fn installed_plugin_paths(&self, plugin_name: &str) -> Vec<PathBuf> {
-        let file = self
-            .claude_home_dir()
-            .join("plugins")
-            .join("installed_plugins.json");
+        let file = self.claude_home_dir().join("plugins").join("installed_plugins.json");
         let Some(text) = read_text_sig(&file) else {
             return vec![];
         };
@@ -116,21 +111,11 @@ impl Locator {
     fn cached_plugin_dirs(&self, plugin_name: &str) -> Vec<PathBuf> {
         let cache = self.claude_home_dir().join("plugins").join("cache");
         let mut dirs: Vec<PathBuf> = Vec::new();
-        let mut markets: Vec<PathBuf> = std::fs::read_dir(&cache)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .collect();
+        let mut markets: Vec<PathBuf> = std::fs::read_dir(&cache).into_iter().flatten().flatten().map(|e| e.path()).collect();
         markets.sort();
         for market in markets {
-            let mut versions: Vec<PathBuf> = std::fs::read_dir(market.join(plugin_name))
-                .into_iter()
-                .flatten()
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.is_dir())
-                .collect();
+            let mut versions: Vec<PathBuf> =
+                std::fs::read_dir(market.join(plugin_name)).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
             versions.sort();
             dirs.extend(versions);
         }
@@ -140,56 +125,27 @@ impl Locator {
 
     /// Installed folders of a plugin: `installPath`s first, then the other cache folders; orphaned ones skipped.
     fn installed_plugin_roots(&self, plugin_name: &str) -> Vec<PathBuf> {
-        let mut ordered: Vec<PathBuf> = self
-            .installed_plugin_paths(plugin_name)
-            .into_iter()
-            .filter(|p| p.is_dir())
-            .collect();
+        let mut ordered: Vec<PathBuf> = self.installed_plugin_paths(plugin_name).into_iter().filter(|p| p.is_dir()).collect();
         for path in self.cached_plugin_dirs(plugin_name) {
             let path = abspath(&path);
             if !ordered.iter().any(|p| same_text(p, &path)) {
                 ordered.push(path);
             }
         }
-        ordered
-            .into_iter()
-            .filter(|p| !p.join(ORPHANED_MARKER).exists())
-            .collect()
+        ordered.into_iter().filter(|p| !p.join(ORPHANED_MARKER).exists()).collect()
     }
 
     pub fn list_installed_plugin_skill_dirs(&self) -> Vec<PathBuf> {
-        self.installed_plugin_roots(PLUGIN_NAME)
-            .into_iter()
-            .map(|p| p.join("skills").join("orchestrator"))
-            .filter(|p| p.is_dir())
-            .collect()
+        self.installed_plugin_roots(PLUGIN_NAME).into_iter().map(|p| p.join("skills").join("orchestrator")).filter(|p| p.is_dir()).collect()
     }
 
     pub fn list_skill_dir_candidates(&self, configured: &str) -> Vec<PathBuf> {
         let plugin_root = self.env.text(PLUGIN_ROOT_VARIABLE);
-        let mut raw: Vec<PathBuf> = vec![
-            PathBuf::from(self.env.text(SKILL_DIR_VARIABLE)),
-            PathBuf::from(configured),
-        ];
-        raw.push(if plugin_root.is_empty() {
-            PathBuf::new()
-        } else {
-            Path::new(&plugin_root).join("skills").join("orchestrator")
-        });
-        raw.push(
-            self.repo_root
-                .join("plugin")
-                .join("skills")
-                .join("orchestrator"),
-        );
+        let mut raw: Vec<PathBuf> = vec![PathBuf::from(self.env.text(SKILL_DIR_VARIABLE)), PathBuf::from(configured)];
+        raw.push(if plugin_root.is_empty() { PathBuf::new() } else { Path::new(&plugin_root).join("skills").join("orchestrator") });
+        raw.push(self.repo_root.join("plugin").join("skills").join("orchestrator"));
         raw.extend(self.list_installed_plugin_skill_dirs());
-        raw.push(
-            self.env
-                .home_dir()
-                .join(".claude")
-                .join("skills")
-                .join("orchestrator"),
-        );
+        raw.push(self.env.home_dir().join(".claude").join("skills").join("orchestrator"));
         let mut unique = Vec::new();
         for path in raw {
             if !path.as_os_str().is_empty() {
@@ -201,10 +157,7 @@ impl Locator {
 
     /// First candidate folder with a `SKILL.md`; empty when the skill is not installed.
     pub fn locate_orchestrator_skill_dir(&self, configured: &str) -> PathBuf {
-        self.list_skill_dir_candidates(configured)
-            .into_iter()
-            .find(|p| p.join("SKILL.md").is_file())
-            .unwrap_or_default()
+        self.list_skill_dir_candidates(configured).into_iter().find(|p| p.join("SKILL.md").is_file()).unwrap_or_default()
     }
 
     /// The skill's guard binary, or empty when it does not exist. The guard ships next to the plugin: `<plugin>/bin/guard.exe`.
@@ -250,11 +203,7 @@ impl Locator {
     /// `version` of `<root>/.claude-plugin/plugin.json`, or empty.
     pub fn read_toolkit_version(root: &Path) -> String {
         read_json_object(&root.join(".claude-plugin").join("plugin.json"))
-            .and_then(|m| {
-                m.get("version")
-                    .and_then(Value::as_str)
-                    .map(|s| s.trim().to_string())
-            })
+            .and_then(|m| m.get("version").and_then(Value::as_str).map(|s| s.trim().to_string()))
             .unwrap_or_default()
     }
 
@@ -265,12 +214,7 @@ impl Locator {
         }
         let version = Self::read_toolkit_version(root);
         match version_key(&version) {
-            None => (
-                TOOLKIT_REQUIRED_FILES
-                    .iter()
-                    .all(|f| root.join(f).is_file()),
-                String::new(),
-            ),
+            None => (TOOLKIT_REQUIRED_FILES.iter().all(|f| root.join(f).is_file()), String::new()),
             Some(key) => (Some(key) >= version_key(TOOLKIT_MIN_VERSION), version),
         }
     }
@@ -280,11 +224,7 @@ impl Locator {
         if root.as_os_str().is_empty() {
             return vec![];
         }
-        TOOLKIT_REQUIRED_FILES
-            .iter()
-            .filter(|f| !root.join(f).is_file())
-            .map(|f| f.to_string())
-            .collect()
+        TOOLKIT_REQUIRED_FILES.iter().filter(|f| !root.join(f).is_file()).map(|f| f.to_string()).collect()
     }
 
     pub fn list_toolkit_candidates(&self, config: &Map<String, Value>) -> Vec<PathBuf> {
@@ -299,14 +239,7 @@ impl Locator {
         let sibling = self.env.text(SIBLING_VARIABLE);
         let sibling = sibling.trim();
         if !sibling.eq_ignore_ascii_case("off") {
-            let path = if sibling.is_empty() {
-                self.repo_root
-                    .join("..")
-                    .join(TOOLKIT_PLUGIN_NAME)
-                    .join("plugin")
-            } else {
-                PathBuf::from(sibling)
-            };
+            let path = if sibling.is_empty() { self.repo_root.join("..").join(TOOLKIT_PLUGIN_NAME).join("plugin") } else { PathBuf::from(sibling) };
             roots.push(Self::toolkit_plugin_folder(&path));
         }
         let mut unique = Vec::new();
@@ -372,12 +305,7 @@ mod tests {
         let claude_home = root.join("home").join(".claude");
         let repo = root.join("workspace").join("claude-maestro");
         fs::create_dir_all(&repo).unwrap();
-        Fixture {
-            _dir: dir,
-            root,
-            claude_home,
-            repo,
-        }
+        Fixture { _dir: dir, root, claude_home, repo }
     }
 
     impl Fixture {
@@ -395,41 +323,16 @@ mod tests {
         fn make_skills(folder: &Path, version: Option<&str>) -> PathBuf {
             if let Some(v) = version {
                 fs::create_dir_all(folder.join(".claude-plugin")).unwrap();
-                fs::write(
-                    folder.join(".claude-plugin").join("plugin.json"),
-                    json!({"name": TOOLKIT_PLUGIN_NAME, "version": v}).to_string(),
-                )
-                .unwrap();
+                fs::write(folder.join(".claude-plugin").join("plugin.json"), json!({"name": TOOLKIT_PLUGIN_NAME, "version": v}).to_string()).unwrap();
             }
             fs::create_dir_all(folder.join("skills").join("backend-dev")).unwrap();
-            fs::write(
-                folder.join("skills").join("backend-dev").join("SKILL.md"),
-                "x",
-            )
-            .unwrap();
+            fs::write(folder.join("skills").join("backend-dev").join("SKILL.md"), "x").unwrap();
             abspath(folder)
         }
 
-        fn cached(
-            &self,
-            market: &str,
-            version: &str,
-            nested: bool,
-            mtime_secs: Option<u64>,
-            declared: Option<&str>,
-        ) -> PathBuf {
-            let folder = self
-                .claude_home
-                .join("plugins")
-                .join("cache")
-                .join(market)
-                .join(TOOLKIT_PLUGIN_NAME)
-                .join(version);
-            let target = if nested {
-                folder.join("plugin")
-            } else {
-                folder.clone()
-            };
+        fn cached(&self, market: &str, version: &str, nested: bool, mtime_secs: Option<u64>, declared: Option<&str>) -> PathBuf {
+            let folder = self.claude_home.join("plugins").join("cache").join(market).join(TOOLKIT_PLUGIN_NAME).join(version);
+            let target = if nested { folder.join("plugin") } else { folder.clone() };
             let root = Self::make_skills(&target, declared);
             if let Some(secs) = mtime_secs {
                 set_dir_mtime(&folder, SystemTime::UNIX_EPOCH + Duration::from_secs(secs));
@@ -438,14 +341,7 @@ mod tests {
         }
 
         fn sibling(&self, version: Option<&str>) -> PathBuf {
-            Self::make_skills(
-                &self
-                    .root
-                    .join("workspace")
-                    .join(TOOLKIT_PLUGIN_NAME)
-                    .join("plugin"),
-                version,
-            )
+            Self::make_skills(&self.root.join("workspace").join(TOOLKIT_PLUGIN_NAME).join("plugin"), version)
         }
     }
 
@@ -459,10 +355,7 @@ mod tests {
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
-            options
-                .write(true)
-                .access_mode(0x100)
-                .custom_flags(0x0200_0000);
+            options.write(true).access_mode(0x100).custom_flags(0x0200_0000);
         }
         #[cfg(not(windows))]
         options.read(true);
@@ -482,10 +375,7 @@ mod tests {
         f.cached("market", "1.0.0", false, None, None);
         f.sibling(None);
         let cfg = json!({"dev_toolkit_dir": configured.to_str().unwrap()});
-        assert_eq!(
-            f.locator().find_toolkit_root(cfg.as_object().unwrap()),
-            configured
-        );
+        assert_eq!(f.locator().find_toolkit_root(cfg.as_object().unwrap()), configured);
     }
 
     #[test]
@@ -494,10 +384,7 @@ mod tests {
         let repo = f.root.join("toolkit-repo");
         let plugin = Fixture::make_skills(&repo.join("plugin"), None);
         let cfg = json!({"dev_toolkit_dir": repo.to_str().unwrap()});
-        assert_eq!(
-            f.locator().find_toolkit_root(cfg.as_object().unwrap()),
-            plugin
-        );
+        assert_eq!(f.locator().find_toolkit_root(cfg.as_object().unwrap()), plugin);
     }
 
     #[test]
@@ -569,10 +456,7 @@ mod tests {
         f.cached("market", "0.1.0", false, None, Some("0.1.0"));
         let best = f.cached("other", "0.2.0", false, None, Some("0.2.0"));
         assert_eq!(f.locator().find_toolkit_root(&empty()), best);
-        assert_eq!(
-            Locator::toolkit_version_status(&best),
-            (false, "0.2.0".to_string())
-        );
+        assert_eq!(Locator::toolkit_version_status(&best), (false, "0.2.0".to_string()));
     }
 
     #[test]
@@ -582,11 +466,7 @@ mod tests {
         let chosen = f.cached("market", "0.3.1", false, Some(1000), Some("0.3.0"));
         fs::create_dir_all(f.claude_home.join("plugins")).unwrap();
         let body = json!({"version": 2, "plugins": {format!("{TOOLKIT_PLUGIN_NAME}@market"): [{"installPath": chosen.to_str().unwrap()}]}});
-        fs::write(
-            f.claude_home.join("plugins").join("installed_plugins.json"),
-            body.to_string(),
-        )
-        .unwrap();
+        fs::write(f.claude_home.join("plugins").join("installed_plugins.json"), body.to_string()).unwrap();
         let l = f.locator();
         assert_eq!(l.list_installed_toolkit_roots()[0], chosen);
         assert_eq!(l.find_toolkit_root(&empty()), chosen);
@@ -596,10 +476,7 @@ mod tests {
     fn missing_required_files_are_named() {
         let f = fx();
         let root = f.cached("market", "0.3.0", false, None, Some("0.3.0"));
-        assert_eq!(
-            Locator::toolkit_missing_files(&root),
-            vec!["bin/craft.exe".to_string()]
-        );
+        assert_eq!(Locator::toolkit_missing_files(&root), vec!["bin/craft.exe".to_string()]);
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::write(root.join("bin").join("craft.exe"), "").unwrap();
         assert!(Locator::toolkit_missing_files(&root).is_empty());
@@ -618,13 +495,7 @@ mod tests {
     #[test]
     fn cache_folder_without_skills_is_ignored() {
         let f = fx();
-        fs::create_dir_all(
-            f.claude_home
-                .join("plugins/cache/market")
-                .join(TOOLKIT_PLUGIN_NAME)
-                .join("0.9.0"),
-        )
-        .unwrap();
+        fs::create_dir_all(f.claude_home.join("plugins/cache/market").join(TOOLKIT_PLUGIN_NAME).join("0.9.0")).unwrap();
         assert_eq!(f.locator().find_toolkit_root(&empty()), PathBuf::new());
     }
 
@@ -650,11 +521,7 @@ mod tests {
         fs::create_dir_all(f.root.join("data")).unwrap();
         fs::write(f.root.join("data").join("config.json"), "{not json").unwrap();
         assert!(read_user_config(&f.root.join("data")).is_empty());
-        fs::write(
-            f.root.join("data").join("config.json"),
-            "\u{feff}{\"a\": 1}",
-        )
-        .unwrap();
+        fs::write(f.root.join("data").join("config.json"), "\u{feff}{\"a\": 1}").unwrap();
         assert_eq!(read_user_config(&f.root.join("data")).len(), 1);
         fs::write(f.root.join("data").join("config.json"), "[1]").unwrap();
         assert!(read_user_config(&f.root.join("data")).is_empty());

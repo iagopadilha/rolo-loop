@@ -36,7 +36,8 @@ const UNCOMMITTED_WARNING_PREFIX: &str = "uncommitted changes in ";
 const READINESS_FILE_PARTS: [&str; 2] = ["planning", "readiness.json"];
 pub const CHECK_TIMEOUT_SECONDS: u64 = 120;
 const MESSAGE_LIMIT: usize = 300;
-const FINGERPRINT_RELATIVE_PATHS: [&str; 4] = [".specs/project/ROADMAP.md", ".specs/project/REPOS.json", ".specs/project/TEST-ENVIRONMENT.md", ".specs/project/.env.test"];
+const FINGERPRINT_RELATIVE_PATHS: [&str; 4] =
+    [".specs/project/ROADMAP.md", ".specs/project/REPOS.json", ".specs/project/TEST-ENVIRONMENT.md", ".specs/project/.env.test"];
 const UNCOMMITTED_FIX: &str = "Commit these files (the worktree is born from the last commit)";
 const JSON_LINE_PREFIX: &str = "[check] JSON: ";
 
@@ -207,7 +208,11 @@ impl ReadinessService<'_> {
     fn context_files_signature(context: &ProjectContext) -> String {
         let items = context_files::uncommitted_context(context.repo_path(), None);
         let joined = items.iter().map(|item| format!("{}:{}", text_of(item.get("path")), text_of(item.get("state")))).collect::<Vec<_>>().join(";");
-        if joined.is_empty() { "-".into() } else { joined }
+        if joined.is_empty() {
+            "-".into()
+        } else {
+            joined
+        }
     }
 
     // ------------------------------------------------ read
@@ -314,7 +319,11 @@ impl ReadinessService<'_> {
             return Self::build_error(&last.unwrap_or_else(|| format!("no READY or PROBLEM line (code {code})")), &fingerprint);
         }
         let problems: Vec<String> = list_of(parsed.get("problems")).iter().map(|i| redact_secrets(i.as_str().unwrap_or(""), Some(MESSAGE_LIMIT))).collect();
-        let warnings: Vec<String> = list_of(parsed.get("warnings")).iter().filter(|i| !i.as_str().unwrap_or("").starts_with(UNCOMMITTED_WARNING_PREFIX)).map(|i| redact_secrets(i.as_str().unwrap_or(""), Some(MESSAGE_LIMIT))).collect();
+        let warnings: Vec<String> = list_of(parsed.get("warnings"))
+            .iter()
+            .filter(|i| !i.as_str().unwrap_or("").starts_with(UNCOMMITTED_WARNING_PREFIX))
+            .map(|i| redact_secrets(i.as_str().unwrap_or(""), Some(MESSAGE_LIMIT)))
+            .collect();
         let mut result = json!({"state": if problems.is_empty() { STATE_READY } else { STATE_PROBLEMS }, "at": now_iso(), "problems": problems, "warnings": warnings,
                                 "uncommitted": Self::read_uncommitted_blocks(context), "fingerprint": fingerprint, "error": ""});
         if let Some(items) = parse_json_items(&output) {
@@ -366,18 +375,33 @@ mod tests {
         let repo = dir.join("proj");
         std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
         std::fs::write(repo.join(".specs/project/ROADMAP.md"), "x").unwrap();
-        let context = ProjectContext::new(Project { id: "p".into(), name: "proj".into(), repo_path: repo.display().to_string(), opened_at: String::new(), last_opened_at: String::new(), favorite: false });
+        let context = ProjectContext::new(Project {
+            id: "p".into(),
+            name: "proj".into(),
+            repo_path: repo.display().to_string(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        });
         (app, context)
     }
 
     #[test]
     fn items_are_grouped_per_repo_and_text_lines_become_other_items() {
-        let items = vec![json!({"kind": "uncommitted", "repo": "a", "files": ["1", "2"]}), json!({"kind": "other", "text": "t"}), json!({"kind": "uncommitted", "repo": "a", "files": ["2", "3"]}), json!({"kind": "uncommitted", "repo": "b", "files": ["9", "9"]})];
+        let items = vec![
+            json!({"kind": "uncommitted", "repo": "a", "files": ["1", "2"]}),
+            json!({"kind": "other", "text": "t"}),
+            json!({"kind": "uncommitted", "repo": "a", "files": ["2", "3"]}),
+            json!({"kind": "uncommitted", "repo": "b", "files": ["9", "9"]}),
+        ];
         let grouped = group_items(&items);
         assert_eq!(grouped.len(), 3);
         assert_eq!((grouped[0]["files"].clone(), grouped[2]["files"].clone()), (json!(["1", "2", "3"]), json!(["9"])));
         let built = build_items(&[json!("p")], &[json!("w")], &[json!({"repo": "r", "setup_files": ["s"], "other_changes": ["o"]})]);
-        assert_eq!((built[0]["files"].clone(), built[0]["text"].clone(), built[1]["level"].clone(), built[2]["level"].clone()), (json!(["s", "o"]), json!("uncommitted changes in r"), json!("problem"), json!("warning")));
+        assert_eq!(
+            (built[0]["files"].clone(), built[0]["text"].clone(), built[1]["level"].clone(), built[2]["level"].clone()),
+            (json!(["s", "o"]), json!("uncommitted changes in r"), json!("problem"), json!("warning"))
+        );
         assert_eq!(parse_json_items("x\n[check] JSON: {\"items\": [{\"a\": 1}, 5]}\n"), Some(vec![json!({"a": 1})]));
         assert_eq!(parse_json_items("[check] JSON: nope"), None);
         assert_eq!(parse_json_items("nothing"), None);

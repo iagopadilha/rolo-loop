@@ -110,7 +110,8 @@ impl PlanningReopenService<'_> {
             if !Path::new(&path).is_dir() {
                 continue;
             }
-            let mut item = json!({"repo": repo.name, "path": pycompat::nt_normpath(&path), "branch": "", "dirty": false, "unpushed": 0, "can_remove": false, "reasons": []});
+            let mut item =
+                json!({"repo": repo.name, "path": pycompat::nt_normpath(&path), "branch": "", "dirty": false, "unpushed": 0, "can_remove": false, "reasons": []});
             let Some(branch) = self.find_registered_loop_branch(&repo, &path) else {
                 item["branch"] = json!(self.app.git.get_current_branch(&path));
                 item["reasons"] = json!([{"code": "not_app_worktree", "text": reason_text("not_app_worktree")}]);
@@ -184,14 +185,21 @@ impl PlanningReopenService<'_> {
             return Err(AppError::loop_running("the loop is running: stop it before reopening the planning").with_code(LOOP_RUNNING_CODE));
         }
         if self.app.jobs().get_running_job(context.repo_path()).is_some() {
-            return Err(AppError::new(Kind::JobInProgress, "a claude job (planning reply, roadmap or map) is running: wait for it to finish").with_code(PLANNING_BUSY_CODE));
+            return Err(
+                AppError::new(Kind::JobInProgress, "a claude job (planning reply, roadmap or map) is running: wait for it to finish").with_code(PLANNING_BUSY_CODE)
+            );
         }
         let worktrees = self.describe_worktrees(context, false);
         if let Some(blocked) = worktrees.iter().find(|item| item["can_remove"] != true) {
-            return Err(conflict(format!("a worktree is not a loop worktree created by the app: remove it by hand ({})", blocked["path"].as_str().unwrap_or("")), NOT_REMOVABLE_CODE).with_extra("worktrees", json!(worktrees)));
+            return Err(conflict(
+                format!("a worktree is not a loop worktree created by the app: remove it by hand ({})", blocked["path"].as_str().unwrap_or("")),
+                NOT_REMOVABLE_CODE,
+            )
+            .with_extra("worktrees", json!(worktrees)));
         }
         if worktrees.iter().any(|item| item["dirty"] == true || item["unpushed"].as_u64().unwrap_or(0) > 0) && !confirm {
-            return Err(conflict("worktrees with uncommitted or unpushed work: confirm to remove them (the branches are kept)", NEEDS_CONFIRM_CODE).with_extra("worktrees", json!(worktrees)));
+            return Err(conflict("worktrees with uncommitted or unpushed work: confirm to remove them (the branches are kept)", NEEDS_CONFIRM_CODE)
+                .with_extra("worktrees", json!(worktrees)));
         }
         let previous_work_dir = context.work_dir();
         if !is_same_path(&previous_work_dir, context.repo_path()) {
@@ -200,7 +208,9 @@ impl PlanningReopenService<'_> {
         let (removed, failures) = self.remove_worktrees(context, &worktrees);
         let removed_names: Vec<&str> = removed.iter().filter_map(|e| e["repo"].as_str()).collect();
         let mut folders = vec![previous_work_dir.clone()];
-        folders.extend(worktrees.iter().filter(|item| !removed_names.contains(&item["repo"].as_str().unwrap_or(""))).filter_map(|item| item["path"].as_str().map(String::from)));
+        folders.extend(
+            worktrees.iter().filter(|item| !removed_names.contains(&item["repo"].as_str().unwrap_or(""))).filter_map(|item| item["path"].as_str().map(String::from)),
+        );
         self.invalidate_approval(context, &folders);
         self.app.planning_requirement().mark_reopened(context, &now_iso(), &folders);
         self.app.log.info("planning_reopened", &[("project", json!(context.project.id)), ("removed", json!(removed.len())), ("failed", json!(failures.len()))]);
@@ -241,7 +251,15 @@ impl PlanningReopenService<'_> {
             }
             Ok(())
         })();
-        result.map_err(|failure| conflict(format!("the plan could not be saved into the repo before removing the worktree ({}); nothing was removed", failure.to_string().chars().take(200).collect::<String>()), REMOVE_FAILED_CODE))
+        result.map_err(|failure| {
+            conflict(
+                format!(
+                    "the plan could not be saved into the repo before removing the worktree ({}); nothing was removed",
+                    failure.to_string().chars().take(200).collect::<String>()
+                ),
+                REMOVE_FAILED_CODE,
+            )
+        })
     }
 
     /// `git worktree remove --force` (the plan was saved; dirt was confirmed) + prune, primary last. Branches stay.

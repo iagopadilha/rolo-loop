@@ -116,7 +116,8 @@ impl WrapUpService<'_> {
     }
 
     fn integration_branch(&self, context: &ProjectContext) -> String {
-        let text = std::fs::read(Path::new(&context.specs_dir()).join("project").join("ROADMAP.md")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        let text =
+            std::fs::read(Path::new(&context.specs_dir()).join("project").join("ROADMAP.md")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
         get_integration_branch(self.app, &text)
     }
 
@@ -160,7 +161,10 @@ impl WrapUpService<'_> {
             Ok(check) => json!({"repos": check["repos"].as_array().into_iter().flatten().map(|item| self.describe_checked_repo(context, item)).collect::<Vec<_>>()}),
             Err(failure) => {
                 // the close routine is not available: the wrap-up still shows the rest
-                self.app.log.warn("wrap_up_check_unavailable", &[("project", json!(context.project.id)), ("message", json!(failure.message.chars().take(RESULT_TEXT_LIMIT).collect::<String>()))]);
+                self.app.log.warn(
+                    "wrap_up_check_unavailable",
+                    &[("project", json!(context.project.id)), ("message", json!(failure.message.chars().take(RESULT_TEXT_LIMIT).collect::<String>()))],
+                );
                 json!({"repos": []})
             }
         }
@@ -174,7 +178,11 @@ impl WrapUpService<'_> {
         let worktree = if Path::new(&context.project.loop_worktree_path()).is_dir() { self.find_worktree(context, name) } else { String::new() };
         let link = item.get("pr").filter(|l| engine_state::notify_truthy(Some(l))).cloned();
         let pr_status = text_or_empty(item.get("pr_status"));
-        let notes: Vec<Value> = reasons.iter().filter(|r| r["code"] == "pr_missing").map(|r| json!({"kind": "pr_missing", "blocking": false, "message": format!("{name}: {}", py_str(r.get("text")))})).collect();
+        let notes: Vec<Value> = reasons
+            .iter()
+            .filter(|r| r["code"] == "pr_missing")
+            .map(|r| json!({"kind": "pr_missing", "blocking": false, "message": format!("{name}: {}", py_str(r.get("text")))}))
+            .collect();
         let mut out = item.as_object().cloned().unwrap_or_default();
         out.insert("notes".into(), json!(notes));
         out.insert("repo".into(), item["name"].clone());
@@ -294,7 +302,8 @@ impl WrapUpService<'_> {
 
     fn close_worktrees(&self, context: &ProjectContext, close_body: &Value) -> Result<Value, AppError> {
         let result = self.app.loop_worktrees().close_loop(context, close_body)?;
-        let failed: Vec<(&String, &Value)> = result["repos"].as_object().into_iter().flatten().filter(|(_, item)| item.is_object() && item["status"] != "closed").collect();
+        let failed: Vec<(&String, &Value)> =
+            result["repos"].as_object().into_iter().flatten().filter(|(_, item)| item.is_object() && item["status"] != "closed").collect();
         if !failed.is_empty() {
             let reasons: Vec<Value> = failed
                 .iter()
@@ -304,7 +313,10 @@ impl WrapUpService<'_> {
                     json!({"repo": name, "kind": "close_failed", "files": [], "commits": [], "message": if joined.is_empty() { "the worktree was kept".to_string() } else { joined }})
                 })
                 .collect();
-            let message = format!("the close did not finish: {}", reasons.iter().map(|r| format!("{}: {}", r["repo"].as_str().unwrap_or(""), r["message"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("; "));
+            let message = format!(
+                "the close did not finish: {}",
+                reasons.iter().map(|r| format!("{}: {}", r["repo"].as_str().unwrap_or(""), r["message"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("; ")
+            );
             let mut error = build_blocked(message, reasons);
             error.extras.insert("closed".into(), result.get("closed").cloned().unwrap_or(json!([])));
             error.extras.insert("backup".into(), result.get("backup").cloned().unwrap_or(Value::Null));
@@ -349,7 +361,12 @@ impl WrapUpService<'_> {
         if code != 0 {
             return vec![];
         }
-        pycompat::splitlines(&output).into_iter().filter(|l| !l.trim().is_empty()).map(|l| l.chars().skip(3).collect::<String>().trim().trim_matches('"').to_string()).take(LISTED_FILES_LIMIT).collect()
+        pycompat::splitlines(&output)
+            .into_iter()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.chars().skip(3).collect::<String>().trim().trim_matches('"').to_string())
+            .take(LISTED_FILES_LIMIT)
+            .collect()
     }
 
     /// `<sha> <subject>` of the commits the remote does not hold: against the remote branch, else against the base the loop forked from.
@@ -374,7 +391,10 @@ impl WrapUpService<'_> {
         let mut receipt = Map::new();
         receipt.insert("pr_url".into(), summary["pr_url"].clone());
         receipt.insert("compare_url".into(), summary["compare_url"].clone());
-        receipt.insert("branch".into(), primary_branch.cloned().or_else(|| meta.get("branch").filter(|b| engine_state::notify_truthy(Some(b))).cloned()).unwrap_or(Value::Null));
+        receipt.insert(
+            "branch".into(),
+            primary_branch.cloned().or_else(|| meta.get("branch").filter(|b| engine_state::notify_truthy(Some(b))).cloned()).unwrap_or(Value::Null),
+        );
         receipt.insert("backup_dir".into(), Value::Null);
         receipt.insert("cost_usd".into(), summary["cost_usd"].clone());
         receipt.insert("max_cost_usd".into(), summary["max_cost_usd"].clone());
@@ -411,7 +431,10 @@ mod tests {
         let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
         let service = app.wrap_up();
         let view = service.get_wrap_up(&context).unwrap();
-        assert_eq!((view["summary"]["features_done"].clone(), view["summary"]["features_total"].clone(), view["check"].clone()), (json!(1), json!(2), json!({"repos": []})));
+        assert_eq!(
+            (view["summary"]["features_done"].clone(), view["summary"]["features_total"].clone(), view["check"].clone()),
+            (json!(1), json!(2), json!({"repos": []}))
+        );
         assert_eq!((view["delivery"]["push_pr"].clone(), view["delivery"]["done"].clone(), view["unreviewed_critical"].clone()), (json!(true), json!(false), json!(0)));
         let error = service.finish(&context, &json!({"mode": "safe"})).unwrap_err();
         assert_eq!((error.kind, error.code.as_deref()), (Kind::RepoConflict, Some("no_worktree")));

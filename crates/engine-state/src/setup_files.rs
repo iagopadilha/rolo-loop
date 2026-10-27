@@ -21,7 +21,12 @@ use std::path::{Path, PathBuf};
 
 const GIT_TIMEOUT_SECONDS: u64 = 30;
 const SPECS_PATHSPECS: [&str; 2] = [":(glob).specs/project/**", ":(glob).specs/features/**"];
-const EXCLUDED_PATHSPECS: [&str; 4] = [":(exclude,glob).specs/project/loop/**", ":(exclude,glob).specs/project/.env*", ":(exclude,glob).specs/project/**/.env*", ":(exclude,glob).specs/project/NETWORK.json"];
+const EXCLUDED_PATHSPECS: [&str; 4] = [
+    ":(exclude,glob).specs/project/loop/**",
+    ":(exclude,glob).specs/project/.env*",
+    ":(exclude,glob).specs/project/**/.env*",
+    ":(exclude,glob).specs/project/NETWORK.json",
+];
 const LOOP_STATE_PREFIX: &str = ".specs/project/loop/";
 const SPECS_PREFIX: &str = ".specs/";
 const APP_BLOCK_MARKERS: [&str; 4] = ["<!-- maestro:context -->", "<!-- CODEBASE:BEGIN -->", "Conformance:", "@.specs/project/RULES.md"];
@@ -107,7 +112,8 @@ pub fn is_app_only_gitignore_change(repo: &str, path: &str) -> bool {
         return false;
     }
     // Python's `line[:1] in "+-"` is also true for an empty line
-    let changed: Vec<&str> = pycompat::splitlines(&out).into_iter().filter(|l| (l.is_empty() || l.starts_with(['+', '-'])) && !l.starts_with("+++") && !l.starts_with("---")).collect();
+    let changed: Vec<&str> =
+        pycompat::splitlines(&out).into_iter().filter(|l| (l.is_empty() || l.starts_with(['+', '-'])) && !l.starts_with("+++") && !l.starts_with("---")).collect();
     !changed.is_empty() && changed.iter().all(|l| l.starts_with('+') && APP_IGNORE_LINES.contains(&l[1..].trim()))
 }
 
@@ -218,7 +224,11 @@ pub fn uncommitted_blocks(repos: &[RepoRef], primary_repo: &str) -> Vec<Value> {
 
 pub fn shortened(paths: &[String]) -> String {
     let shown = paths.iter().take(LIST_LIMIT).cloned().collect::<Vec<_>>().join(", ");
-    if paths.len() > LIST_LIMIT { format!("{shown} and {} more", paths.len() - LIST_LIMIT) } else { shown }
+    if paths.len() > LIST_LIMIT {
+        format!("{shown} and {} more", paths.len() - LIST_LIMIT)
+    } else {
+        shown
+    }
 }
 
 fn string_list(v: &Value, key: &str) -> Vec<String> {
@@ -230,7 +240,12 @@ pub fn block_text(block: &Value) -> String {
     let (setup, other) = (string_list(block, "setup_files"), string_list(block, "other_changes"));
     let mut parts: Vec<String> = Vec::new();
     if !setup.is_empty() {
-        parts.push(format!("{} setup file{} not committed: they will be carried into the worktree (or commit them from Workspace): {}", setup.len(), if setup.len() == 1 { "" } else { "s" }, shortened(&setup)));
+        parts.push(format!(
+            "{} setup file{} not committed: they will be carried into the worktree (or commit them from Workspace): {}",
+            setup.len(),
+            if setup.len() == 1 { "" } else { "s" },
+            shortened(&setup)
+        ));
     }
     if !other.is_empty() {
         parts.push(format!("{} other changed file{} will NOT be carried: {}", other.len(), if other.len() == 1 { "" } else { "s" }, shortened(&other)));
@@ -289,7 +304,8 @@ pub fn network_filter_script(work: &str, toolkit_root: &str, data_dir: &str) -> 
     if !binary.is_file() {
         return (String::new(), format!("toolkit has no {}: no network-filter.js", TOOLKIT_BINARY.join("/")));
     }
-    let (code, out, _) = run_timeout_env(&binary.display().to_string(), &["testenv", "network-filter", "--project", work], None, &[("LOOP_DATA_DIR", data_dir)], TESTENV_TIMEOUT_SECONDS);
+    let (code, out, _) =
+        run_timeout_env(&binary.display().to_string(), &["testenv", "network-filter", "--project", work], None, &[("LOOP_DATA_DIR", data_dir)], TESTENV_TIMEOUT_SECONDS);
     if code != 0 || out.trim().is_empty() {
         return (String::new(), format!("craft testenv network-filter failed (exit {code}): no network-filter.js"));
     }

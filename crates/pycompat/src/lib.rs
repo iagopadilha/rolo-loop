@@ -53,11 +53,7 @@ impl Re {
         Re::build(pattern, true)
     }
     fn compile(pattern: &str, ci: bool) -> Result<FRegex, fancy_regex::Error> {
-        let source = if ci {
-            format!("(?i){pattern}")
-        } else {
-            pattern.to_string()
-        };
+        let source = if ci { format!("(?i){pattern}") } else { pattern.to_string() };
         let mut builder = RegexBuilder::new(&source);
         builder.backtrack_limit(2_000_000);
         builder.build()
@@ -65,13 +61,7 @@ impl Re {
     /// A pattern written in this codebase (static): compiled by the Rust engine's own grammar, no Python-grammar check.
     fn build(pattern: &str, ci: bool) -> Re {
         match Re::compile(pattern, ci) {
-            Ok(re) => Re {
-                re,
-                src: pattern.to_string(),
-                ci,
-                start: std::sync::OnceLock::new(),
-                full: std::sync::OnceLock::new(),
-            },
+            Ok(re) => Re { re, src: pattern.to_string(), ci, start: std::sync::OnceLock::new(), full: std::sync::OnceLock::new() },
             Err(error) => panic!("invalid pattern {pattern:?}: {error}"),
         }
     }
@@ -86,23 +76,14 @@ impl Re {
             return Err(message);
         }
         Re::compile(pattern, ci)
-            .map(|re| Re {
-                re,
-                src: pattern.to_string(),
-                ci,
-                start: std::sync::OnceLock::new(),
-                full: std::sync::OnceLock::new(),
-            })
+            .map(|re| Re { re, src: pattern.to_string(), ci, start: std::sync::OnceLock::new(), full: std::sync::OnceLock::new() })
             .map_err(|_| "invalid pattern".to_string())
     }
     pub fn is_match(&self, text: &str) -> bool {
         self.re.is_match(text).unwrap_or(false)
     }
     fn twin<'a>(&self, cell: &'a std::sync::OnceLock<FRegex>, tail: &str) -> &'a FRegex {
-        cell.get_or_init(|| {
-            Re::compile(&format!(r"\A(?:{}){}", self.src, tail), self.ci)
-                .expect("anchored twin compiles")
-        })
+        cell.get_or_init(|| Re::compile(&format!(r"\A(?:{}){}", self.src, tail), self.ci).expect("anchored twin compiles"))
     }
     /// Python `re.match`: anchored at the start.
     pub fn match_start(&self, text: &str) -> Option<M> {
@@ -128,11 +109,7 @@ impl Re {
             let Some(m) = self.find_at(text, pos) else {
                 break;
             };
-            pos = if m.end == m.start {
-                next_boundary(text, m.end)
-            } else {
-                m.end
-            };
+            pos = if m.end == m.start { next_boundary(text, m.end) } else { m.end };
             out.push(m);
         }
         out
@@ -175,13 +152,7 @@ impl Re {
 
 fn to_m(caps: &fancy_regex::Captures<'_>) -> M {
     let whole = caps.get(0).expect("group 0 always exists");
-    M {
-        start: whole.start(),
-        end: whole.end(),
-        groups: (0..caps.len())
-            .map(|i| caps.get(i).map(|g| g.as_str().to_string()))
-            .collect(),
-    }
+    M { start: whole.start(), end: whole.end(), groups: (0..caps.len()).map(|i| caps.get(i).map(|g| g.as_str().to_string())).collect() }
 }
 
 fn next_boundary(text: &str, index: usize) -> usize {
@@ -406,10 +377,7 @@ pub fn posix_normpath(path: &str) -> String {
         if c.is_empty() || c == "." {
             continue;
         }
-        if c != ".."
-            || (initial == 0 && comps.is_empty())
-            || comps.last().is_some_and(|l| *l == "..")
-        {
+        if c != ".." || (initial == 0 && comps.is_empty()) || comps.last().is_some_and(|l| *l == "..") {
             comps.push(c);
         } else if !comps.is_empty() {
             comps.pop();
@@ -429,8 +397,7 @@ pub fn posix_normpath(path: &str) -> String {
 pub fn nt_isabs(path: &str) -> bool {
     let p = path.replace('/', "\\");
     let b = p.as_bytes();
-    (b.len() >= 3 && b[1] == b':' && b[0].is_ascii_alphabetic() && b[2] == b'\\')
-        || (p.starts_with("\\\\") && p.len() > 2)
+    (b.len() >= 3 && b[1] == b':' && b[0].is_ascii_alphabetic() && b[2] == b'\\') || (p.starts_with("\\\\") && p.len() > 2)
 }
 
 /// `os.path.join(a, b)` on Windows.
@@ -455,11 +422,7 @@ pub fn nt_join(a: &str, b: &str) -> String {
     if a.is_empty() {
         return b.to_string();
     }
-    let base = if ar.is_empty() || ar.ends_with('\\') || a.ends_with(['\\', '/']) {
-        a.to_string()
-    } else {
-        format!("{a}\\")
-    };
+    let base = if ar.is_empty() || ar.ends_with('\\') || a.ends_with(['\\', '/']) { a.to_string() } else { format!("{a}\\") };
     format!("{base}{}", if bd.is_empty() { b.to_string() } else { br })
 }
 
@@ -477,9 +440,7 @@ pub fn nt_abspath(path: &str) -> String {
     let full = if nt_isabs(path) {
         path.to_string()
     } else {
-        let cwd = std::env::current_dir()
-            .map(|p| p.display().to_string())
-            .unwrap_or_default();
+        let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default();
         nt_join(&cwd, path)
     };
     nt_normpath(&full)
@@ -633,11 +594,8 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
     let mut scheme = String::new();
     if let Some(i) = rest.find(':') {
         let cand = &rest[..i];
-        let valid = !cand.is_empty()
-            && cand.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
-            && cand
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+        let valid =
+            !cand.is_empty() && cand.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) && cand.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
         if valid {
             scheme = cand.to_ascii_lowercase();
             rest = rest[i + 1..].to_string();
@@ -649,9 +607,7 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
         let end = body.find(['/', '?', '#']).unwrap_or(body.len());
         netloc = body[..end].to_string();
         rest = body[end..].to_string();
-        if (netloc.contains('[') && !netloc.contains(']'))
-            || (netloc.contains(']') && !netloc.contains('['))
-        {
+        if (netloc.contains('[') && !netloc.contains(']')) || (netloc.contains(']') && !netloc.contains('[')) {
             return Err("Invalid IPv6 URL".into());
         }
     }
@@ -697,9 +653,7 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
     if let Some(p) = port_text {
         if !p.is_empty() {
             if p.chars().all(|c| c.is_ascii_digit()) {
-                let n: u32 = p
-                    .parse()
-                    .map_err(|_| "Port out of range 0-65535".to_string())?;
+                let n: u32 = p.parse().map_err(|_| "Port out of range 0-65535".to_string())?;
                 if n > 65535 {
                     return Err("Port out of range 0-65535".into());
                 }
@@ -709,15 +663,7 @@ pub fn urlsplit(url: &str) -> Result<UrlParts, String> {
             }
         }
     }
-    Ok(UrlParts {
-        scheme,
-        hostname,
-        port,
-        path,
-        query,
-        username,
-        password,
-    })
+    Ok(UrlParts { scheme, hostname, port, path, query, username, password })
 }
 
 #[cfg(test)]
@@ -742,18 +688,9 @@ mod tests {
 
     #[test]
     fn shlex_nonposix_keeps_quotes() {
-        assert_eq!(
-            shlex_split_nonposix("rm -rf \"a b\" c").unwrap(),
-            vec!["rm", "-rf", "\"a b\"", "c"]
-        );
-        assert_eq!(
-            shlex_split_nonposix("\"abc\"def").unwrap(),
-            vec!["\"abc\"", "def"]
-        );
-        assert_eq!(
-            shlex_split_nonposix("abc\"def ghi\"").unwrap(),
-            vec!["abc\"def", "ghi\""]
-        );
+        assert_eq!(shlex_split_nonposix("rm -rf \"a b\" c").unwrap(), vec!["rm", "-rf", "\"a b\"", "c"]);
+        assert_eq!(shlex_split_nonposix("\"abc\"def").unwrap(), vec!["\"abc\"", "def"]);
+        assert_eq!(shlex_split_nonposix("abc\"def ghi\"").unwrap(), vec!["abc\"def", "ghi\""]);
         assert!(shlex_split_nonposix("echo \"unclosed").is_err());
     }
 
@@ -782,10 +719,7 @@ mod tests {
         assert_eq!(u.port, Some(8443));
         assert_eq!(u.path, "/a/b");
         assert!(urlsplit("http://h:abc/").is_err());
-        assert_eq!(
-            urlsplit("http://[::1]:80/").unwrap().hostname.as_deref(),
-            Some("::1")
-        );
+        assert_eq!(urlsplit("http://[::1]:80/").unwrap().hostname.as_deref(), Some("::1"));
     }
 
     #[test]
@@ -812,11 +746,8 @@ pub fn nt_realpath(path: &str) -> String {
     loop {
         if let Ok(real) = std::fs::canonicalize(&existing) {
             let text = real.display().to_string();
-            let mut resolved = if let Some(tail) = text.strip_prefix(VERBATIM_UNC) {
-                format!(r"\\{tail}")
-            } else {
-                text.strip_prefix(VERBATIM).unwrap_or(&text).to_string()
-            };
+            let mut resolved =
+                if let Some(tail) = text.strip_prefix(VERBATIM_UNC) { format!(r"\\{tail}") } else { text.strip_prefix(VERBATIM).unwrap_or(&text).to_string() };
             for part in rest.iter().rev() {
                 if !resolved.ends_with('\\') {
                     resolved.push('\\');
@@ -855,5 +786,9 @@ pub fn format_g(value: f64) -> String {
     }
     let decimals = (5 - exponent).max(0) as usize;
     let text = format!("{value:.decimals$}");
-    if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.').to_string() } else { text }
+    if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        text
+    }
 }

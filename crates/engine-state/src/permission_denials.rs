@@ -23,7 +23,11 @@ static SPACES: LazyLock<Re> = LazyLock::new(|| Re::new(r"\s+"));
 /// `GUARD_PROD_HINTS` (the guard's production words, comma-separated; default prod,production) as whole-word regexes.
 pub fn prod_hint_patterns(env: &Env) -> Vec<Re> {
     let raw = app_env_option(env, "GUARD_PROD_HINTS").unwrap_or_else(|| "prod,production".into());
-    raw.split(',').map(str::trim).filter(|i| !i.is_empty()).filter_map(|item| Re::try_build(&format!("(?<![A-Za-z0-9]){}(?![A-Za-z0-9])", pycompat::escape(item)), true)).collect()
+    raw.split(',')
+        .map(str::trim)
+        .filter(|i| !i.is_empty())
+        .filter_map(|item| Re::try_build(&format!("(?<![A-Za-z0-9]){}(?![A-Za-z0-9])", pycompat::escape(item)), true))
+        .collect()
 }
 
 /// The project's `deny_bash_regex` from PERMISSIONS.json (block rules written with `harness rules`): a denied command that matches one of

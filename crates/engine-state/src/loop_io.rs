@@ -15,11 +15,7 @@ pub fn run(program: &str, args: &[&str], cwd: Option<&str>) -> (i32, String, Str
         cmd.current_dir(dir);
     }
     match cmd.output() {
-        Ok(out) => (
-            out.status.code().unwrap_or(1),
-            String::from_utf8_lossy(&out.stdout).trim().to_string(),
-            String::from_utf8_lossy(&out.stderr).trim().to_string(),
-        ),
+        Ok(out) => (out.status.code().unwrap_or(1), String::from_utf8_lossy(&out.stdout).trim().to_string(), String::from_utf8_lossy(&out.stderr).trim().to_string()),
         Err(error) => (1, String::new(), error.to_string()),
     }
 }

@@ -68,9 +68,29 @@ fn allowed(name: &str) -> Option<Spec> {
 
 /// Every flag that [`allowed`] accepts, for the test that keeps it in step with the parser.
 pub const ALLOWED_FLAGS: [&str; 23] = [
-    "--e2e", "--push", "--no-push", "--continue-on-blocked", "--pause-on-blocked", "--allow-silent", "--no-auto-answer", "--no-monitor", "--wave", "--timeout", "--max-stall",
-    "--limit-wait", "--limit-retries", "--gate-tiebreaks", "--max-auto-answers", "--auto-answers-per-feature", "--budget", "--max-cost", "--branch", "--base-branch", "--git-user",
-    "--orchestrator-model", "--permission-mode",
+    "--e2e",
+    "--push",
+    "--no-push",
+    "--continue-on-blocked",
+    "--pause-on-blocked",
+    "--allow-silent",
+    "--no-auto-answer",
+    "--no-monitor",
+    "--wave",
+    "--timeout",
+    "--max-stall",
+    "--limit-wait",
+    "--limit-retries",
+    "--gate-tiebreaks",
+    "--max-auto-answers",
+    "--auto-answers-per-feature",
+    "--budget",
+    "--max-cost",
+    "--branch",
+    "--base-branch",
+    "--git-user",
+    "--orchestrator-model",
+    "--permission-mode",
 ];
 const DROPPED_FLAGS_WITH_VALUE: [&str; 7] = ["--answer", "--option", "--leftovers", "--claude", "--claude-fallback", "--setup", "--summary-dir"];
 
@@ -111,7 +131,11 @@ fn convert_value(name: &str, spec: Spec, raw: &str) -> Result<String, LoopComman
         Spec::Choice(choices) => choices.contains(&raw),
         Spec::Switch => false,
     };
-    if ok { Ok(raw.to_string()) } else { invalid(format!("the saved command has an invalid value for {name}: {}", py_repr_str(&short(raw, 80)))) }
+    if ok {
+        Ok(raw.to_string())
+    } else {
+        invalid(format!("the saved command has an invalid value for {name}: {}", py_repr_str(&short(raw, 80))))
+    }
 }
 
 /// `(value, next index)` of an option: `--name=value` or `--name value`.
@@ -183,7 +207,8 @@ fn resolve_working_folder(saved_cwd: Option<&Value>, project_repo: &str, allowed
 /// `{"argv": [program, "loop", project_repo, *known options], "cwd": folder, "dropped": [option names]}`. An error for a foreign program or
 /// subcommand, an unknown option, a bad value, another repository or a folder outside the project.
 pub fn rebuild_loop_command(saved: &Value, project_repo: &str, allowed_folders: &[String], program: &str) -> Result<Value, LoopCommandInvalid> {
-    let argv: Option<Vec<String>> = saved.get("argv").and_then(Value::as_array).filter(|a| a.len() >= 2).and_then(|a| a.iter().map(|i| i.as_str().map(String::from)).collect());
+    let argv: Option<Vec<String>> =
+        saved.get("argv").and_then(Value::as_array).filter(|a| a.len() >= 2).and_then(|a| a.iter().map(|i| i.as_str().map(String::from)).collect());
     let Some(argv) = argv else { return invalid("the saved command is not a list of text arguments".into()) };
     check_program(&argv[0], program)?;
     check_subcommand(&argv[1])?;
@@ -210,7 +235,25 @@ mod tests {
     fn rebuilds_with_known_options_and_drops_the_dangerous_ones() {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().display().to_string();
-        let value = saved(&["C:\\x\\harness.exe", "loop", &repo, "--wave", "2", "--e2e", "--answer", "do it", "--claude=evil.exe", "--setup", "calc", "--max-cost=12.5", "--permission-mode", "acceptEdits"], Value::Null);
+        let value = saved(
+            &[
+                "C:\\x\\harness.exe",
+                "loop",
+                &repo,
+                "--wave",
+                "2",
+                "--e2e",
+                "--answer",
+                "do it",
+                "--claude=evil.exe",
+                "--setup",
+                "calc",
+                "--max-cost=12.5",
+                "--permission-mode",
+                "acceptEdits",
+            ],
+            Value::Null,
+        );
         let rebuilt = rebuild_loop_command(&value, &repo, &[repo.clone()], "C:\\app\\harness.exe").unwrap();
         let argv: Vec<&str> = rebuilt["argv"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert_eq!(argv, vec!["C:\\app\\harness.exe", "loop", repo.as_str(), "--wave", "2", "--e2e", "--max-cost", "12.5", "--permission-mode", "acceptEdits"]);

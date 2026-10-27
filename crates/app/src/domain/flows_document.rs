@@ -48,7 +48,8 @@ pub fn parse_flows(text: &str) -> Vec<(String, String, Vec<String>)> {
 /// `{"missing": [ROADMAP slugs without a flow of >= MIN_FLOW_STEPS steps], "orphans": [FLOWS slugs not in the ROADMAP]}`.
 pub fn check_flow_coverage(feature_slugs: &[String], flows_text: &str) -> Value {
     let flows = parse_flows(flows_text);
-    let missing: Vec<&String> = feature_slugs.iter().filter(|s| flows.iter().find(|(f, _, _)| f == *s).map(|(_, _, steps)| steps.len()).unwrap_or(0) < MIN_FLOW_STEPS).collect();
+    let missing: Vec<&String> =
+        feature_slugs.iter().filter(|s| flows.iter().find(|(f, _, _)| f == *s).map(|(_, _, steps)| steps.len()).unwrap_or(0) < MIN_FLOW_STEPS).collect();
     let orphans: Vec<&String> = flows.iter().map(|(s, _, _)| s).filter(|s| !feature_slugs.contains(s)).collect();
     json!({"missing": missing, "orphans": orphans})
 }

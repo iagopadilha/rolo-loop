@@ -32,7 +32,15 @@ const ARCHITECTURE_TEXT: &str = "# Architecture
 - `migrations/`: reviewed SQL migrations.
 ";
 const LOOP_STATE_ENTRIES: [&str; 10] = [
-    "json/LOOP.json", "json/meta.json", "internal/turns", "internal/snapshots", "internal/guard.log", "internal/LOOP.lock", "internal/demo-answer.txt", "ANSWERS.md", "VALIDATE.md",
+    "json/LOOP.json",
+    "json/meta.json",
+    "internal/turns",
+    "internal/snapshots",
+    "internal/guard.log",
+    "internal/LOOP.lock",
+    "internal/demo-answer.txt",
+    "ANSWERS.md",
+    "VALIDATE.md",
     "GRAPH.md",
 ];
 
@@ -131,7 +139,11 @@ impl DemoProjectSeeder {
             let name = folder.rsplit('/').next().unwrap_or(folder);
             scaffold.push((format!("{folder}/README.md"), format!("# {name}\n\nPart of {PROJECT_NAME}.\n")));
         }
-        let first: Vec<String> = ["README.md", ".gitignore", "CLAUDE.md"].iter().map(|s| s.to_string()).chain(scaffold.iter().map(|(p, _)| p.clone()).filter(|p| p.ends_with("/README.md"))).collect();
+        let first: Vec<String> = ["README.md", ".gitignore", "CLAUDE.md"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain(scaffold.iter().map(|(p, _)| p.clone()).filter(|p| p.ends_with("/README.md")))
+            .collect();
         for (relative, text) in &scaffold {
             write_text_atomically(&self.repo_file(relative), text).map_err(|e| e.to_string())?;
         }

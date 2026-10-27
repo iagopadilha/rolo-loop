@@ -24,13 +24,7 @@ pub const ORIGIN_LOCAL: &str = "local";
 pub const ORIGIN_BUILTIN: &str = "builtin";
 pub const ORIGIN_GLOBAL: &str = "global";
 pub const ORIGIN_PROJECT: &str = "project";
-pub const LOCAL_ENTRIES: [&str; 5] = [
-    "localhost * cred",
-    "127.0.0.1 * cred",
-    "[::1] * cred",
-    "0.0.0.0 * cred",
-    "*.localhost * cred",
-];
+pub const LOCAL_ENTRIES: [&str; 5] = ["localhost * cred", "127.0.0.1 * cred", "[::1] * cred", "0.0.0.0 * cred", "*.localhost * cred"];
 pub const BUILTIN_READ_HOSTS: [&str; 12] = [
     "learn.microsoft.com",
     "developer.mozilla.org",
@@ -48,12 +42,9 @@ pub const BUILTIN_READ_HOSTS: [&str; 12] = [
 pub const NETWORK_LABEL: &str = ".specs/project/NETWORK.json";
 const IF_MISSING_PREFIX: &str = "if-missing=";
 
-static LABEL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?$").expect("regex"));
-static ENV_NAME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").expect("regex"));
-static SCHEME_PREFIX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z][A-Za-z0-9+.\-]*://").expect("regex"));
+static LABEL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?$").expect("regex"));
+static ENV_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").expect("regex"));
+static SCHEME_PREFIX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z][A-Za-z0-9+.\-]*://").expect("regex"));
 static CONTROL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\x00-\x1f\x7f]").expect("regex"));
 
 pub fn default_port(scheme: &str) -> Option<u32> {
@@ -157,15 +148,9 @@ fn parse_host(text: &str) -> Result<String, String> {
     if host.is_empty() {
         return Err("host is empty".into());
     }
-    let labels: Vec<&str> = if let Some(rest) = host.strip_prefix("*.") {
-        rest.split('.').collect()
-    } else {
-        host.split('.').collect()
-    };
+    let labels: Vec<&str> = if let Some(rest) = host.strip_prefix("*.") { rest.split('.').collect() } else { host.split('.').collect() };
     if labels.concat().contains('*') {
-        return Err(format!(
-            "wildcard only as a leading `*.domain` (got {text})"
-        ));
+        return Err(format!("wildcard only as a leading `*.domain` (got {text})"));
     }
     for label in labels {
         if !LABEL.is_match(label) {
@@ -177,13 +162,7 @@ fn parse_host(text: &str) -> Result<String, String> {
 
 fn parse_port(text: &str) -> Result<u32, String> {
     match text.parse::<u32>() {
-        Ok(n)
-            if !text.is_empty()
-                && text.chars().all(|c| c.is_ascii_digit())
-                && (1..=65535).contains(&n) =>
-        {
-            Ok(n)
-        }
+        Ok(n) if !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()) && (1..=65535).contains(&n) => Ok(n),
         _ => Err(format!("invalid port {text} (1-65535)")),
     }
 }
@@ -208,10 +187,7 @@ fn parse_target(target: &str, allow_path: bool) -> Result<Target, String> {
     if hostport.starts_with('[') {
         let close = hostport.find(']').ok_or("unclosed `[` in the IPv6 host")?;
         let literal = &hostport[1..close];
-        host = literal
-            .parse::<IpAddr>()
-            .map(|ip| ip.to_string())
-            .map_err(|_| format!("invalid IPv6 address {}", &hostport[..=close]))?;
+        host = literal.parse::<IpAddr>().map(|ip| ip.to_string()).map_err(|_| format!("invalid IPv6 address {}", &hostport[..=close]))?;
         let rest = &hostport[close + 1..];
         if !rest.is_empty() {
             let Some(p) = rest.strip_prefix(':') else {
@@ -237,11 +213,7 @@ fn parse_target(target: &str, allow_path: bool) -> Result<Target, String> {
         if !allow_path {
             return Err("a path is not allowed here".into());
         }
-        if unquote(raw_path)
-            .replace('\\', "/")
-            .split('/')
-            .any(|s| s == "." || s == "..")
-        {
+        if unquote(raw_path).replace('\\', "/").split('/').any(|s| s == "." || s == "..") {
             return Err("path prefix cannot contain `.` or `..` segments".into());
         }
         path = normalise_path(raw_path);
@@ -266,10 +238,7 @@ fn parse_methods(token: &str) -> Result<BTreeSet<String>, String> {
             return Err(format!("`{item}` must stand alone in METHODS"));
         }
         if !HTTP_METHODS.contains(&method.as_str()) {
-            return Err(format!(
-                "unknown method {item} (use {}, * or tcp)",
-                HTTP_METHODS.join(",")
-            ));
+            return Err(format!("unknown method {item} (use {}, * or tcp)", HTTP_METHODS.join(",")));
         }
         methods.insert(method);
     }
@@ -303,25 +272,16 @@ pub fn parse_entry(text: &Value, origin: &str) -> Result<Entry, String> {
                 return Err("duplicate `if-missing`".into());
             }
             if !ENV_NAME.is_match(name) {
-                return Err(format!(
-                    "if-missing needs a variable NAME (letters, digits, `_`), got '{name}'"
-                ));
+                return Err(format!("if-missing needs a variable NAME (letters, digits, `_`), got '{name}'"));
             }
             if_missing = name.to_string();
         } else if let Some(m) = &methods {
             let listed: Vec<&str> = m.iter().map(String::as_str).collect();
-            return Err(format!(
-                "more than one METHODS token ({}) or unknown option {token}",
-                listed.join(",")
-            ));
+            return Err(format!("more than one METHODS token ({}) or unknown option {token}", listed.join(",")));
         } else {
             match parse_methods(token) {
                 Ok(m) => methods = Some(m),
-                Err(error) => {
-                    return Err(format!(
-                        "invalid METHODS or unknown option '{token}': {error}"
-                    ))
-                }
+                Err(error) => return Err(format!("invalid METHODS or unknown option '{token}': {error}")),
             }
         }
     }
@@ -329,16 +289,7 @@ pub fn parse_entry(text: &Value, origin: &str) -> Result<Entry, String> {
     if methods.contains(TCP) && !path.is_empty() {
         return Err("a tcp entry cannot have a path prefix".into());
     }
-    Ok(Entry {
-        host,
-        port,
-        path,
-        methods,
-        cred,
-        if_missing,
-        origin: origin.to_string(),
-        text: original,
-    })
+    Ok(Entry { host, port, path, methods, cred, if_missing, origin: origin.to_string(), text: original })
 }
 
 /// Deny host pattern (`360.example.com`, `*.prod.example.com`): host only.
@@ -405,51 +356,23 @@ pub fn effective_from(
     mut notes: Vec<String>,
     broken: &str,
 ) -> Effective {
-    let mut allow: Vec<Entry> = LOCAL_ENTRIES
-        .iter()
-        .map(|t| {
-            parse_entry(&Value::String((*t).to_string()), ORIGIN_LOCAL)
-                .expect("local entries are valid")
-        })
-        .collect();
+    let mut allow: Vec<Entry> = LOCAL_ENTRIES.iter().map(|t| parse_entry(&Value::String((*t).to_string()), ORIGIN_LOCAL).expect("local entries are valid")).collect();
     if builtin_read {
-        allow.extend(BUILTIN_READ_HOSTS.iter().map(|h| {
-            parse_entry(&Value::String((*h).to_string()), ORIGIN_BUILTIN)
-                .expect("built-in hosts are valid")
-        }));
+        allow.extend(BUILTIN_READ_HOSTS.iter().map(|h| parse_entry(&Value::String((*h).to_string()), ORIGIN_BUILTIN).expect("built-in hosts are valid")));
     }
-    allow.extend(entries_from(
-        global_entries,
-        ORIGIN_GLOBAL,
-        "config.json egress_hosts",
-        &mut notes,
-    ));
-    allow.extend(entries_from(
-        project_entries,
-        ORIGIN_PROJECT,
-        NETWORK_LABEL,
-        &mut notes,
-    ));
+    allow.extend(entries_from(global_entries, ORIGIN_GLOBAL, "config.json egress_hosts", &mut notes));
+    allow.extend(entries_from(project_entries, ORIGIN_PROJECT, NETWORK_LABEL, &mut notes));
     let mut patterns = Vec::new();
     for text in deny {
         match parse_deny(text) {
             Ok(p) => patterns.push(p),
-            Err(error) => notes.push(format!(
-                "config.json egress_never {} ignored: {error}",
-                crate_repr(text)
-            )),
+            Err(error) => notes.push(format!("config.json egress_never {} ignored: {error}", crate_repr(text))),
         }
     }
     let mut names: Vec<String> = env_names.to_vec();
     names.sort();
     names.dedup();
-    Effective {
-        allow,
-        deny: patterns,
-        notes,
-        broken: broken.to_string(),
-        env_names: names,
-    }
+    Effective { allow, deny: patterns, notes, broken: broken.to_string(), env_names: names }
 }
 
 fn crate_repr(v: &Value) -> String {
@@ -481,9 +404,7 @@ fn read_json(path: &Path) -> (Option<Value>, String) {
 fn as_bool(value: Option<&Value>, default: bool) -> bool {
     match value {
         Some(Value::Bool(b)) => *b,
-        Some(Value::String(s)) if matches!(s.trim().to_lowercase().as_str(), "true" | "false") => {
-            s.trim().to_lowercase() == "true"
-        }
+        Some(Value::String(s)) if matches!(s.trim().to_lowercase().as_str(), "true" | "false") => s.trim().to_lowercase() == "true",
         _ => default,
     }
 }
@@ -527,7 +448,13 @@ pub fn load_effective(project_root: &Path, data_dir: &Path, env_names: &[String]
         (None, true) => Value::Object(Default::default()),
         (other, ok) => {
             broken = "config.json".to_string();
-            let why = if !ok { error } else if other.is_some() { "not a JSON object".to_string() } else { "not a JSON object".to_string() };
+            let why = if !ok {
+                error
+            } else if other.is_some() {
+                "not a JSON object".to_string()
+            } else {
+                "not a JSON object".to_string()
+            };
             notes.push(format!("config.json is unusable ({why}): every non-local request fails closed"));
             Value::Object(Default::default())
         }
@@ -574,9 +501,7 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
         if !host.ends_with(suffix) || host.len() <= suffix.len() {
             return false;
         }
-        return host[..host.len() - suffix.len()]
-            .split('.')
-            .all(|label| !label.is_empty());
+        return host[..host.len() - suffix.len()].split('.').all(|label| !label.is_empty());
     }
     pattern == host
 }
@@ -604,8 +529,7 @@ pub fn parse_request_url(url: &str) -> Result<(String, String, Option<u32>, Stri
     if authority.contains('\\') {
         return Err("backslash in the authority (parsers disagree on the host)".into());
     }
-    let (scheme, hostname, port, path) =
-        split_url(&text).map_err(|e| format!("invalid url ({e})"))?;
+    let (scheme, hostname, port, path) = split_url(&text).map_err(|e| format!("invalid url ({e})"))?;
     let Some(mut host) = hostname else {
         return Err("no host in the url".into());
     };
@@ -625,10 +549,7 @@ fn split_url(url: &str) -> Result<Split, String> {
     let mut scheme = String::new();
     if let Some(i) = rest.find(':') {
         let cand = &rest[..i];
-        let valid = cand.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
-            && cand
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+        let valid = cand.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) && cand.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
         if valid {
             scheme = cand.to_ascii_lowercase();
             rest = rest[i + 1..].to_string();
@@ -639,9 +560,7 @@ fn split_url(url: &str) -> Result<Split, String> {
         let end = body.find(['/', '?', '#']).unwrap_or(body.len());
         netloc = body[..end].to_string();
         rest = body[end..].to_string();
-        if (netloc.contains('[') && !netloc.contains(']'))
-            || (netloc.contains(']') && !netloc.contains('['))
-        {
+        if (netloc.contains('[') && !netloc.contains(']')) || (netloc.contains(']') && !netloc.contains('[')) {
             return Err("Invalid IPv6 URL".into());
         }
     }
@@ -675,9 +594,7 @@ fn split_url(url: &str) -> Result<Split, String> {
     let mut port = None;
     if let Some(p) = port_text.filter(|p| !p.is_empty()) {
         if p.chars().all(|c| c.is_ascii_digit()) {
-            let n: u32 = p
-                .parse()
-                .map_err(|_| "Port out of range 0-65535".to_string())?;
+            let n: u32 = p.parse().map_err(|_| "Port out of range 0-65535".to_string())?;
             if n > 65535 {
                 return Err("Port out of range 0-65535".into());
             }
@@ -714,23 +631,11 @@ fn method_matches(entry: &Entry, method: &str, scheme: &str) -> bool {
 }
 
 /// `(allowed, kind, reason)`. Method `*` = unknown method: any HTTP entry matches.
-pub fn judge(
-    effective: &Effective,
-    method: &str,
-    url: &str,
-    cred: bool,
-    env_names: Option<&[String]>,
-) -> (bool, Kind, String) {
+pub fn judge(effective: &Effective, method: &str, url: &str, cred: bool, env_names: Option<&[String]>) -> (bool, Kind, String) {
     let method = normalise_method(method);
     let (scheme, host, port, path) = match parse_request_url(url) {
         Ok(parts) => parts,
-        Err(error) => {
-            return (
-                false,
-                Kind::Unjudgeable,
-                format!("cannot judge the url: {error}"),
-            )
-        }
+        Err(error) => return (false, Kind::Unjudgeable, format!("cannot judge the url: {error}")),
     };
     let shown_port = match port {
         Some(p) if default_port(&scheme) != Some(p) => format!(":{p}"),
@@ -739,11 +644,7 @@ pub fn judge(
     let target = format!("{host}{shown_port}{path}");
     for pattern in &effective.deny {
         if host_matches(pattern, &host) {
-            return (
-                false,
-                Kind::Denied,
-                format!("host {host} is denied (egress_never {pattern})"),
-            );
+            return (false, Kind::Denied, format!("host {host} is denied (egress_never {pattern})"));
         }
     }
     for entry in &effective.allow {
@@ -752,14 +653,7 @@ pub fn judge(
         }
     }
     if !effective.broken.is_empty() {
-        return (
-            false,
-            Kind::Broken,
-            format!(
-                "{} is unreadable: every non-local request is blocked until it is fixed",
-                effective.broken
-            ),
-        );
+        return (false, Kind::Broken, format!("{} is unreadable: every non-local request is blocked until it is fixed", effective.broken));
     }
     let defined: Vec<&String> = match env_names {
         Some(names) => names.iter().collect(),
@@ -784,29 +678,15 @@ pub fn judge(
     if cred {
         let carrying: Vec<&Entry> = matching.iter().copied().filter(|e| e.cred).collect();
         if carrying.is_empty() {
-            return (
-                false,
-                Kind::NoCred,
-                format!("{method} {target} is listed ({}) but without `cred`: credentials may not be sent there", matching[0].text),
-            );
+            return (false, Kind::NoCred, format!("{method} {target} is listed ({}) but without `cred`: credentials may not be sent there", matching[0].text));
         }
         matching = carrying;
     }
-    (
-        true,
-        Kind::Ok,
-        format!("matches {} ({})", matching[0].text, matching[0].origin),
-    )
+    (true, Kind::Ok, format!("matches {} ({})", matching[0].text, matching[0].origin))
 }
 
 /// The contract call the shared fixture exercises.
-pub fn allows(
-    effective: &Effective,
-    method: &str,
-    url: &str,
-    cred: bool,
-    env_names: Option<&[String]>,
-) -> (bool, String) {
+pub fn allows(effective: &Effective, method: &str, url: &str, cred: bool, env_names: Option<&[String]>) -> (bool, String) {
     let (allowed, _, reason) = judge(effective, method, url, cred, env_names);
     (allowed, reason)
 }
@@ -835,33 +715,13 @@ mod tests {
         assert_eq!(cases.len(), 112);
         let mut failed = vec![];
         for case in cases {
-            let deny: Vec<Value> = case
-                .get("deny")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let builtin = case
-                .get("builtin_read")
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            let env: Vec<String> = case
-                .get("env_names")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let deny: Vec<Value> = case.get("deny").and_then(Value::as_array).cloned().unwrap_or_default();
+            let builtin = case.get("builtin_read").and_then(Value::as_bool).unwrap_or(true);
+            let env: Vec<String> =
+                case.get("env_names").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
             let eff = effective_from(&texts(case), &json!([]), &deny, builtin, &env, vec![], "");
             let req = &case["request"];
-            let (allowed, reason) = allows(
-                &eff,
-                req["method"].as_str().unwrap(),
-                req["url"].as_str().unwrap(),
-                req["cred"].as_bool().unwrap_or(false),
-                None,
-            );
+            let (allowed, reason) = allows(&eff, req["method"].as_str().unwrap(), req["url"].as_str().unwrap(), req["cred"].as_bool().unwrap_or(false), None);
             if allowed != case["allowed"].as_bool().unwrap() {
                 failed.push(format!("{}: got {allowed} ({reason})", case["note"]));
             }
@@ -879,9 +739,7 @@ mod tests {
             let want = case["reason_contains"].as_str().unwrap().to_lowercase();
             match parse_entry(&case["invalid"], ORIGIN_PROJECT) {
                 Ok(_) => failed.push(format!("accepted: {}", case["invalid"])),
-                Err(reason) if !reason.to_lowercase().contains(&want) => {
-                    failed.push(format!("{}: '{reason}' lacks '{want}'", case["invalid"]))
-                }
+                Err(reason) if !reason.to_lowercase().contains(&want) => failed.push(format!("{}: '{reason}' lacks '{want}'", case["invalid"])),
                 Err(_) => {}
             }
         }
@@ -890,15 +748,7 @@ mod tests {
 
     #[test]
     fn broken_list_fails_closed_but_local_stays_open() {
-        let eff = effective_from(
-            &json!([]),
-            &json!([]),
-            &[],
-            true,
-            &[],
-            vec![],
-            "NETWORK.json",
-        );
+        let eff = effective_from(&json!([]), &json!([]), &[], true, &[], vec![], "NETWORK.json");
         assert!(!allows(&eff, "GET", "https://github.com/x", false, None).0);
         assert!(allows(&eff, "GET", "http://localhost:3000/", false, None).0);
     }
@@ -908,17 +758,10 @@ mod tests {
         let data = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(project.path().join(".specs/project")).unwrap();
-        std::fs::write(
-            project.path().join(".specs/project/NETWORK.json"),
-            r#"{"allow": ["api.example.com POST cred"]}"#,
-        )
-        .unwrap();
+        std::fs::write(project.path().join(".specs/project/NETWORK.json"), r#"{"allow": ["api.example.com POST cred"]}"#).unwrap();
         let eff = load_effective(project.path(), data.path(), &[]);
         assert!(allows(&eff, "POST", "https://api.example.com/login", true, None).0);
         std::fs::write(project.path().join(".specs/project/NETWORK.json"), "{oops").unwrap();
-        assert_eq!(
-            load_effective(project.path(), data.path(), &[]).broken,
-            NETWORK_LABEL
-        );
+        assert_eq!(load_effective(project.path(), data.path(), &[]).broken, NETWORK_LABEL);
     }
 }

@@ -183,7 +183,11 @@ impl WorkspaceFileGuard {
         };
         let path = relative.split('/').fold(snapshot.root.clone(), |a, p| a.join(p));
         let written = path.parent().map(std::fs::create_dir_all).transpose().and_then(|_| std::fs::write(&path, content));
-        if written.is_ok() { reverted.push(relative.to_string()) } else { unrestorable.push(relative.to_string()) }
+        if written.is_ok() {
+            reverted.push(relative.to_string())
+        } else {
+            unrestorable.push(relative.to_string())
+        }
     }
 
     /// Folders born during the job that ended up empty (deepest first). An allowed file keeps its folder.

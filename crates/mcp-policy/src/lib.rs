@@ -30,12 +30,13 @@ pub const MAX_EXTRA: usize = 100;
 pub const NAME_MAX_LENGTH: usize = 100;
 
 static READ_VERB: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(?:get|list|query|search|find|check|analy[sz]e|suggest|validate|read|describe|show|fetch|select|count|lookup|view|explain|inspect|generate_deeplink)").expect("regex")
+    Regex::new(
+        r"(?i)^(?:get|list|query|search|find|check|analy[sz]e|suggest|validate|read|describe|show|fetch|select|count|lookup|view|explain|inspect|generate_deeplink)",
+    )
+    .expect("regex")
 });
-static NAME_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9 _.:@/-]*\n?$").expect("regex"));
-static PATTERN_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^mcp__[A-Za-z0-9][A-Za-z0-9_.-]*\*?\n?$").expect("regex"));
+static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9 _.:@/-]*\n?$").expect("regex"));
+static PATTERN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^mcp__[A-Za-z0-9][A-Za-z0-9_.-]*\*?\n?$").expect("regex"));
 static NON_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^A-Za-z0-9_-]").expect("regex"));
 static MANY_UNDERSCORES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"_+").expect("regex"));
 
@@ -82,10 +83,7 @@ pub fn normalize_name(name: &str) -> String {
     let stripped = name.trim();
     let mut text = NON_NAME.replace_all(stripped, "_").into_owned();
     if stripped.to_lowercase().starts_with("claude.ai ") {
-        text = MANY_UNDERSCORES
-            .replace_all(&text, "_")
-            .trim_matches('_')
-            .to_string();
+        text = MANY_UNDERSCORES.replace_all(&text, "_").trim_matches('_').to_string();
     }
     text.to_lowercase()
 }
@@ -107,12 +105,8 @@ pub fn check_name(name: &Value) -> Result<String, McpPolicyError> {
         return err("a server name must be text".into());
     };
     let text = raw.trim().to_string();
-    let bad = text.is_empty()
-        || text.chars().count() > NAME_MAX_LENGTH
-        || !NAME_RE.is_match(&text)
-        || normalize_name(&text)
-            .trim_matches(|c| c == '_' || c == '-')
-            .is_empty();
+    let bad =
+        text.is_empty() || text.chars().count() > NAME_MAX_LENGTH || !NAME_RE.is_match(&text) || normalize_name(&text).trim_matches(|c| c == '_' || c == '-').is_empty();
     if bad {
         let shown: String = text.chars().take(40).collect();
         return err(format!(
@@ -131,10 +125,7 @@ pub fn check_pattern(pattern: &Value) -> Result<String, McpPolicyError> {
     let text = raw.trim().to_string();
     if !PATTERN_RE.is_match(&text) || text.chars().count() > 200 {
         let shown: String = text.chars().take(60).collect();
-        return err(format!(
-            "{} is not a valid tool pattern: use mcp__<server>__<tool>, with a trailing * as the only wildcard",
-            repr(&shown)
-        ));
+        return err(format!("{} is not a valid tool pattern: use mcp__<server>__<tool>, with a trailing * as the only wildcard", repr(&shown)));
     }
     Ok(text)
 }
@@ -155,21 +146,12 @@ pub fn check_server(name: &str, value: &Value) -> Result<ServerOptions, McpPolic
     let Value::Object(map) = value else {
         return err(format!("{name}: the options must be an object"));
     };
-    let mut unknown: Vec<String> = map
-        .keys()
-        .filter(|k| !SERVER_FIELDS.contains(&k.as_str()))
-        .cloned()
-        .collect();
+    let mut unknown: Vec<String> = map.keys().filter(|k| !SERVER_FIELDS.contains(&k.as_str())).cloned().collect();
     if !unknown.is_empty() {
         unknown.sort();
         return err(format!("{name}: unknown option(s): {}", unknown.join(", ")));
     }
-    let mut clean = ServerOptions {
-        allow: false,
-        kind: KIND_OTHER.into(),
-        production: false,
-        read_only: false,
-    };
+    let mut clean = ServerOptions { allow: false, kind: KIND_OTHER.into(), production: false, read_only: false };
     for key in ["allow", "production", "read_only"] {
         if let Some(v) = map.get(key) {
             let Value::Bool(b) = v else {
@@ -185,21 +167,14 @@ pub fn check_server(name: &str, value: &Value) -> Result<ServerOptions, McpPolic
     if let Some(kind) = map.get("kind") {
         match kind.as_str() {
             Some(k) if k == KIND_SQL || k == KIND_OTHER => clean.kind = k.to_string(),
-            _ => {
-                return err(format!(
-                    "{name}: kind must be one of: {KIND_SQL}, {KIND_OTHER}"
-                ))
-            }
+            _ => return err(format!("{name}: kind must be one of: {KIND_SQL}, {KIND_OTHER}")),
         }
     }
     Ok(clean)
 }
 
 /// Clean servers and extras of a whole save; the first problem raises.
-pub fn check_config(
-    servers: &Value,
-    extra: &Value,
-) -> Result<(Vec<(String, ServerOptions)>, Vec<String>), McpPolicyError> {
+pub fn check_config(servers: &Value, extra: &Value) -> Result<(Vec<(String, ServerOptions)>, Vec<String>), McpPolicyError> {
     let Value::Object(map) = servers else {
         return err("servers must be an object keyed by server name".into());
     };
@@ -212,12 +187,7 @@ pub fn check_config(
         let text = check_name(&Value::String(name.clone()))?;
         let prefix = normalize_name(&text);
         if let Some((_, other)) = seen.iter().find(|(p, _)| *p == prefix) {
-            return err(format!(
-                "{} and {} are the same server (both give the tool prefix mcp__{}__)",
-                repr(other),
-                repr(&text),
-                prefix
-            ));
+            return err(format!("{} and {} are the same server (both give the tool prefix mcp__{}__)", repr(other), repr(&text), prefix));
         }
         seen.push((prefix, text.clone()));
         let options = check_server(&text, value)?;
@@ -234,10 +204,7 @@ pub fn check_config(
     let mut patterns: Vec<String> = Vec::new();
     for item in &list {
         let text = check_pattern(item)?;
-        if !patterns
-            .iter()
-            .any(|p| p.to_lowercase() == text.to_lowercase())
-        {
+        if !patterns.iter().any(|p| p.to_lowercase() == text.to_lowercase()) {
             patterns.push(text);
         }
     }
@@ -248,20 +215,12 @@ pub fn check_config(
 
 fn restrictive_server(value: &Value) -> ServerOptions {
     let sql = value.get("kind").and_then(Value::as_str) == Some(KIND_SQL);
-    ServerOptions {
-        allow: false,
-        kind: if sql { KIND_SQL } else { KIND_OTHER }.into(),
-        production: true,
-        read_only: true,
-    }
+    ServerOptions { allow: false, kind: if sql { KIND_SQL } else { KIND_OTHER }.into(), production: true, read_only: true }
 }
 
 /// The effective policy of a parsed config.json.
 pub fn policy_from(config: &Value, broken: &str) -> Policy {
-    let mut policy = Policy {
-        broken: broken.to_string(),
-        ..Policy::default()
-    };
+    let mut policy = Policy { broken: broken.to_string(), ..Policy::default() };
     let Value::Object(config) = config else {
         return policy;
     };
@@ -276,18 +235,13 @@ pub fn policy_from(config: &Value, broken: &str) -> Policy {
         }
     };
     for (name, value) in &servers {
-        let outcome = check_name(&Value::String(name.clone()))
-            .and_then(|text| check_server(name, value).map(|o| (text, o)));
+        let outcome = check_name(&Value::String(name.clone())).and_then(|text| check_server(name, value).map(|o| (text, o)));
         match outcome {
             Ok((text, options)) => set_server(&mut policy.servers, text, options),
             Err(error) => {
                 policy.notes.push(format!("config.json {SERVERS_KEY} entry ignored (the server stays not allowed): {error}"));
                 if !name.trim().is_empty() {
-                    set_server(
-                        &mut policy.servers,
-                        name.trim().to_string(),
-                        restrictive_server(value),
-                    );
+                    set_server(&mut policy.servers, name.trim().to_string(), restrictive_server(value));
                 }
             }
         }
@@ -305,9 +259,7 @@ pub fn policy_from(config: &Value, broken: &str) -> Policy {
     for item in &extra {
         match check_pattern(item) {
             Ok(text) => policy.extra.push(text),
-            Err(error) => policy
-                .notes
-                .push(format!("config.json {EXTRA_KEY} entry ignored: {error}")),
+            Err(error) => policy.notes.push(format!("config.json {EXTRA_KEY} entry ignored: {error}")),
         }
     }
     policy
@@ -327,9 +279,7 @@ pub fn read_policy(dir: &Path) -> Policy {
     let path = dir.join("config.json");
     let bytes = match std::fs::read(&path) {
         Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return policy_from(&Value::Object(Map::new()), "")
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return policy_from(&Value::Object(Map::new()), ""),
         Err(_) => return policy_from(&Value::Object(Map::new()), "config.json"),
     };
     let text = match String::from_utf8(bytes) {
@@ -346,10 +296,7 @@ pub fn read_policy(dir: &Path) -> Policy {
 // ---- queries --------------------------------------------------------------------------------------------------------------------
 
 /// The configured server a tool name belongs to (the longest matching prefix).
-pub fn find_server<'a>(
-    policy: &'a Policy,
-    tool_name: &str,
-) -> Option<(&'a str, &'a ServerOptions)> {
+pub fn find_server<'a>(policy: &'a Policy, tool_name: &str) -> Option<(&'a str, &'a ServerOptions)> {
     let lowered = tool_name.to_lowercase();
     let mut best: Option<(&str, &ServerOptions, usize)> = None;
     for (name, options) in &policy.servers {
@@ -391,10 +338,7 @@ pub fn is_read_tool_name(tool_name: &str) -> bool {
 /// Why an `mcp__` tool is outside the loop's allowlist for this profile; empty when it may be used.
 pub fn deny_reason(policy: &Policy, tool_name: &str, profile: &str) -> String {
     if !policy.broken.is_empty() {
-        return format!(
-            "{} is unreadable: no MCP server is allowed until it is fixed",
-            policy.broken
-        );
+        return format!("{} is unreadable: no MCP server is allowed until it is fixed", policy.broken);
     }
     let found = find_server(policy, tool_name);
     if let Some((name, options)) = found {
@@ -405,19 +349,14 @@ pub fn deny_reason(policy: &Policy, tool_name: &str, profile: &str) -> String {
                 }
                 return String::new();
             }
-            return format!(
-                "the production server {name} is only for the {} profiles, not {profile}",
-                PRODUCTION_PROFILES.join("/")
-            );
+            return format!("the production server {name} is only for the {} profiles, not {profile}", PRODUCTION_PROFILES.join("/"));
         }
     }
     if extra_allows(policy, tool_name) {
         return String::new();
     }
     if let Some((name, _)) = found {
-        return format!(
-            "{tool_name}: the server {name} is configured but not allowed (Settings > MCP servers)"
-        );
+        return format!("{tool_name}: the server {name} is configured but not allowed (Settings > MCP servers)");
     }
     format!("{tool_name} is not on the MCP allowlist: a loop may use only the servers allowed in Settings > MCP servers (none by default)")
 }
@@ -450,12 +389,7 @@ pub fn allowed_server_names(policy: &Policy) -> Vec<String> {
     if !policy.broken.is_empty() {
         return vec![];
     }
-    policy
-        .servers
-        .iter()
-        .filter(|(_, o)| o.allow)
-        .map(|(n, _)| n.clone())
-        .collect()
+    policy.servers.iter().filter(|(_, o)| o.allow).map(|(n, _)| n.clone()).collect()
 }
 
 #[cfg(test)]
@@ -478,19 +412,14 @@ mod tests {
     #[test]
     fn closed_by_default() {
         let p = policy(json!({}));
-        assert!(
-            deny_reason(&p, "mcp__db-dev__query", "executor").contains("not on the MCP allowlist")
-        );
+        assert!(deny_reason(&p, "mcp__db-dev__query", "executor").contains("not on the MCP allowlist"));
     }
 
     #[test]
     fn allowed_server_passes_and_production_is_restricted() {
-        let p = policy(
-            json!({"mcp_servers": {"db-dev": {"allow": true, "kind": "sql"}, "db-prod": {"allow": true, "kind": "sql", "production": true}}}),
-        );
+        let p = policy(json!({"mcp_servers": {"db-dev": {"allow": true, "kind": "sql"}, "db-prod": {"allow": true, "kind": "sql", "production": true}}}));
         assert_eq!(deny_reason(&p, "mcp__db-dev__query", "executor"), "");
-        assert!(deny_reason(&p, "mcp__db-prod__query", "executor")
-            .contains("only for the orchestrator/planning profiles"));
+        assert!(deny_reason(&p, "mcp__db-prod__query", "executor").contains("only for the orchestrator/planning profiles"));
         assert_eq!(deny_reason(&p, "mcp__db-prod__query", "planning"), "");
         assert!(is_sql_tool(&p, "mcp__db-dev__query"));
         assert!(is_production_tool(&p, "mcp__db-prod__x"));
@@ -500,9 +429,7 @@ mod tests {
     fn read_only_non_sql_passes_only_read_tools() {
         let p = policy(json!({"mcp_servers": {"graf": {"allow": true, "read_only": true}}}));
         assert_eq!(deny_reason(&p, "mcp__graf__get_dashboard", "executor"), "");
-        assert!(
-            deny_reason(&p, "mcp__graf__create_dashboard", "executor").contains("not a read tool")
-        );
+        assert!(deny_reason(&p, "mcp__graf__create_dashboard", "executor").contains("not a read tool"));
         assert!(is_read_tool_name("mcp__graf__listAlerts"));
     }
 
@@ -536,13 +463,7 @@ mod tests {
         assert!(check_config(&json!({"a": {"allow": "yes"}}), &json!([])).is_err());
         assert!(check_config(&json!({"a:b": {}, "a_b": {}}), &json!([])).is_err());
         assert!(check_config(&json!({"a": {"kind": "weird"}}), &json!([])).is_err());
-        assert_eq!(
-            check_config(&json!({}), &json!(["mcp__a__*", "MCP__A__*"]))
-                .unwrap()
-                .1
-                .len(),
-            1
-        );
+        assert_eq!(check_config(&json!({}), &json!(["mcp__a__*", "MCP__A__*"])).unwrap().1.len(), 1);
     }
 
     #[test]
@@ -551,14 +472,7 @@ mod tests {
         assert_eq!(read_policy(dir.path()).broken, "");
         std::fs::write(dir.path().join("config.json"), "{nope").unwrap();
         assert_eq!(read_policy(dir.path()).broken, "config.json");
-        std::fs::write(
-            dir.path().join("config.json"),
-            "\u{feff}{\"mcp_servers\": {\"a\": {\"allow\": true}}}",
-        )
-        .unwrap();
-        assert_eq!(
-            allowed_server_names(&read_policy(dir.path())),
-            vec!["a".to_string()]
-        );
+        std::fs::write(dir.path().join("config.json"), "\u{feff}{\"mcp_servers\": {\"a\": {\"allow\": true}}}").unwrap();
+        assert_eq!(allowed_server_names(&read_policy(dir.path())), vec!["a".to_string()]);
     }
 }

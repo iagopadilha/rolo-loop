@@ -64,7 +64,9 @@ impl App {
 
 impl FolderPickerService<'_> {
     fn dialog_command(&self) -> Vec<String> {
-        self.dialog_argv.clone().unwrap_or_else(|| vec!["powershell.exe".into(), "-NoProfile".into(), "-STA".into(), "-NonInteractive".into(), "-Command".into(), FOLDER_DIALOG_CODE.to_string()])
+        self.dialog_argv.clone().unwrap_or_else(|| {
+            vec!["powershell.exe".into(), "-NoProfile".into(), "-STA".into(), "-NonInteractive".into(), "-Command".into(), FOLDER_DIALOG_CODE.to_string()]
+        })
     }
 
     /// `{"path": "...|null", "reason": "..."}`: null with a reason when the dialog is not available, it failed or the user cancelled. `initial`: an
@@ -168,7 +170,10 @@ mod tests {
         let listing = picker.list_subfolders(Some(&dir.path().display().to_string())).unwrap();
         let names: Vec<&str> = listing["folders"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
         assert_eq!(names, ["alpha", "Beta", "data"]);
-        assert_eq!((listing["folders"][0]["has_git"].clone(), listing["folders"][1]["has_specs"].clone(), listing["truncated"].clone()), (json!(true), json!(true), json!(false)));
+        assert_eq!(
+            (listing["folders"][0]["has_git"].clone(), listing["folders"][1]["has_specs"].clone(), listing["truncated"].clone()),
+            (json!(true), json!(true), json!(false))
+        );
         assert!(picker.list_subfolders(Some("C:\\definitely\\missing")).is_err());
         let roots = picker.list_subfolders(None).unwrap();
         assert!(roots["path"].is_null() && !roots["folders"].as_array().unwrap().is_empty());

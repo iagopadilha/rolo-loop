@@ -10,7 +10,8 @@ use serde_json::json;
 use std::io::Read;
 
 pub const CLAUDE_STUB_STEM: &str = "demo-claude";
-const DEMO_REPLY: &str = "Demo mode: no Claude call is made here. The data in this panel is mocked by `harness demo`; open a real repository with `harness serve` to talk to the loop.";
+const DEMO_REPLY: &str =
+    "Demo mode: no Claude call is made here. The data in this panel is mocked by `harness demo`; open a real repository with `harness serve` to talk to the loop.";
 const NOTICE: &str = "demo mode: this loop is simulated by `harness demo`; nothing runs, pushes or spends here. Open a real repository to run a loop.";
 const ANSWER_FILE_PARTS: [&str; 5] = [".specs", "project", "loop", "internal", "demo-answer.txt"];
 const EXIT_OK: i32 = 0;
@@ -28,7 +29,8 @@ pub fn claude_stub(args: &[String]) -> i32 {
     }
     let mut ignored = String::new();
     let _ = std::io::stdin().read_to_string(&mut ignored);
-    let reply = json!({"type": "result", "subtype": "success", "is_error": false, "result": DEMO_REPLY, "total_cost_usd": 0, "session_id": "demo-session", "num_turns": 1});
+    let reply =
+        json!({"type": "result", "subtype": "success", "is_error": false, "result": DEMO_REPLY, "total_cost_usd": 0, "session_id": "demo-session", "num_turns": 1});
     println!("{reply}");
     EXIT_OK
 }

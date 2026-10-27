@@ -261,7 +261,11 @@ fn bridge(shared: &Shared, client: &mut TcpStream, upstream: TcpStream, rest: &[
     if !rest.is_empty() && upstream.write_all(rest).is_err() {
         return;
     }
-    let (Ok(client_reader), Ok(upstream_writer), Ok(upstream_reader), Ok(client_writer)) = (client.try_clone(), upstream.try_clone(), upstream.try_clone(), client.try_clone()) else { return };
+    let (Ok(client_reader), Ok(upstream_writer), Ok(upstream_reader), Ok(client_writer)) =
+        (client.try_clone(), upstream.try_clone(), upstream.try_clone(), client.try_clone())
+    else {
+        return;
+    };
     let worker = std::thread::spawn(move || pipe(client_reader, upstream_writer));
     pipe(upstream_reader, client_writer);
     let _ = worker.join();
@@ -300,7 +304,9 @@ fn forward(shared: &Shared, client: &mut TcpStream, method: &str, target: &str, 
     let Ok(parts) = pycompat::urlsplit(target) else { return reply(client, 400, "Bad Request", "") };
     let host = clean_host(parts.hostname.as_deref().unwrap_or(""));
     let port = parts.port.unwrap_or(80);
-    let cred = parts.username.as_deref().is_some_and(|u| !u.is_empty()) || parts.password.as_deref().is_some_and(|u| !u.is_empty()) || headers.iter().any(|(n, _)| CRED_HEADERS.contains(&n.to_lowercase().as_str()));
+    let cred = parts.username.as_deref().is_some_and(|u| !u.is_empty())
+        || parts.password.as_deref().is_some_and(|u| !u.is_empty())
+        || headers.iter().any(|(n, _)| CRED_HEADERS.contains(&n.to_lowercase().as_str()));
     let content = shared.allow_list.read();
     let (mut allowed, reason) = match &content {
         Some(c) if crate::notify_truthy(Some(c)) => network_policy::allows(&network_policy::effective_from_json(c), method, target, cred),
@@ -319,7 +325,9 @@ fn forward(shared: &Shared, client: &mut TcpStream, method: &str, target: &str, 
     let Some(mut upstream) = open_upstream(client, &host, port) else { return };
     let path = format!("{path_only}{}", if parts.query.is_empty() { String::new() } else { format!("?{}", parts.query) });
     let mut lines = vec![format!("{method} {path} {version}")];
-    lines.extend(headers.iter().filter(|(n, _)| !["proxy-connection", "proxy-authorization", "connection"].contains(&n.to_lowercase().as_str())).map(|(n, v)| format!("{n}: {v}")));
+    lines.extend(
+        headers.iter().filter(|(n, _)| !["proxy-connection", "proxy-authorization", "connection"].contains(&n.to_lowercase().as_str())).map(|(n, v)| format!("{n}: {v}")),
+    );
     lines.push("Connection: close".into());
     if upstream.write_all(format!("{}\r\n\r\n", lines.join("\r\n")).as_bytes()).is_err() {
         return;
@@ -410,7 +418,10 @@ pub fn layer_environment(port: u16, allow_file: &Path, preload_dir: &Path, node_
     values.push(("no_proxy".into(), NO_PROXY_VALUE.into()));
     let (old_path, old_options) = (existing.text("PYTHONPATH"), existing.text("NODE_OPTIONS"));
     values.push(("PYTHONPATH".into(), format!("{}{}", forward_slashes(preload_dir), if old_path.is_empty() { String::new() } else { format!(";{old_path}") })));
-    values.push(("NODE_OPTIONS".into(), format!("{}--require \"{}\"", if old_options.is_empty() { String::new() } else { format!("{old_options} ") }, forward_slashes(node_preload))));
+    values.push((
+        "NODE_OPTIONS".into(),
+        format!("{}--require \"{}\"", if old_options.is_empty() { String::new() } else { format!("{old_options} ") }, forward_slashes(node_preload)),
+    ));
     values.push(("NODE_USE_ENV_PROXY".into(), "1".into()));
     values.push(("LOOP_NETWORK_ALLOW_FILE".into(), forward_slashes(allow_file)));
     values
@@ -527,7 +538,10 @@ impl RuntimeLayer {
         if let Some(mut proxy) = self.proxy.take() {
             proxy.stop();
         }
-        let ours = std::fs::read(&self.runtime_file).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).is_some_and(|v| v.get("pid").and_then(Value::as_u64) == Some(u64::from(std::process::id())));
+        let ours = std::fs::read(&self.runtime_file)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            .is_some_and(|v| v.get("pid").and_then(Value::as_u64) == Some(u64::from(std::process::id())));
         if ours {
             let _ = std::fs::remove_file(&self.runtime_file); // no runtime file = the guard points the proxy variables at a closed port: fail closed
         }
@@ -640,7 +654,11 @@ pub fn runtime_self_test(env: &Env, allow_file: Option<&Path>, timeout: u64) -> 
     };
     let content = AllowList::new(&list_path).read();
     let effective: Option<Effective> = content.as_ref().map(network_policy::effective_from_json);
-    let denied = DENIED_HOST_CANDIDATES.iter().find(|h| effective.as_ref().is_some_and(|e| !network_policy::allows(e, "GET", &format!("https://{h}/"), false).0)).copied().unwrap_or("");
+    let denied = DENIED_HOST_CANDIDATES
+        .iter()
+        .find(|h| effective.as_ref().is_some_and(|e| !network_policy::allows(e, "GET", &format!("https://{h}/"), false).0))
+        .copied()
+        .unwrap_or("");
     let (preload_dir, node_preload) = match install_preloads(&env.user_data_dir()) {
         Ok(p) => p,
         Err(_) => (PathBuf::new(), PathBuf::new()),
@@ -675,7 +693,11 @@ pub fn runtime_self_test(env: &Env, allow_file: Option<&Path>, timeout: u64) -> 
     let denied_status = raw_connect_status(proxy_port, denied, 443);
     let local_status = raw_connect_status(proxy_port, "127.0.0.1", local_port);
     let logged = std::fs::read_to_string(&log_path).map(|t| t.contains(denied)).unwrap_or(false);
-    add("proxy-denied", denied_status == 403 && logged, format!("CONNECT to a denied host answered {denied_status}, egress.log {}", if logged { "has the line" } else { "has no line" }));
+    add(
+        "proxy-denied",
+        denied_status == 403 && logged,
+        format!("CONNECT to a denied host answered {denied_status}, egress.log {}", if logged { "has the line" } else { "has no line" }),
+    );
     add("proxy-local", local_status == 200, format!("CONNECT to localhost answered {local_status}"));
     let mut base: Vec<(String, String)> = env.vars();
     for (k, v) in layer_environment(proxy_port, &list_path, &preload_dir, &node_preload, env) {
@@ -701,7 +723,11 @@ pub fn runtime_self_test(env: &Env, allow_file: Option<&Path>, timeout: u64) -> 
     }
     for (id, command, expected) in probes {
         let (code, output) = run_probe(&command, &base, timeout);
-        add(id, code == Some(0) && output.contains(expected), format!("exit {}: {}", code.map(|c| c.to_string()).unwrap_or_else(|| "None".into()), output.replace('\n', " ")));
+        add(
+            id,
+            code == Some(0) && output.contains(expected),
+            format!("exit {}: {}", code.map(|c| c.to_string()).unwrap_or_else(|| "None".into()), output.replace('\n', " ")),
+        );
     }
     proxy.stop();
     json!({"ok": all_ok, "checks": checks, "skipped": skipped})
@@ -740,7 +766,10 @@ mod tests {
         let env = Env::from_pairs([("PYTHONPATH", "C:\\old"), ("NODE_OPTIONS", "--max-old-space-size=4096")]);
         let values = layer_environment(4242, Path::new("C:\\p\\allow.json"), Path::new("C:\\pre"), Path::new("C:\\pre\\preload.cjs"), &env);
         let get = |k: &str| values.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap();
-        assert_eq!((get("HTTP_PROXY").as_str(), get("https_proxy").as_str(), get("NO_PROXY").as_str()), ("http://127.0.0.1:4242", "http://127.0.0.1:4242", NO_PROXY_VALUE));
+        assert_eq!(
+            (get("HTTP_PROXY").as_str(), get("https_proxy").as_str(), get("NO_PROXY").as_str()),
+            ("http://127.0.0.1:4242", "http://127.0.0.1:4242", NO_PROXY_VALUE)
+        );
         assert_eq!(get("PYTHONPATH"), "C:/pre;C:\\old");
         assert_eq!(get("NODE_OPTIONS"), "--max-old-space-size=4096 --require \"C:/pre/preload.cjs\"");
         assert_eq!(get("LOOP_NETWORK_ALLOW_FILE"), "C:/p/allow.json");
@@ -767,7 +796,10 @@ mod tests {
         });
         assert_eq!(raw_connect_status(port, "denied.example.net", 443), 403);
         let line: Value = serde_json::from_str(std::fs::read_to_string(&log).unwrap().lines().next().unwrap()).unwrap();
-        assert_eq!((line["host"].as_str(), line["method"].as_str(), line["layer"].as_str(), line["turn"].as_i64()), (Some("denied.example.net"), Some("CONNECT"), Some("proxy"), Some(7)));
+        assert_eq!(
+            (line["host"].as_str(), line["method"].as_str(), line["layer"].as_str(), line["turn"].as_i64()),
+            (Some("denied.example.net"), Some("CONNECT"), Some("proxy"), Some(7))
+        );
         let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
         client.write_all(format!("CONNECT localhost:{echo_port} HTTP/1.1\r\n\r\n").as_bytes()).unwrap();
         client.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -804,7 +836,10 @@ mod tests {
         assert_eq!(first.port(), second.port());
         let runtime = internal_dir_of(&w).join(RUNTIME_FILE);
         let info: Value = serde_json::from_str(&std::fs::read_to_string(&runtime).unwrap()).unwrap();
-        assert_eq!((info["port"].as_u64(), info["project"].as_str(), info["pid"].as_u64()), (Some(u64::from(first.port())), Some("proj"), Some(u64::from(std::process::id()))));
+        assert_eq!(
+            (info["port"].as_u64(), info["project"].as_str(), info["pid"].as_u64()),
+            (Some(u64::from(first.port())), Some("proj"), Some(u64::from(std::process::id())))
+        );
         first.set_turn(3);
         let info: Value = serde_json::from_str(&std::fs::read_to_string(&runtime).unwrap()).unwrap();
         assert_eq!(info["turn"], 3);

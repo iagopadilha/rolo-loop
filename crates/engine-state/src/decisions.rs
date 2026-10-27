@@ -101,7 +101,13 @@ pub fn format_line(slug: &str, turn: Option<i64>, level: &str, doubt: &str, chos
     let level = if LEVELS.contains(&level) { level } else { DEFAULT_LEVEL };
     let turn_text = turn.map(|t| t.to_string()).unwrap_or_else(|| "unknown".into());
     let slug = clean(slug);
-    format!("- [{}] turn={turn_text} level={level} {} | chose: {} | revert: {}", if slug.is_empty() { "general" } else { &slug }, clean(doubt), clean(chose), clean(revert))
+    format!(
+        "- [{}] turn={turn_text} level={level} {} | chose: {} | revert: {}",
+        if slug.is_empty() { "general" } else { &slug },
+        clean(doubt),
+        clean(chose),
+        clean(revert)
+    )
 }
 
 /// Appends one line (creates the folder and file when missing). Returns the line written.
@@ -135,7 +141,10 @@ mod tests {
         let line = format_line("a|b", Some(3), "critical", "which  DB?", "pg | yes", "undo it");
         assert_eq!(line, "- [a/b] turn=3 level=critical which DB? | chose: pg / yes | revert: undo it");
         let p = parse_line(&line, 7).unwrap();
-        assert_eq!((p["slug"].as_str(), p["turn"].as_i64(), p["level"].as_str(), p["chose"].as_str(), p["revert"].as_str()), (Some("a/b"), Some(3), Some("critical"), Some("pg / yes"), Some("undo it")));
+        assert_eq!(
+            (p["slug"].as_str(), p["turn"].as_i64(), p["level"].as_str(), p["chose"].as_str(), p["revert"].as_str()),
+            (Some("a/b"), Some(3), Some("critical"), Some("pg / yes"), Some("undo it"))
+        );
         assert_eq!(parse_line("- [x] old style | chose: y", 1).unwrap()["level"], "important");
         assert_eq!(parse_line("- [x] no choice here", 2).unwrap()["unparsed"], true);
         assert!(parse_line("## heading", 3).is_none());

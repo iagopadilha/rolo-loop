@@ -40,7 +40,11 @@ fn with_context(app: &App, request: &Request, action: impl FnOnce(&ProjectContex
 /// URL of this project's panel from the Host already validated by the server (127.0.0.1:<port> or localhost:<port>).
 fn build_project_url(request: &Request, context: &ProjectContext) -> Option<String> {
     let host = request.header("host").trim().to_string();
-    if host.is_empty() { None } else { Some(format!("http://{host}/p/{}/", context.project.id)) }
+    if host.is_empty() {
+        None
+    } else {
+        Some(format!("http://{host}/p/{}/", context.project.id))
+    }
 }
 
 fn get_codebase_tree(app: &App, request: &Request) -> Response {
@@ -120,4 +124,3 @@ fn mark_reviewed(app: &App, request: &Request) -> Response {
 fn request_change(app: &App, request: &Request) -> Response {
     with_context(app, request, |context| respond_json(|| app.decisions().request_change(context, request.param("decision_id"))))
 }
-

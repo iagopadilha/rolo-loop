@@ -37,7 +37,8 @@ const ENGINE_SPECS_FOLDER: &str = ".specs\\project\\loop\\json";
 /// The loop's run state in the PRIMARY worktree: written by the engine and the orchestrator, saved by the verified backup.
 const ENGINE_RUN_STATE_FOLDER: &str = ".specs\\project\\loop";
 /// Local files the engine itself writes into the worktree on every start and turn: engine-owned, they never block the removal.
-const ENGINE_GENERATED_IGNORED: [&str; 4] = [".specs/project/.env.test", ".specs/project/NETWORK.json", ".specs/project/loop/internal/network-filter.js", ".specs/project/loop/internal/network-allow.json"];
+const ENGINE_GENERATED_IGNORED: [&str; 4] =
+    [".specs/project/.env.test", ".specs/project/NETWORK.json", ".specs/project/loop/internal/network-filter.js", ".specs/project/loop/internal/network-allow.json"];
 
 fn reason_text(code: &str) -> String {
     match code {
@@ -113,7 +114,11 @@ pub fn project_entries(primary_repo: &str) -> (Vec<Entry>, Value) {
     }
     let mut entries = Vec::new();
     for repo in &repos {
-        if !repo.primary && !(crate::notify_truthy(recorded_repos.get(&repo.name)) || crate::notify_truthy(last_run_repos.get(&repo.name)) || Path::new(&repo.loop_worktree_path()).is_dir()) {
+        if !repo.primary
+            && !(crate::notify_truthy(recorded_repos.get(&repo.name))
+                || crate::notify_truthy(last_run_repos.get(&repo.name))
+                || Path::new(&repo.loop_worktree_path()).is_dir())
+        {
             continue; // a `reference` repo, or an edit repo no feature changed, never got a worktree: nothing to close, merge or remove
         }
         let recorded: Value = if !recorded_repos.is_empty() {
@@ -194,7 +199,10 @@ pub fn check_repo(entry: &Entry, running: bool) -> Value {
         return item;
     }
     if !branch.starts_with(LOOP_BRANCH_PREFIX) {
-        reasons.push(reason("push_unconfirmed", &format!("The worktree is not on a loop/* branch ({}); it is never closed from here.", if branch.is_empty() { "detached HEAD" } else { &branch })));
+        reasons.push(reason(
+            "push_unconfirmed",
+            &format!("The worktree is not on a loop/* branch ({}); it is never closed from here.", if branch.is_empty() { "detached HEAD" } else { &branch }),
+        ));
     } else if !(push.starts_with("done") && remote_holds_head(&entry.worktree, &branch)) {
         reasons.push(reason("push_unconfirmed", ""));
     }
@@ -252,7 +260,10 @@ pub fn back_up_worktree(env: &Env, worktree: &str, output_dir: &str) -> (String,
         Some(_) => "project",
         None => base_name,
     };
-    let stamp = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc()).format(time::macros::format_description!("[year]-[month]-[day]-[hour][minute]")).unwrap_or_default();
+    let stamp = time::OffsetDateTime::now_local()
+        .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+        .format(time::macros::format_description!("[year]-[month]-[day]-[hour][minute]"))
+        .unwrap_or_default();
     let base = Path::new(&nt_abspath(output_dir)).join(format!("loop-{name}-{stamp}"));
     let (mut folder, mut suffix) = (base.clone(), 1);
     while folder.exists() {
@@ -266,7 +277,10 @@ pub fn back_up_worktree(env: &Env, worktree: &str, output_dir: &str) -> (String,
     }
     let (code, out) = loop_summary::run_cli(&[worktree.to_string(), "--out".into(), shown.clone()], env);
     if code != 0 {
-        let tail: String = { let c: Vec<char> = out.chars().collect(); c[c.len().saturating_sub(200)..].iter().collect() };
+        let tail: String = {
+            let c: Vec<char> = out.chars().collect();
+            c[c.len().saturating_sub(200)..].iter().collect()
+        };
         return failed(format!("backup failed: loop_summary.py did not finish cleanly ({})", if tail.is_empty() { "no output".to_string() } else { tail }));
     }
     let has_md = std::fs::read_dir(&folder).map(|d| d.flatten().any(|e| e.file_name().to_string_lossy().to_lowercase().ends_with(".md"))).unwrap_or(false);
@@ -292,7 +306,11 @@ pub fn back_up_worktree(env: &Env, worktree: &str, output_dir: &str) -> (String,
 fn walk_files(folder: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(folder).into_iter().flatten().flatten() {
         let path = entry.path();
-        if path.is_dir() { walk_files(&path, out) } else { out.push(path) }
+        if path.is_dir() {
+            walk_files(&path, out)
+        } else {
+            out.push(path)
+        }
     }
 }
 
@@ -301,7 +319,15 @@ pub fn durable_files(primary_work: &str) -> Vec<String> {
     let specs = Path::new(primary_work).join(".specs");
     let mut found: Vec<String> = DURABLE_PROJECT_FILES.iter().filter(|p| p.split('/').fold(specs.clone(), |a, x| a.join(x)).is_file()).map(|p| p.to_string()).collect();
     for name in DURABLE_FEATURE_FILES {
-        let mut paths: Vec<String> = std::fs::read_dir(specs.join("features")).map(|d| d.flatten().map(|e| e.path()).filter(|p| p.join(name).is_file()).map(|p| format!("features/{}/{name}", p.file_name().unwrap_or_default().to_string_lossy())).collect()).unwrap_or_default();
+        let mut paths: Vec<String> = std::fs::read_dir(specs.join("features"))
+            .map(|d| {
+                d.flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.join(name).is_file())
+                    .map(|p| format!("features/{}/{name}", p.file_name().unwrap_or_default().to_string_lossy()))
+                    .collect()
+            })
+            .unwrap_or_default();
         paths.sort();
         found.extend(paths);
     }
@@ -346,7 +372,11 @@ fn command_max_cost(primary_work: &str) -> Option<f64> {
         let text = item.as_str().map(String::from).unwrap_or_else(|| item.to_string());
         let (name, _, joined) = pycompat::partition(&text, "=");
         if name == "--max-cost" {
-            let raw = if joined.is_empty() { argv.get(index + 1).map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).unwrap_or_default() } else { joined.to_string() };
+            let raw = if joined.is_empty() {
+                argv.get(index + 1).map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).unwrap_or_default()
+            } else {
+                joined.to_string()
+            };
             return raw.trim().parse::<f64>().ok();
         }
     }
@@ -386,7 +416,16 @@ fn run_totals(meta: &Value, prior: &Value, primary_work: &str) -> Vec<(String, V
 
 /// `<primary repo>/.specs/project/loop/json/last-run.json`. `removed` = names whose worktree is gone (or about to be). `finished` (wrap-up
 /// Finish) marks the run and every repo entry `"finished": true`: the next start does NOT re-attach to that branch.
-fn write_last_run(primary_repo: &str, entries: &[Entry], checks: &[(String, Value)], removed: &[String], durable: &[String], meta: &Value, primary_work: &str, finished: bool) {
+fn write_last_run(
+    primary_repo: &str,
+    entries: &[Entry],
+    checks: &[(String, Value)],
+    removed: &[String],
+    durable: &[String],
+    meta: &Value,
+    primary_work: &str,
+    finished: bool,
+) {
     let prior = load_json(&last_run_path(primary_repo));
     let prior_repos = prior.get("repos").and_then(Value::as_object).cloned().unwrap_or_default();
     let mut repos = Map::new();
@@ -417,7 +456,8 @@ fn write_last_run(primary_repo: &str, entries: &[Entry], checks: &[(String, Valu
             item["finished"] = json!(true);
         }
     }
-    let durable_value = if durable.is_empty() { prior.get("durable_files").filter(|v| crate::notify_truthy(Some(*v))).cloned().unwrap_or(json!([])) } else { json!(durable) };
+    let durable_value =
+        if durable.is_empty() { prior.get("durable_files").filter(|v| crate::notify_truthy(Some(*v))).cloned().unwrap_or(json!([])) } else { json!(durable) };
     let mut record = Map::new();
     record.insert("closed_at".into(), json!(timestamp()));
     record.insert("multi".into(), json!(entries.len() > 1));
@@ -543,7 +583,20 @@ fn clear_engine_specs(worktree: &str, saved_plan: &[String], repo: &str) -> Opti
         for command in [&["checkout", "--", ".specs"][..], &["clean", "-fdxq", "--", ".specs"][..]] {
             let (code, out, failure) = git(worktree, command);
             if code != 0 {
-                return Some(format!("{} ({})", specs.display(), cut_reason(if !failure.is_empty() { &failure } else if !out.is_empty() { &out } else { "no detail" }, 80)));
+                return Some(format!(
+                    "{} ({})",
+                    specs.display(),
+                    cut_reason(
+                        if !failure.is_empty() {
+                            &failure
+                        } else if !out.is_empty() {
+                            &out
+                        } else {
+                            "no detail"
+                        },
+                        80
+                    )
+                ));
             }
         }
         return None;
@@ -557,7 +610,8 @@ fn clear_engine_specs(worktree: &str, saved_plan: &[String], repo: &str) -> Opti
 /// `git worktree remove` from the user's repo, no --force unless asked. Returns an error text, or `None` when the folder is gone.
 fn remove_worktree(entry: &Entry, force: bool, saved_plan: &[String]) -> Option<String> {
     if is_same_path(&entry.worktree, &entry.repo_path) {
-        return Some("refused: the worktree is the original repo folder".into()); // belt and braces: never the user's own folder
+        return Some("refused: the worktree is the original repo folder".into());
+        // belt and braces: never the user's own folder
     }
     if !force {
         if let Some(blocker) = clear_engine_specs(&entry.worktree, saved_plan, &entry.repo_path) {
@@ -572,7 +626,20 @@ fn remove_worktree(entry: &Entry, force: bool, saved_plan: &[String]) -> Option<
     let (_, out, err) = git(&entry.repo_path, &args);
     git(&entry.repo_path, &["worktree", "prune"]);
     if Path::new(&entry.worktree).is_dir() {
-        return Some(format!("git worktree remove failed for {}, the folder is still there: {}", entry.worktree, cut_reason(if !err.is_empty() { &err } else if !out.is_empty() { &out } else { "no detail" }, REASON_LIMIT)));
+        return Some(format!(
+            "git worktree remove failed for {}, the folder is still there: {}",
+            entry.worktree,
+            cut_reason(
+                if !err.is_empty() {
+                    &err
+                } else if !out.is_empty() {
+                    &out
+                } else {
+                    "no detail"
+                },
+                REASON_LIMIT
+            )
+        ));
     }
     None
 }
@@ -626,7 +693,10 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
     let output_dir = if o.output_dir.is_empty() { loop_summary::default_output_dir(env) } else { o.output_dir.clone() };
     let checks: Vec<(String, Value)> = entries.iter().map(|e| (e.name.clone(), check_repo(e, false))).collect();
     let check_of = |name: &str| checks.iter().find(|(n, _)| n == name).expect("check").1.clone();
-    let mut outcome: Vec<(String, Value)> = entries.iter().map(|e| (e.name.clone(), json!({"status": "kept", "removed_worktree": false, "branch_kept": check_of(&e.name)["branch"], "reasons": []}))).collect();
+    let mut outcome: Vec<(String, Value)> = entries
+        .iter()
+        .map(|e| (e.name.clone(), json!({"status": "kept", "removed_worktree": false, "branch_kept": check_of(&e.name)["branch"], "reasons": []})))
+        .collect();
     fn slot<'a>(outcome: &'a mut [(String, Value)], name: &str) -> &'a mut Value {
         &mut outcome.iter_mut().find(|(n, _)| n == name).expect("outcome").1
     }
@@ -635,9 +705,16 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
         let check = check_of(&entry.name);
         if o.only.as_ref().is_some_and(|only| !only.contains(&entry.name)) {
             slot(&mut outcome, &entry.name)["reasons"] = check["reasons"].clone();
-        } else if check["can_close"] == true || (check["needs_confirm"] == true && o.confirm_compare_link) || (o.allow_missing_pr && only_pr_missing(&check)) || is_forceable(entry, &check, o.force_remove) {
+        } else if check["can_close"] == true
+            || (check["needs_confirm"] == true && o.confirm_compare_link)
+            || (o.allow_missing_pr && only_pr_missing(&check))
+            || is_forceable(entry, &check, o.force_remove)
+        {
             closing.push(entry.clone());
-            let forced = o.force_remove && check["can_close"] != true && !(check["needs_confirm"] == true && o.confirm_compare_link) && !(o.allow_missing_pr && only_pr_missing(&check));
+            let forced = o.force_remove
+                && check["can_close"] != true
+                && !(check["needs_confirm"] == true && o.confirm_compare_link)
+                && !(o.allow_missing_pr && only_pr_missing(&check));
             slot(&mut outcome, &entry.name)["forced"] = json!(forced);
         } else {
             slot(&mut outcome, &entry.name)["reasons"] = check["reasons"].clone();
@@ -677,12 +754,19 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
                     closing.retain(|e| !e.primary);
                     let s = slot(&mut outcome, &primary_entry.name);
                     s["status"] = json!("failed");
-                    s["reasons"] = json!([reason("error", &format!("the durable .specs/ files could not be copied back ({}); the primary worktree was kept", failure.to_string().chars().take(160).collect::<String>()))]);
+                    s["reasons"] = json!([reason(
+                        "error",
+                        &format!(
+                            "the durable .specs/ files could not be copied back ({}); the primary worktree was kept",
+                            failure.to_string().chars().take(160).collect::<String>()
+                        )
+                    )]);
                 }
             }
         }
     }
-    let prod_database = if closing.is_empty() { None } else { Some(write_prod_database_script(env, &primary_repo, &primary_entry.worktree, &entries, &checks, &output_dir)) };
+    let prod_database =
+        if closing.is_empty() { None } else { Some(write_prod_database_script(env, &primary_repo, &primary_entry.worktree, &entries, &checks, &output_dir)) };
     let mut order = closing.clone();
     order.sort_by_key(|e| e.primary); // (d) the primary, which holds `.specs/`, goes last
     for entry in &order {
@@ -704,7 +788,8 @@ pub fn close(env: &Env, primary_repo: &str, o: &CloseOptions) -> Value {
     let removed: Vec<String> = outcome.iter().filter(|(_, r)| r["removed_worktree"] == true).map(|(n, _)| n.clone()).collect();
     let closing_names: Vec<&String> = closing.iter().map(|e| &e.name).collect();
     if primary_safe && !(removed.len() == closing_names.len() && removed.iter().all(|n| closing_names.contains(&n))) {
-        write_last_run(&primary_repo, &entries, &checks, &removed, &durable, &primary_meta, &primary_entry.worktree, o.finished); // a removal failed: the record must say so
+        write_last_run(&primary_repo, &entries, &checks, &removed, &durable, &primary_meta, &primary_entry.worktree, o.finished);
+        // a removal failed: the record must say so
     }
     let closed: Vec<&String> = outcome.iter().filter(|(_, r)| r["status"] == "closed").map(|(n, _)| n).collect();
     let kept: Vec<&String> = outcome.iter().filter(|(_, r)| r["status"] != "closed").map(|(n, _)| n).collect();
@@ -790,7 +875,11 @@ mod tests {
         let specs = work.join(".specs").join("project");
         std::fs::create_dir_all(specs.join("loop").join("json")).unwrap();
         std::fs::write(specs.join("ROADMAP.md"), "## Stage 1\n- [a] status=verified\n").unwrap();
-        std::fs::write(specs.join("loop").join("json").join("meta.json"), r#"{"branch": "loop/x", "base": "developer", "turns": 2, "cost_usd": 1.5, "finished_at": "2026-01-01T00:00:00"}"#).unwrap();
+        std::fs::write(
+            specs.join("loop").join("json").join("meta.json"),
+            r#"{"branch": "loop/x", "base": "developer", "turns": 2, "cost_usd": 1.5, "finished_at": "2026-01-01T00:00:00"}"#,
+        )
+        .unwrap();
         std::fs::write(specs.join("loop").join("json").join("delivery.json"), r#"{"push": "FAILED: no origin", "pr": null, "pr_status": "not created"}"#).unwrap();
         (repo.display().to_string(), work.display().to_string())
     }
@@ -824,7 +913,10 @@ mod tests {
         assert!(closed["durable_copied"].as_array().unwrap().iter().any(|p| p == "project/ROADMAP.md"));
         let last = load_json(&last_run_path(&repo));
         assert_eq!((last["multi"].clone(), last["finished"].clone(), last["turns"].clone(), last["cost_usd"].clone()), (json!(false), json!(true), json!(2), json!(1.5)));
-        assert_eq!((last["repos"]["app"]["branch"].clone(), last["repos"]["app"]["worktree_removed"].clone(), last["repos"]["app"]["finished"].clone()), (json!("loop/x"), json!(true), json!(true)));
+        assert_eq!(
+            (last["repos"]["app"]["branch"].clone(), last["repos"]["app"]["worktree_removed"].clone(), last["repos"]["app"]["finished"].clone()),
+            (json!("loop/x"), json!(true), json!(true))
+        );
         assert_eq!(last["max_cost_usd"], json!(50.0));
         assert!(Path::new(&repo).join(".specs/project/ROADMAP.md").is_file());
         let again = can_close(&repo);

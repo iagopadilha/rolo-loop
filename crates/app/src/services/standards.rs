@@ -75,10 +75,13 @@ impl StandardsService<'_> {
             })
             .collect();
         standards::validate(&pairs).map_err(invalid_standards)?;
-        Ok(pairs.into_iter().filter_map(|(slot, value)| {
-            let trimmed = value.trim().to_string();
-            (!trimmed.is_empty()).then_some((slot, trimmed))
-        }).collect())
+        Ok(pairs
+            .into_iter()
+            .filter_map(|(slot, value)| {
+                let trimmed = value.trim().to_string();
+                (!trimmed.is_empty()).then_some((slot, trimmed))
+            })
+            .collect())
     }
 
     // ------------------------------------------------ repository root

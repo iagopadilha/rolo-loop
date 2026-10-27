@@ -85,13 +85,29 @@ pub struct CommandOptions {
 
 impl Default for CommandOptions {
     fn default() -> Self {
-        CommandOptions { model: String::new(), budget_usd: None, allowed_tools: vec![], disallowed_tools: vec![], no_mcp: true, resume_session: String::new(), fork_session: false, prompt_argument: String::new(), permission_mode: String::new(), hook_profile: String::new(), mcp_config_path: String::new() }
+        CommandOptions {
+            model: String::new(),
+            budget_usd: None,
+            allowed_tools: vec![],
+            disallowed_tools: vec![],
+            no_mcp: true,
+            resume_session: String::new(),
+            fork_session: false,
+            prompt_argument: String::new(),
+            permission_mode: String::new(),
+            hook_profile: String::new(),
+            mcp_config_path: String::new(),
+        }
     }
 }
 
 /// Python `str(float)`-like text of a budget (`2.0`, `0.5`).
 fn budget_text(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e16 { format!("{value:.1}") } else { value.to_string() }
+    if value.fract() == 0.0 && value.abs() < 1e16 {
+        format!("{value:.1}")
+    } else {
+        value.to_string()
+    }
 }
 
 pub type CallRecorder = Arc<dyn Fn(&str, &str, &Value) + Send + Sync>;
@@ -110,12 +126,24 @@ pub struct ClaudeClient {
 }
 
 impl ClaudeClient {
-    pub fn new(env: Env, process_runner: Arc<dyn ProcessRunner>, claude_binary: &str, guard_path: PathBuf, plugin_root: PathBuf, toolkit_root: PathBuf, fallback_binaries: Vec<String>) -> Self {
+    pub fn new(
+        env: Env,
+        process_runner: Arc<dyn ProcessRunner>,
+        claude_binary: &str,
+        guard_path: PathBuf,
+        plugin_root: PathBuf,
+        toolkit_root: PathBuf,
+        fallback_binaries: Vec<String>,
+    ) -> Self {
         ClaudeClient { env, process_runner, claude_binary: claude_binary.to_string(), guard_path, plugin_root, toolkit_root, fallback_binaries, call_recorder: None }
     }
 
     fn binary_name(&self) -> &str {
-        if self.claude_binary.is_empty() { DEFAULT_BINARY_NAME } else { &self.claude_binary }
+        if self.claude_binary.is_empty() {
+            DEFAULT_BINARY_NAME
+        } else {
+            &self.claude_binary
+        }
     }
 
     pub fn get_binary(&self) -> String {
@@ -129,7 +157,11 @@ impl ClaudeClient {
 
     /// The guard binary ('' when it does not exist).
     pub fn locate_guard(&self) -> String {
-        if self.guard_path.is_file() { self.guard_path.display().to_string() } else { String::new() }
+        if self.guard_path.is_file() {
+            self.guard_path.display().to_string()
+        } else {
+            String::new()
+        }
     }
 
     /// `--settings` JSON that registers the guard as a PreToolUse hook with `--profile <hook_profile>`; '' without a guard.
@@ -307,7 +339,11 @@ impl ClaudeClient {
     /// Normalised result event of the output (one object, an array of events, stream-json, noise around it); `{}` when nothing in it is a claude result.
     pub fn parse_json_output(output: &str) -> Value {
         let data = cli_output::parse(output);
-        if engine_state::notify_truthy(data.get("ok")) { data } else { json!({}) }
+        if engine_state::notify_truthy(data.get("ok")) {
+            data
+        } else {
+            json!({})
+        }
     }
 
     pub fn extract_cost(raw: &Value) -> Value {
@@ -335,7 +371,11 @@ mod tests {
         fn run_and_wait(&self, argv: &[String], _: &str, _: u64, _: Option<&str>, _: &[(String, String)], _: Option<&[(String, String)]>) -> (i32, String, String) {
             self.calls.lock().unwrap().push(argv.to_vec());
             let mut replies = self.replies.lock().unwrap();
-            if replies.len() > 1 { replies.remove(0) } else { replies[0].clone() }
+            if replies.len() > 1 {
+                replies.remove(0)
+            } else {
+                replies[0].clone()
+            }
         }
         fn spawn_detached(&self, _: &[String], _: &str, _: &str, _: &[(String, String)]) -> std::io::Result<i64> {
             Ok(1)
@@ -347,7 +387,8 @@ mod tests {
     }
 
     fn client(replies: Vec<(i32, &str, &str)>) -> (ClaudeClient, Arc<Scripted>) {
-        let runner = Arc::new(Scripted { replies: Mutex::new(replies.into_iter().map(|(c, o, e)| (c, o.to_string(), e.to_string())).collect()), calls: Mutex::new(vec![]) });
+        let runner =
+            Arc::new(Scripted { replies: Mutex::new(replies.into_iter().map(|(c, o, e)| (c, o.to_string(), e.to_string())).collect()), calls: Mutex::new(vec![]) });
         let dir = tempfile::tempdir().unwrap().keep();
         let env = Env::from_pairs([("LOOP_DATA_DIR", dir.to_str().unwrap()), ("LOOP_CLAUDE_HOME", dir.to_str().unwrap())]);
         (ClaudeClient::new(env, runner.clone(), "claude", PathBuf::new(), PathBuf::new(), PathBuf::new(), vec![]), runner)
@@ -359,9 +400,39 @@ mod tests {
         let data = runtime_isolation::data_dir(&c.env);
         std::fs::create_dir_all(&data).unwrap();
         std::fs::write(data.join("config.json"), r#"{"loop_isolation": false}"#).unwrap();
-        let argv = c.build_command(&CommandOptions { model: "m".into(), budget_usd: Some(2.0), allowed_tools: vec!["Read".into()], permission_mode: "dontAsk".into(), resume_session: "s1".into(), fork_session: true, ..Default::default() });
+        let argv = c.build_command(&CommandOptions {
+            model: "m".into(),
+            budget_usd: Some(2.0),
+            allowed_tools: vec!["Read".into()],
+            permission_mode: "dontAsk".into(),
+            resume_session: "s1".into(),
+            fork_session: true,
+            ..Default::default()
+        });
         let tail: Vec<&str> = argv.iter().skip_while(|a| *a != "-p").map(String::as_str).collect();
-        assert_eq!(tail, ["-p", "--output-format", "stream-json", "--verbose", "--model", "m", "--max-budget-usd", "2.0", "--permission-mode", "dontAsk", "--allowedTools", "Read", "--strict-mcp-config", "--mcp-config", EMPTY_MCP_CONFIG, "--resume", "s1", "--fork-session"]);
+        assert_eq!(
+            tail,
+            [
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--model",
+                "m",
+                "--max-budget-usd",
+                "2.0",
+                "--permission-mode",
+                "dontAsk",
+                "--allowedTools",
+                "Read",
+                "--strict-mcp-config",
+                "--mcp-config",
+                EMPTY_MCP_CONFIG,
+                "--resume",
+                "s1",
+                "--fork-session"
+            ]
+        );
     }
 
     #[test]
@@ -369,7 +440,10 @@ mod tests {
         let ok = r#"{"type":"result","subtype":"success","is_error":false,"result":"hi","session_id":"abc","total_cost_usd":0.5}"#;
         let (c, _) = client(vec![(0, ok, "")]);
         let r = c.run_prompt(&["claude".into(), "-p".into()], "", "q", 5, &[]);
-        assert_eq!((r["ok"].clone(), r["reply"].clone(), r["session_id"].clone(), r["cost_usd"].clone(), r["binary"].clone()), (json!(true), json!("hi"), json!("abc"), json!(0.5), json!("claude")));
+        assert_eq!(
+            (r["ok"].clone(), r["reply"].clone(), r["session_id"].clone(), r["cost_usd"].clone(), r["binary"].clone()),
+            (json!(true), json!("hi"), json!("abc"), json!(0.5), json!("claude"))
+        );
         let (c, _) = client(vec![(1, "", "boom token=abc123456789\nlast line")]);
         let r = c.run_prompt(&["claude".into(), "-p".into()], "", "q", 5, &[]);
         assert_eq!((r["ok"].clone(), r["error"].clone()), (json!(false), json!("last line")));

@@ -40,10 +40,7 @@ pub fn repo_root(env: &Env) -> PathBuf {
 pub fn build_paths(env: &Env, repo_root: PathBuf) -> Paths {
     let config = read_user_config(&env.user_data_dir());
     let locator = Locator::new(env.clone(), repo_root);
-    let configured = config
-        .get("orchestrator_skill_dir")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let configured = config.get("orchestrator_skill_dir").and_then(|v| v.as_str()).unwrap_or("");
     let skill = locator.locate_orchestrator_skill_dir(configured);
     Paths {
         maestro_plugin: plugin_root_of(&skill).display().to_string(),
@@ -59,10 +56,7 @@ pub fn run(args: Args) -> i32 {
     }
     let paths = build_paths(&env, repo_root(&env));
     if args.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&paths).expect("serializable")
-        );
+        println!("{}", serde_json::to_string_pretty(&paths).expect("serializable"));
     } else {
         println!("maestro_plugin={}", paths.maestro_plugin);
         println!("orchestrator_skill={}", paths.orchestrator_skill);

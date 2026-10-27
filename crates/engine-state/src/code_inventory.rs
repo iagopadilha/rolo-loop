@@ -127,7 +127,9 @@ fn entry_point_kind(path_from_folder: &str, absolute: &Path) -> Option<&'static 
     if lower == "package.json" {
         let text = std::fs::read(absolute).ok().and_then(|b| String::from_utf8(b).ok())?;
         let package = serde_json::from_str::<Value>(text.strip_prefix('\u{feff}').unwrap_or(&text)).ok()?;
-        let truthy = |k: &str| package.get(k).is_some_and(|v| !matches!(v, Value::Null | Value::Bool(false)) && v != &json!("") && v != &json!({}) && v != &json!([]) && v != &json!(0));
+        let truthy = |k: &str| {
+            package.get(k).is_some_and(|v| !matches!(v, Value::Null | Value::Bool(false)) && v != &json!("") && v != &json!({}) && v != &json!([]) && v != &json!(0))
+        };
         return if package.is_object() && (truthy("main") || truthy("scripts")) { Some("startup") } else { None };
     }
     if !is_code(name) {
@@ -297,8 +299,6 @@ pub fn write_atomically(path: &Path, document: &Value) -> std::io::Result<()> {
     crate::loop_io::atomic_write_text(path, &text)
 }
 
-
-
 pub fn run_cli(args: &[String]) -> (i32, String, String) {
     let mut folder: Option<String> = None;
     let (mut json_out, mut no_write) = (false, false);
@@ -316,9 +316,19 @@ pub fn run_cli(args: &[String]) -> (i32, String, String) {
             flag @ ("--giant-lines" | "--giant-kb") if value(index).is_some() => {
                 match value(index).and_then(|v| v.parse::<i64>().ok()) {
                     Some(n) => {
-                        if flag == "--giant-lines" { giant_lines = n } else { giant_kb = n }
+                        if flag == "--giant-lines" {
+                            giant_lines = n
+                        } else {
+                            giant_kb = n
+                        }
                     }
-                    None => return (2, String::new(), format!("code_inventory: error: argument {flag}: invalid int value: {}\n", pycompat::py_repr_str(&value(index).unwrap_or_default()))),
+                    None => {
+                        return (
+                            2,
+                            String::new(),
+                            format!("code_inventory: error: argument {flag}: invalid int value: {}\n", pycompat::py_repr_str(&value(index).unwrap_or_default())),
+                        )
+                    }
                 }
                 index += 2;
             }
@@ -378,13 +388,8 @@ pub fn run_cli(args: &[String]) -> (i32, String, String) {
     }
     let totals = &document["totals"];
     let giant = document["giant"].as_array().cloned().unwrap_or_default();
-    let mut out = format!(
-        "inventory: {} files, {} giant ({} lines, {} KB)\n",
-        totals["files"],
-        giant.len(),
-        totals["lines"],
-        totals["bytes"].as_i64().unwrap_or(0) / 1024
-    );
+    let mut out =
+        format!("inventory: {} files, {} giant ({} lines, {} KB)\n", totals["files"], giant.len(), totals["lines"], totals["bytes"].as_i64().unwrap_or(0) / 1024);
     for item in &giant {
         let hints: Vec<&str> = item["hint"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
         out.push_str(&format!(
@@ -429,6 +434,11 @@ mod tests {
         assert_eq!(doc["giant"][0]["path"], "src/Big.ts");
         assert_eq!(doc["giant"][0]["hint"][0], "f0(");
         let kinds: Vec<(&str, &str)> = doc["entry_points"].as_array().unwrap().iter().map(|e| (e["path"].as_str().unwrap(), e["kind"].as_str().unwrap())).collect();
-        assert!(kinds.contains(&("MyApp.sln", "solution")) && kinds.contains(&("api/UsersController.cs", "controller")) && kinds.contains(&("src/main.ts", "startup")) && kinds.contains(&("package.json", "startup")));
+        assert!(
+            kinds.contains(&("MyApp.sln", "solution"))
+                && kinds.contains(&("api/UsersController.cs", "controller"))
+                && kinds.contains(&("src/main.ts", "startup"))
+                && kinds.contains(&("package.json", "startup"))
+        );
     }
 }

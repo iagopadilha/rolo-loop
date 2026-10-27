@@ -14,7 +14,14 @@ pub const PROJECT_ROUTE_PREFIX: &str = "/p/{project_id}/api";
 pub fn status_of(kind: Kind) -> u16 {
     match kind {
         Kind::ProjectNotFound | Kind::SpecFileNotFound | Kind::JobNotFound | Kind::RepoNotFound | Kind::DecisionNotFound => 404,
-        Kind::InvalidPath | Kind::InvalidRequest | Kind::PathOutsideSpecs | Kind::FileEditRefused | Kind::InvalidRepo | Kind::UnknownCredentialName | Kind::InvalidSetting | Kind::SettingUnavailable => 400,
+        Kind::InvalidPath
+        | Kind::InvalidRequest
+        | Kind::PathOutsideSpecs
+        | Kind::FileEditRefused
+        | Kind::InvalidRepo
+        | Kind::UnknownCredentialName
+        | Kind::InvalidSetting
+        | Kind::SettingUnavailable => 400,
         Kind::SubprojectsNotConfirmed | Kind::PlanningGates => 422,
         Kind::Internal => 500,
         Kind::FileVersionConflict
@@ -36,10 +43,16 @@ pub fn status_of(kind: Kind) -> u16 {
 pub fn response_of(error: &AppError) -> Response {
     match error.kind {
         Kind::ProjectNotFound => Response::error(404, PROJECT_NOT_FOUND_MESSAGE),
-        Kind::FileVersionConflict => Response::error_with(409, error.message.clone(), &[("current_version", error.current_version.as_ref().map_or(Value::Null, |v| json!(v)))]),
+        Kind::FileVersionConflict => {
+            Response::error_with(409, error.message.clone(), &[("current_version", error.current_version.as_ref().map_or(Value::Null, |v| json!(v)))])
+        }
         Kind::PlanningGates => {
             let status = if error.code.as_deref() == Some(crate::domain::errors::PLANNING_PREREQUISITES_CODE) { 409 } else { 422 };
-            Response::error_with(status, error.message.clone(), &[("code", error.code.as_ref().map_or(Value::Null, |c| json!(c))), ("gates", error.gates.clone().unwrap_or(Value::Null))])
+            Response::error_with(
+                status,
+                error.message.clone(),
+                &[("code", error.code.as_ref().map_or(Value::Null, |c| json!(c))), ("gates", error.gates.clone().unwrap_or(Value::Null))],
+            )
         }
         Kind::Internal => Response::error(500, format!("internal error: {}", error.message)),
         kind => {
@@ -99,5 +112,9 @@ pub fn guard_repos_free(app: &App, context: &ProjectContext, action: impl FnOnce
 
 /// Query value as a non-negative integer (`isdigit()` rule); `None` for anything else.
 pub fn parse_unsigned(text: &str) -> Option<i64> {
-    if !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()) { text.parse().ok() } else { None }
+    if !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()) {
+        text.parse().ok()
+    } else {
+        None
+    }
 }

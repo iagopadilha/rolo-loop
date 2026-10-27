@@ -65,7 +65,11 @@ fn walk_files(root: &Path, names: &[&str]) -> Vec<(String, Vec<PathBuf>)> {
         let (mut subdirs, mut files): (Vec<String>, Vec<String>) = (vec![], vec![]);
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if entry.path().is_dir() { subdirs.push(name) } else { files.push(name) }
+            if entry.path().is_dir() {
+                subdirs.push(name)
+            } else {
+                files.push(name)
+            }
         }
         for name in &files {
             if let Some(slot) = found.iter_mut().find(|(n, _)| n == name) {
@@ -87,7 +91,11 @@ fn walk_files(root: &Path, names: &[&str]) -> Vec<(String, Vec<PathBuf>)> {
 
 fn relative(root: &Path, path: &Path) -> String {
     let value = path.strip_prefix(root).map(|p| p.display().to_string().replace('\\', "/")).unwrap_or_else(|_| path.display().to_string());
-    if value.is_empty() { ".".into() } else { value }
+    if value.is_empty() {
+        ".".into()
+    } else {
+        value
+    }
 }
 
 struct DotnetEntry {
@@ -108,7 +116,15 @@ fn dotnet_entries(root: &Path) -> Vec<DotnetEntry> {
         let settings = read_json(&path).unwrap_or(Value::Null);
         let https = settings.get("profiles").and_then(|p| p.get(HTTPS_PROFILE)).cloned().unwrap_or(Value::Null);
         let truthy = engine_truthy(Some(&https));
-        let urls = https.get("applicationUrl").map(|v| match v { Value::String(s) => s.clone(), Value::Null => String::new(), o => o.to_string() }).unwrap_or_default().replace(';', " , ");
+        let urls = https
+            .get("applicationUrl")
+            .map(|v| match v {
+                Value::String(s) => s.clone(),
+                Value::Null => String::new(),
+                o => o.to_string(),
+            })
+            .unwrap_or_default()
+            .replace(';', " , ");
         entries.push(DotnetEntry { dir: relative(root, project_dir), has_https: truthy, urls });
     }
     entries.sort_by_key(|e| (!e.dir.ends_with(".Api"), e.dir.clone()));
@@ -133,7 +149,8 @@ fn front_entries(root: &Path) -> Vec<FrontEntry> {
         let scripts = read_json(&path).and_then(|p| p.get("scripts").cloned()).unwrap_or(Value::Null);
         let Some(script) = FRONT_SCRIPTS.iter().find(|name| scripts.get(**name).is_some()) else { continue };
         let Some(project_dir) = path.parent() else { continue };
-        let mut names: Vec<String> = std::fs::read_dir(project_dir).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+        let mut names: Vec<String> =
+            std::fs::read_dir(project_dir).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
         names.sort();
         let config: String = names.iter().filter(|n| n.starts_with("vite.config.")).map(|n| read_text(&project_dir.join(n))).collect();
         let port = VITE_PORT_PATTERN.search(&config).map(|m| m[1].to_string());
@@ -143,7 +160,11 @@ fn front_entries(root: &Path) -> Vec<FrontEntry> {
 }
 
 fn where_(dir: &str) -> String {
-    if dir == "." { String::new() } else { format!(" (in `{dir}`)") }
+    if dir == "." {
+        String::new()
+    } else {
+        format!(" (in `{dir}`)")
+    }
 }
 
 /// The block text (with markers), or `None` when the folder has neither a .NET launchSettings nor a front end.
@@ -196,7 +217,13 @@ pub fn conflicting_lines(text: &str) -> Vec<String> {
         Some((s, e)) => format!("{}{}", &text[..s], &text[e..]),
         None => text.to_string(),
     };
-    RUN_LINE_PATTERN.find_all(&outside).into_iter().map(|m| m.text().to_string()).filter(|line| !line.contains("--launch-profile")).map(|l| l.trim().to_string()).collect()
+    RUN_LINE_PATTERN
+        .find_all(&outside)
+        .into_iter()
+        .map(|m| m.text().to_string())
+        .filter(|line| !line.contains("--launch-profile"))
+        .map(|l| l.trim().to_string())
+        .collect()
 }
 
 /// Writes (or rewrites) the block in `<root>/CLAUDE.md`; returns `(changed, conflicting lines)`. No block = nothing written.

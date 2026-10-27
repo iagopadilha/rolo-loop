@@ -44,7 +44,17 @@ pub struct RepoRef {
 
 impl RepoRef {
     pub fn new(name: &str, path: &str, primary: bool) -> Self {
-        RepoRef { name: name.into(), path: path.into(), primary, worktree_path: String::new(), copy: vec![], setup: String::new(), copy_configured: false, role: ROLE_EDIT.into(), reason: String::new() }
+        RepoRef {
+            name: name.into(),
+            path: path.into(),
+            primary,
+            worktree_path: String::new(),
+            copy: vec![],
+            setup: String::new(),
+            copy_configured: false,
+            role: ROLE_EDIT.into(),
+            reason: String::new(),
+        }
     }
 
     pub fn loop_worktree_path(&self) -> String {
@@ -64,7 +74,11 @@ pub fn short_name_of(path: &str) -> String {
     let base = last_segment(&nt_normpath(path)).to_lowercase();
     let cleaned = NAME_INVALID.replace_lit(&base, "-");
     let trimmed = cleaned.trim_matches('-');
-    if trimmed.is_empty() { "repo".into() } else { trimmed.into() }
+    if trimmed.is_empty() {
+        "repo".into()
+    } else {
+        trimmed.into()
+    }
 }
 
 /// `name`, or `name-2`, `name-3`... when already taken.
@@ -193,7 +207,14 @@ pub fn repos_changed_by_roadmap(primary_name: &str, features: &Features) -> BTre
 
 /// Writes REPOS.json (the registry service and the engine share this one writer). `scope_defined`/`scope_source` of `None` keep what the
 /// file says. `approve_setup_for` = names of repos whose `setup` the USER just typed in the app: only those texts are recorded as approved.
-pub fn save_repos(primary_repo: &str, repos: &[RepoRef], scope_defined: Option<bool>, scope_source: Option<&str>, approve_setup_for: &[&str], data_dir: &Path) -> std::io::Result<()> {
+pub fn save_repos(
+    primary_repo: &str,
+    repos: &[RepoRef],
+    scope_defined: Option<bool>,
+    scope_source: Option<&str>,
+    approve_setup_for: &[&str],
+    data_dir: &Path,
+) -> std::io::Result<()> {
     let current = read_repos_file(primary_repo);
     let scope_defined = scope_defined.unwrap_or(current.scope_defined);
     let scope_source = scope_source.map(String::from).unwrap_or(current.scope_source);

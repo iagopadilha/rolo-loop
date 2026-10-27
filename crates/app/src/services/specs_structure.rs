@@ -169,7 +169,11 @@ impl SpecsStructureService<'_> {
         }
         for (path, content) in self.build_template_files(project_dir, &name) {
             let relative = Self::relative_to_project(project_dir, &path);
-            if self.app.specs.create_file_if_missing(&path, &content).unwrap_or(false) { created.push(relative) } else { existing.push(relative) }
+            if self.app.specs.create_file_if_missing(&path, &content).unwrap_or(false) {
+                created.push(relative)
+            } else {
+                existing.push(relative)
+            }
         }
         changed.extend(self.ensure_specs_in_gitignore(project_dir));
         changed.extend(self.ensure_env_files_in_gitignore(project_dir));
@@ -276,7 +280,11 @@ impl SpecsStructureService<'_> {
         for line in conflicts {
             self.app.log.warn("claude_md_run_line_without_https", &[("folder", json!(project_dir)), ("line", json!(line.chars().take(160).collect::<String>()))]);
         }
-        if changed { vec!["CLAUDE.md (How to run)".into()] } else { vec![] }
+        if changed {
+            vec!["CLAUDE.md (How to run)".into()]
+        } else {
+            vec![]
+        }
     }
 
     /// CLAUDE.md imports RULES.md (read in every session). Appends the line; never rewrites what exists.
@@ -333,7 +341,8 @@ impl SpecsStructureService<'_> {
             files.push((project_specs_dir.join(name), template.replace("{project_name}", project_name).replace("{today}", &today)));
         }
         let rules_block = extract_markdown_block(&self.read_template(RULES_TEMPLATE_NAME));
-        files.push((project_specs_dir.join(RULES_FILE_NAME), if rules_block.is_empty() { MINIMAL_RULES.to_string() } else { build_rules_without_examples(&rules_block) }));
+        files
+            .push((project_specs_dir.join(RULES_FILE_NAME), if rules_block.is_empty() { MINIMAL_RULES.to_string() } else { build_rules_without_examples(&rules_block) }));
         files
     }
 
@@ -403,7 +412,14 @@ mod tests {
         assert_eq!(std::fs::read_to_string(project.join(".specs/project/ROADMAP.md")).unwrap(), "mine");
         assert_eq!(SpecsStructureService::validate_conformance("x").unwrap_err().kind, Kind::InvalidPath);
         assert_eq!(service.initialize_structure(&dir.path().join("none").display().to_string(), None, "").unwrap_err().kind, Kind::InvalidPath);
-        let context = ProjectContext::new(Project { id: "p".into(), name: "Proj".into(), repo_path: folder.clone(), opened_at: String::new(), last_opened_at: String::new(), favorite: false });
+        let context = ProjectContext::new(Project {
+            id: "p".into(),
+            name: "Proj".into(),
+            repo_path: folder.clone(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        });
         assert_eq!(service.write_project_conformance(&context, "legacy").unwrap(), "LEGACY");
         assert_eq!(service.get_conformance(&folder).as_deref(), Some("LEGACY"));
     }

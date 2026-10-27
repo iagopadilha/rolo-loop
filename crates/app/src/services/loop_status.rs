@@ -93,7 +93,7 @@ impl LoopStatusService<'_> {
             status = Some(STATUS_RUNNING.into());
         } else if status.as_deref() == Some(STATUS_CONTINUE) {
             status = Some(STATUS_STOPPED.into()); // the script died in the middle of the loop
-            // finish(error) writes only meta.json; when it is newer than LOOP.json, it says why the loop stopped
+                                                  // finish(error) writes only meta.json; when it is newer than LOOP.json, it says why the loop stopped
             if meta.get("stopped").and_then(Value::as_str) == Some(STOPPED_BY_ERROR) && text_of(meta.get("finished_at")) >= text_of(loop_json.get("at")) {
                 status = Some(STATUS_ERROR.into());
                 reason = meta.get("reason").cloned().unwrap_or(Value::Null);
@@ -187,7 +187,11 @@ impl LoopStatusService<'_> {
             Some(Value::Object(repos)) if !repos.is_empty() => repos.keys().cloned().collect(),
             _ => project_repos::load_repos(context.repo_path()).into_iter().take(1).map(|r| r.name).collect(),
         };
-        let question = if awaiting { json!({"reason": loop_json.get("reason").cloned().unwrap_or(Value::Null), "options": to_text_list(loop_json.get("options")), "since": loop_json.get("at").cloned().unwrap_or(Value::Null)}) } else { Value::Null };
+        let question = if awaiting {
+            json!({"reason": loop_json.get("reason").cloned().unwrap_or(Value::Null), "options": to_text_list(loop_json.get("options")), "since": loop_json.get("at").cloned().unwrap_or(Value::Null)})
+        } else {
+            Value::Null
+        };
         let cost = meta.get("cost_usd").filter(|v| v.is_number()).cloned().unwrap_or(Value::Null);
         json!({
             "project_id": project.id, "name": project.name, "url": format!("/p/{}/", project.id), "running": true,
@@ -275,7 +279,11 @@ mod tests {
         let work = ctx.work_dir();
         let roadmap = std::path::Path::new(&work).join(".specs/project/ROADMAP.md");
         std::fs::create_dir_all(roadmap.parent().unwrap()).unwrap();
-        std::fs::write(&roadmap, "## Stage 2: API ##\n\n- [a] status=building title=\"A\" scope=Small stage=2 paths=src\n- [b] status=pending title=\"B\" scope=Small paths=src2\n").unwrap();
+        std::fs::write(
+            &roadmap,
+            "## Stage 2: API ##\n\n- [a] status=building title=\"A\" scope=Small stage=2 paths=src\n- [b] status=pending title=\"B\" scope=Small paths=src2\n",
+        )
+        .unwrap();
         assert_eq!(service.describe_stage(&work, &["a".to_string()]), json!("Stage 2: API"));
         assert_eq!(service.describe_stage(&work, &["b".to_string()]), json!("Stage 2:")); // the heading label "2:" has no word boundary, so only the generic title is built
         assert_eq!(service.describe_stage(&work, &["zzz".to_string()]), Value::Null);

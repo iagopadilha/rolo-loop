@@ -64,7 +64,8 @@ impl AppDiagnosticsService<'_> {
         let mut output = String::new();
         if self.app.claude.is_available() {
             let argv = vec![self.app.claude.get_binary(), "--version".into()];
-            let (code, stdout, stderr) = self.app.processes.run_and_wait(&argv, &self.app.config.app_root_dir.display().to_string(), CLAUDE_VERSION_TIMEOUT_SECONDS, None, &[], None);
+            let (code, stdout, stderr) =
+                self.app.processes.run_and_wait(&argv, &self.app.config.app_root_dir.display().to_string(), CLAUDE_VERSION_TIMEOUT_SECONDS, None, &[], None);
             let combined = format!("{stdout}\n{stderr}");
             let first = pycompat::splitlines(&combined).into_iter().map(str::trim).find(|l| !l.is_empty());
             if let (Some(line), 0) = (first, code) {
@@ -139,7 +140,9 @@ impl AppDiagnosticsService<'_> {
             return vec![];
         }
         let wanted = REQUIRED_TOOLKIT_SKILLS.iter().map(|n| (*n, true)).chain(OPTIONAL_TOOLKIT_SKILLS.iter().map(|n| (*n, false)));
-        wanted.map(|(name, required)| json!({"skill": name, "required": required, "present": Path::new(toolkit_root).join("skills").join(name).join("SKILL.md").is_file()})).collect()
+        wanted
+            .map(|(name, required)| json!({"skill": name, "required": required, "present": Path::new(toolkit_root).join("skills").join(name).join("SKILL.md").is_file()}))
+            .collect()
     }
 
     /// `[{"folder", "slot", "skill", "resolved"}]` for every Standards binding of the given projects (root and subprojects), resolved the way the
@@ -210,7 +213,12 @@ impl AppDiagnosticsService<'_> {
         } else if engine_state::notify_truthy(version.get("warning")) {
             warnings.push(text_or_empty(version.get("warning")));
         }
-        problems.extend(channels.iter().filter(|c| c["required"] == true && c["configured"] != true).map(|c| format!("required notify channel {} is not configured", c["name"].as_str().unwrap_or(""))));
+        problems.extend(
+            channels
+                .iter()
+                .filter(|c| c["required"] == true && c["configured"] != true)
+                .map(|c| format!("required notify channel {} is not configured", c["name"].as_str().unwrap_or(""))),
+        );
         let mcp = self.describe_mcp_policy();
         warnings.extend(mcp["warnings"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from));
         let mut env = self.app.env.clone();
@@ -255,7 +263,8 @@ impl AppDiagnosticsService<'_> {
         if !channels.is_empty() {
             argv.extend(["--channels".to_string(), channels.join(",")]);
         }
-        let (code, output, error) = self.app.processes.run_and_wait(&argv, &self.app.config.app_root_dir.display().to_string(), TEST_NOTIFICATION_TIMEOUT_SECONDS, None, &[], None);
+        let (code, output, error) =
+            self.app.processes.run_and_wait(&argv, &self.app.config.app_root_dir.display().to_string(), TEST_NOTIFICATION_TIMEOUT_SECONDS, None, &[], None);
         let mut results = Map::new();
         for line in pycompat::splitlines(&output) {
             if let Some(found) = NOTIFY_RESULT_LINE.match_start(line.trim()) {
@@ -286,7 +295,10 @@ mod tests {
         assert_eq!(report["toolkit"]["found"], false);
         assert_eq!(report["guard"]["found"], false);
         let problems: Vec<&str> = report["problems"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
-        assert!(problems.iter().any(|p| p.starts_with("orchestrator skill not found")) && problems.iter().any(|p| p.starts_with("claude-craft-kit not found")), "{problems:?}");
+        assert!(
+            problems.iter().any(|p| p.starts_with("orchestrator skill not found")) && problems.iter().any(|p| p.starts_with("claude-craft-kit not found")),
+            "{problems:?}"
+        );
         assert_eq!(report["notify_channels"].as_array().unwrap().len(), 5);
         assert!(report["notify_channels"].as_array().unwrap().iter().all(|c| c["required"] == false));
         assert_eq!(report["notify_channels"][0], json!({"name": "console", "enabled": true, "required": false, "configured": true}));

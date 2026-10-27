@@ -115,7 +115,11 @@ pub fn collect_expected_items(items: &Value) -> Vec<String> {
     if !identifiers.is_empty() {
         return identifiers;
     }
-    items.get("sections").and_then(Value::as_object).map(|s| s.iter().filter(|(_, present)| engine_state::notify_truthy(Some(present))).map(|(name, _)| name.clone()).collect()).unwrap_or_default()
+    items
+        .get("sections")
+        .and_then(Value::as_object)
+        .map(|s| s.iter().filter(|(_, present)| engine_state::notify_truthy(Some(present))).map(|(name, _)| name.clone()).collect())
+        .unwrap_or_default()
 }
 
 /// `{"covered": [...], "dropped": [{"item","reason"}], "missing": [...]}` for the source's items against the merged tables.

@@ -26,20 +26,26 @@ pub fn run(args: Args) -> i32 {
         let read = std::fs::read(&path).ok().and_then(|bytes| String::from_utf8(bytes).ok()).map(|t| t.strip_prefix('\u{feff}').unwrap_or(&t).to_string());
         let parsed = match read {
             Some(text) if text.trim().is_empty() => Ok(Map::new()),
-            Some(text) => serde_json::from_str::<Value>(&text).map_err(|e| e.to_string()).and_then(|v| v.as_object().cloned().ok_or_else(|| "not a JSON object".to_string())),
+            Some(text) => {
+                serde_json::from_str::<Value>(&text).map_err(|e| e.to_string()).and_then(|v| v.as_object().cloned().ok_or_else(|| "not a JSON object".to_string()))
+            }
             None => Err("cannot be read as UTF-8 text".to_string()),
         };
         match parsed {
             Ok(existing) => config = existing,
             Err(failure) => {
-                eprintln!("{} exists but cannot be read ({failure}): fix or remove it, then run install again. Nothing was written (your settings are kept).", path.display());
+                eprintln!(
+                    "{} exists but cannot be read ({failure}): fix or remove it, then run install again. Nothing was written (your settings are kept).",
+                    path.display()
+                );
                 return 1;
             }
         }
     }
     let repo_root = engine_state::app_ctx::repo_root(&env);
     let locator = Locator::new(env.clone(), repo_root.clone());
-    let configured = if args.skill_dir.is_empty() { config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("").to_string() } else { args.skill_dir.clone() };
+    let configured =
+        if args.skill_dir.is_empty() { config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("").to_string() } else { args.skill_dir.clone() };
     let skill_dir = locator.locate_orchestrator_skill_dir(&configured).display().to_string();
     let app_root = repo_root.join("app").display().to_string();
     config.insert("app_root_dir".into(), json!(app_root));
@@ -62,5 +68,9 @@ pub fn run(args: Args) -> i32 {
     println!("written: {}", path.display());
     println!("  app_root_dir = {app_root}");
     println!("  orchestrator_skill_dir = {}", if skill_dir.is_empty() { "(skill not found: run again with --skill-dir)" } else { &skill_dir });
-    if skill_dir.is_empty() { 1 } else { 0 }
+    if skill_dir.is_empty() {
+        1
+    } else {
+        0
+    }
 }

@@ -38,10 +38,13 @@ impl StructuredLog {
         entry.insert("level".into(), json!(level));
         entry.insert("event".into(), json!(event));
         for (key, value) in fields {
-            entry.insert((*key).to_string(), match value {
-                Value::String(s) => json!(redact_secrets(s)),
-                other => other.clone(),
-            });
+            entry.insert(
+                (*key).to_string(),
+                match value {
+                    Value::String(s) => json!(redact_secrets(s)),
+                    other => other.clone(),
+                },
+            );
         }
         let line = py_json_dumps(&Value::Object(entry), false);
         if self.mirror_to_console {

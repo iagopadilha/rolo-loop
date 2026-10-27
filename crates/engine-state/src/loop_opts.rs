@@ -402,8 +402,26 @@ mod tests {
         let o = opts(&["C:\\repo"]);
         assert_eq!((o.wave, o.budget, o.timeout, o.max_stall, o.limit_wait, o.limit_retries, o.max_cost), (3, 5.0, 60, 10, 30, 8, 50.0));
         assert_eq!((o.permission_mode.as_str(), o.orchestrator_model.as_str(), o.auto_answer, o.push_flag, o.rewind), ("auto", "opus", true, None, None));
-        let o = opts(&["C:\\repo", "--wave", "5", "--no-push", "--claude-fallback", "cc", "--claude-fallback=cc2", "--max-cost", "0", "--rewind", "-1", "--no-auto-answer", "--leftovers", "commit"]);
-        assert_eq!((o.wave, o.push_flag, o.claude_fallback.clone(), o.max_cost, o.rewind, o.auto_answer, o.leftovers.as_str()), (5, Some(false), vec!["cc".to_string(), "cc2".to_string()], 0.0, Some(-1), false, "commit"));
+        let o = opts(&[
+            "C:\\repo",
+            "--wave",
+            "5",
+            "--no-push",
+            "--claude-fallback",
+            "cc",
+            "--claude-fallback=cc2",
+            "--max-cost",
+            "0",
+            "--rewind",
+            "-1",
+            "--no-auto-answer",
+            "--leftovers",
+            "commit",
+        ]);
+        assert_eq!(
+            (o.wave, o.push_flag, o.claude_fallback.clone(), o.max_cost, o.rewind, o.auto_answer, o.leftovers.as_str()),
+            (5, Some(false), vec!["cc".to_string(), "cc2".to_string()], 0.0, Some(-1), false, "commit")
+        );
         let o = opts(&["--max-sta", "3", "C:\\repo", "--e2e"]);
         assert_eq!((o.max_stall, o.e2e, o.repo.as_str()), (3, true, "C:\\repo"));
     }

@@ -10,8 +10,8 @@
 use super::App;
 use crate::domain::errors::AppError;
 use crate::domain::project::ProjectContext;
-use engine_state::network_policy;
 use egress_policy::read_project_entries;
+use engine_state::network_policy;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -89,7 +89,9 @@ impl NetworkService<'_> {
     /// `apply` merges the valid suggested entries into NETWORK.json and deletes the suggestion file; `dismiss` only deletes it.
     pub fn answer_suggestion(&self, context: &ProjectContext, action: &Value, confirm: &Value) -> Result<Value, AppError> {
         require_confirm(confirm)?;
-        let Some(action) = action.as_str().filter(|a| SUGGESTION_ACTIONS.contains(a)) else { return Err(AppError::invalid_request("action must be 'apply' or 'dismiss'")) };
+        let Some(action) = action.as_str().filter(|a| SUGGESTION_ACTIONS.contains(a)) else {
+            return Err(AppError::invalid_request("action must be 'apply' or 'dismiss'"));
+        };
         let root = context.credentials_dir();
         let _guard = self.app.network_lock.lock().unwrap_or_else(|e| e.into_inner());
         if action == "dismiss" {

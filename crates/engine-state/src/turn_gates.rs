@@ -111,7 +111,8 @@ pub fn merge_verified_contracts(work: &str, meta: &mut Value, state: &mut Value,
         return;
     }
     let (features, _) = parse_roadmap(&read(&Path::new(work).join(".specs").join("project").join("ROADMAP.md")));
-    let mut handled: Vec<String> = meta.get("contract_merged_slugs").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+    let mut handled: Vec<String> =
+        meta.get("contract_merged_slugs").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
     let mut recorded = serde_json::Map::new();
     for (slug, feature) in features.iter() {
         if feature.status() != "verified" || handled.contains(slug) {
@@ -124,7 +125,15 @@ pub fn merge_verified_contracts(work: &str, meta: &mut Value, state: &mut Value,
             let warning = format!("back-end feature verified without .specs/features/{}/contract.md: SYSTEM.md was not updated", feature_folder_name(slug));
             warnings.push(warning.clone());
             println!("[loop] WARNING (contract merge, {slug}): {warning}");
-            decisions::append(work, slug, state_turn(state), "important", &format!("WARNING contract: {warning}"), "went on without the contract delta", "write the contract.md (routes, env, events) and merge it into SYSTEM.md");
+            decisions::append(
+                work,
+                slug,
+                state_turn(state),
+                "important",
+                &format!("WARNING contract: {warning}"),
+                "went on without the contract delta",
+                "write the contract.md (routes, env, events) and merge it into SYSTEM.md",
+            );
         }
         if result.changed {
             if let Some(m) = meta.as_object_mut() {
@@ -186,13 +195,15 @@ pub fn pause_on_quarantine(specs: &str, prev: Option<&serde_json::Map<String, Va
     }
     let old = parse_roadmap(&roadmap(prev.get("dir").and_then(Value::as_str).unwrap_or(""))).0;
     let new = parse_roadmap(&roadmap(specs)).0;
-    let fresh: Vec<String> = new.iter().filter(|(slug, f)| f.status() == "blocked" && old.get(slug).map(|o| o.status()) != Some("blocked")).map(|(s, _)| s.clone()).collect();
+    let fresh: Vec<String> =
+        new.iter().filter(|(slug, f)| f.status() == "blocked" && old.get(slug).map(|o| o.status()) != Some("blocked")).map(|(s, _)| s.clone()).collect();
     if fresh.is_empty() {
         return String::new();
     }
     let why = text(state.get("reason")).trim().to_string();
     let joined = fresh.join(", ");
-    let mut reason = format!("Quarantine after 2 failures: {joined}. The loop paused for you to decide (try again with guidance from you, or skip and carry on with the others).");
+    let mut reason =
+        format!("Quarantine after 2 failures: {joined}. The loop paused for you to decide (try again with guidance from you, or skip and carry on with the others).");
     if !why.is_empty() {
         reason.push_str(&format!(" Orchestrator detail: {}", why.chars().take(600).collect::<String>()));
     }
@@ -242,7 +253,11 @@ pub fn effective_cost_cap(meta: &Value, max_cost: f64) -> f64 {
         Some(Value::Bool(true)) => 1.0,
         _ => 0.0,
     };
-    if raised > 0.0 { raised } else { max_cost }
+    if raised > 0.0 {
+        raised
+    } else {
+        max_cost
+    }
 }
 
 pub fn cost_cap_reason(cost: f64, cap: f64) -> String {
@@ -274,7 +289,8 @@ mod tests {
 
     #[test]
     fn e2e_marks() {
-        let (_d, _w, specs) = project("## Stage 1\n- [a] status=verified\n- [b] status=verified e2e=ok\n- [c] status=building e2e=failed\n- [d] status=blocked e2e=failed\n");
+        let (_d, _w, specs) =
+            project("## Stage 1\n- [a] status=verified\n- [b] status=verified e2e=ok\n- [c] status=building e2e=failed\n- [d] status=blocked e2e=failed\n");
         assert_eq!(e2e_unmarked(&specs), vec!["a without e2e=", "c with e2e=failed"]);
     }
 

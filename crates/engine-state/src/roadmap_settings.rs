@@ -74,7 +74,13 @@ fn describe_default(key: &str) -> String {
     match value {
         Value::Bool(true) => "yes".into(),
         Value::Bool(false) => "no".into(),
-        Value::String(s) if s.is_empty() => if key == "branch" { "automatic".into() } else { "empty".into() },
+        Value::String(s) if s.is_empty() => {
+            if key == "branch" {
+                "automatic".into()
+            } else {
+                "empty".into()
+            }
+        }
         Value::String(s) => s,
         Value::Number(n) if n.is_f64() => format!("{:.1}", n.as_f64().unwrap_or(0.0)),
         other => other.to_string(),

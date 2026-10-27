@@ -37,7 +37,11 @@ pub fn planning_file_path(context: &ProjectContext, file_name: &str) -> PathBuf 
 /// Refuses `edit` -> `reference` while a loop worktree exists for the repo (the loop is still open).
 pub fn ensure_can_switch_to_reference(repo: &RepoRef) -> Result<(), AppError> {
     if !repo.primary && Path::new(&repo.loop_worktree_path()).is_dir() {
-        return Err(AppError::new(Kind::RepoConflict, format!("close the loop first: repository {} already has a loop worktree, so it cannot become reference", repo.name)).with_code(CLOSE_LOOP_FIRST_CODE));
+        return Err(AppError::new(
+            Kind::RepoConflict,
+            format!("close the loop first: repository {} already has a loop worktree, so it cannot become reference", repo.name),
+        )
+        .with_code(CLOSE_LOOP_FIRST_CODE));
     }
     Ok(())
 }
@@ -53,7 +57,10 @@ fn text_of(value: Option<&Value>) -> String {
 /// `[{"path", "reason"}]` refused by the last application of the chat's suggestion (empty list = none, or file absent/broken).
 pub fn load_last_rejections(context: &ProjectContext) -> Vec<Value> {
     let Some(data) = std::fs::read(planning_file_path(context, REJECTED_FILE_NAME)).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else { return vec![] };
-    data.get("rejected").and_then(Value::as_array).map(|rows| rows.iter().filter(|r| r.is_object()).map(|r| json!({"path": text_of(r.get("path")), "reason": text_of(r.get("reason"))})).collect()).unwrap_or_default()
+    data.get("rejected")
+        .and_then(Value::as_array)
+        .map(|rows| rows.iter().filter(|r| r.is_object()).map(|r| json!({"path": text_of(r.get("path")), "reason": text_of(r.get("reason"))})).collect())
+        .unwrap_or_default()
 }
 
 struct Valid {
@@ -119,7 +126,13 @@ impl PlanningReposService<'_> {
         let mut by_key: Vec<Valid> = Vec::new();
         for item in entries {
             let path = if item.is_object() { text_of(item.get("path")).trim().to_string() } else { String::new() };
-            let label = if !path.is_empty() { path.clone() } else if item.is_object() { text_of(item.get("name")) } else { text_of(Some(item)) };
+            let label = if !path.is_empty() {
+                path.clone()
+            } else if item.is_object() {
+                text_of(item.get("name"))
+            } else {
+                text_of(Some(item))
+            };
             let problem = self.find_problem(item, &path);
             if !problem.is_empty() {
                 rejected.push(json!({"path": label, "reason": problem}));
@@ -270,7 +283,14 @@ mod tests {
         let plain = dir.path().join("not-git");
         std::fs::create_dir_all(&plain).unwrap();
         std::fs::create_dir_all(Path::new(&primary).join(".specs/project")).unwrap();
-        let context = ProjectContext::new(Project { id: "p".into(), name: "main-app".into(), repo_path: primary.clone(), opened_at: String::new(), last_opened_at: String::new(), favorite: false });
+        let context = ProjectContext::new(Project {
+            id: "p".into(),
+            name: "main-app".into(),
+            repo_path: primary.clone(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        });
         let suggestion = json!({"repos": [
             {"path": other, "role": "reference", "reason": "contracts"},
             {"path": other, "role": "edit"},
@@ -288,7 +308,10 @@ mod tests {
         assert_eq!(applied.len(), 1);
         assert_eq!((applied[0]["name"].clone(), applied[0]["role"].clone(), applied[0]["reason"].clone()), (json!("shared-lib"), json!("edit"), json!("contracts")));
         let reasons: Vec<&str> = result["rejected"].as_array().unwrap().iter().map(|r| r["reason"].as_str().unwrap()).collect();
-        assert_eq!(reasons, ["not a git repository", "folder does not exist", "role must be edit or reference", "each repository must be an object with path, role and reason"]);
+        assert_eq!(
+            reasons,
+            ["not a git repository", "folder does not exist", "role must be edit or reference", "each repository must be an object with path, role and reason"]
+        );
         let stored = project_repos::load_repos(&primary);
         assert_eq!((stored.len(), stored[0].reason.clone(), stored[1].name.clone()), (2, "me".to_string(), "shared-lib".to_string()));
         assert_eq!(load_last_rejections(&context).len(), 4);

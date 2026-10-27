@@ -15,10 +15,12 @@ use std::sync::LazyLock;
 
 pub const SUBPROJECTS_RELATIVE_PATH: [&str; 3] = [".specs", "project", "SUBPROJECTS.json"];
 pub const SYSTEM_DOCUMENT: &str = "docs/codebase/SYSTEM.md";
-const PROJECT_FILE_PATTERNS: [&str; 10] = ["*.sln", "*.slnx", "*.csproj", "package.json", "pyproject.toml", "go.mod", "pom.xml", "Cargo.toml", "composer.json", "Gemfile"];
+const PROJECT_FILE_PATTERNS: [&str; 10] =
+    ["*.sln", "*.slnx", "*.csproj", "package.json", "pyproject.toml", "go.mod", "pom.xml", "Cargo.toml", "composer.json", "Gemfile"];
 const CONTAINER_NAMES: [&str; 4] = ["apps", "packages", "services", "src"];
 const PROJECT_FILE_DEPTH: i32 = 2;
-const STACK_BY_FILE: [(&str, &str); 6] = [("pyproject.toml", "python"), ("go.mod", "go"), ("pom.xml", "java"), ("Cargo.toml", "rust"), ("composer.json", "php"), ("Gemfile", "ruby")];
+const STACK_BY_FILE: [(&str, &str); 6] =
+    [("pyproject.toml", "python"), ("go.mod", "go"), ("pom.xml", "java"), ("Cargo.toml", "rust"), ("composer.json", "php"), ("Gemfile", "ruby")];
 const LOOP_WORKTREE_SUFFIX: &str = "-worktree-loop";
 static CONFORMANCE_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?m)^Conformance:\s*(STANDARD|LEGACY)\b"));
 
@@ -39,9 +41,8 @@ fn is_skipped_folder(name: &str) -> bool {
 }
 
 fn subfolders(folder: &Path) -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(folder)
-        .map(|r| r.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
-        .unwrap_or_default();
+    let mut names: Vec<String> =
+        std::fs::read_dir(folder).map(|r| r.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
     names.sort();
     names
 }
@@ -52,13 +53,7 @@ fn glob_in(folder: &Path, pattern: &str) -> Vec<String> {
         .map(|r| {
             r.flatten()
                 .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| {
-                    if cfg!(windows) {
-                        fnmatchcase(&n.to_lowercase(), &pattern.to_lowercase())
-                    } else {
-                        fnmatchcase(n, pattern)
-                    }
-                })
+                .filter(|n| if cfg!(windows) { fnmatchcase(&n.to_lowercase(), &pattern.to_lowercase()) } else { fnmatchcase(n, pattern) })
                 .collect()
         })
         .unwrap_or_default();
@@ -299,12 +294,11 @@ pub fn detect(root: &str) -> Value {
     }
     let mut taken = BTreeSet::new();
     let projects: Vec<Value> = paths.iter().map(|p| make_project(&root, p, &mut taken)).collect();
-    let warnings: Vec<String> = projects
-        .iter()
-        .filter_map(|p| p.get("warning").map(|w| format!("{}: {}", p["path"].as_str().unwrap_or(""), w.as_str().unwrap_or(""))))
-        .collect();
+    let warnings: Vec<String> =
+        projects.iter().filter_map(|p| p.get("warning").map(|w| format!("{}: {}", p["path"].as_str().unwrap_or(""), w.as_str().unwrap_or("")))).collect();
     result["monorepo"] = json!(true);
-    result["reason"] = json!(if patterns.is_empty() { format!("{} project folders under the root", paths.len()) } else { "workspaces of the root package.json".to_string() });
+    result["reason"] =
+        json!(if patterns.is_empty() { format!("{} project folders under the root", paths.len()) } else { "workspaces of the root package.json".to_string() });
     result["projects"] = Value::Array(projects);
     result["warnings"] = json!(warnings);
     result
@@ -328,9 +322,10 @@ pub fn read_repos(root: &str) -> (Map<String, Value>, String) {
     if !path.exists() {
         return (Map::new(), String::new());
     }
-    let parsed = std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| String::from_utf8(b).map_err(|e| e.to_string())).and_then(|t| {
-        serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(&t)).map_err(|e| e.to_string())
-    });
+    let parsed = std::fs::read(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|b| String::from_utf8(b).map_err(|e| e.to_string()))
+        .and_then(|t| serde_json::from_str::<Value>(t.strip_prefix('\u{feff}').unwrap_or(&t)).map_err(|e| e.to_string()));
     match parsed {
         Err(error) => (Map::new(), format!("unreadable SUBPROJECTS.json: {error}")),
         Ok(Value::Object(m)) => match m.get("repos") {
@@ -447,7 +442,8 @@ pub fn for_paths_lines(root: &str, paths: &[String], repo_name: Option<&str>) ->
         }
         seen.push((repo, base.clone()));
         let skill = project.get("skill").filter(|v| truthy(v)).map(|v| text_of(Some(v))).unwrap_or_else(|| "-".into());
-        lines.push(format!("SUBPROJECT: {base} | CLAUDE: {base}/CLAUDE.md | MAP: {base}/docs/codebase | SKILL: {skill} | CONFORMANCE: {}", read_conformance(root, &base)));
+        lines
+            .push(format!("SUBPROJECT: {base} | CLAUDE: {base}/CLAUDE.md | MAP: {base}/docs/codebase | SKILL: {skill} | CONFORMANCE: {}", read_conformance(root, &base)));
     }
     let mut system = std::path::PathBuf::from(root);
     for part in SYSTEM_DOCUMENT.split('/') {
@@ -466,7 +462,11 @@ fn flag_value(args: &[String], name: &str) -> Option<String> {
 /// `harness`-less module CLI: `subprojects.py detect|show|for-paths ...`; returns `(exit_code, stdout, stderr)`.
 pub fn run_cli(args: &[String]) -> (i32, String, String) {
     let Some(command) = args.first().map(String::as_str) else {
-        return (2, String::new(), "usage: subprojects.py [-h] {detect,show,for-paths} ...\nsubprojects.py: error: the following arguments are required: command\n".into());
+        return (
+            2,
+            String::new(),
+            "usage: subprojects.py [-h] {detect,show,for-paths} ...\nsubprojects.py: error: the following arguments are required: command\n".into(),
+        );
     };
     let Some(root) = args.get(1).filter(|a| !a.starts_with("--")) else {
         return (2, String::new(), format!("usage: subprojects.py {command} [-h] root\nsubprojects.py {command}: error: the following arguments are required: root\n"));
@@ -556,7 +556,8 @@ mod tests {
 
     #[test]
     fn folders_and_stacks_are_detected() {
-        let d = tree(&[("api/Api.csproj", ""), ("api/A.cs", ""), ("web/package.json", "{\"dependencies\": {\"react\": \"1\"}}"), ("web/x.tsx", ""), ("docs/readme.md", "")]);
+        let d =
+            tree(&[("api/Api.csproj", ""), ("api/A.cs", ""), ("web/package.json", "{\"dependencies\": {\"react\": \"1\"}}"), ("web/x.tsx", ""), ("docs/readme.md", "")]);
         let r = detect(&d.path().display().to_string());
         assert_eq!(r["monorepo"], true);
         assert_eq!(r["projects"][0]["stack"], "dotnet");
@@ -566,7 +567,12 @@ mod tests {
 
     #[test]
     fn workspaces_with_negation() {
-        let d = tree(&[("package.json", "{\"workspaces\": [\"packages/*\", \"!packages/skip\"]}"), ("packages/a/package.json", "{}"), ("packages/skip/package.json", "{}"), ("packages/b/package.json", "{}")]);
+        let d = tree(&[
+            ("package.json", "{\"workspaces\": [\"packages/*\", \"!packages/skip\"]}"),
+            ("packages/a/package.json", "{}"),
+            ("packages/skip/package.json", "{}"),
+            ("packages/b/package.json", "{}"),
+        ]);
         let r = detect(&d.path().display().to_string());
         let paths: Vec<&str> = r["projects"].as_array().unwrap().iter().map(|p| p["path"].as_str().unwrap()).collect();
         assert_eq!(paths, vec!["packages/a", "packages/b"]);

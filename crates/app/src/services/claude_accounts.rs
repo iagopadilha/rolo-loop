@@ -22,12 +22,8 @@ const KNOWN_METHODS: [&str; 3] = ["login", "token", "API key"];
 pub const MAIN_ROLE: &str = "main";
 /// Label word (what `auth status` gives) -> code kept in files.
 const METHOD_CODES: [(&str, &str); 3] = [("login", "login"), ("token", "token"), ("API key", "api_key")];
-pub const METHOD_WORDS: [(&str, &str); 4] = [
-    ("login", "subscription · browser login"),
-    ("token", "subscription · sign-in token"),
-    ("api_key", "API key · billed per token"),
-    ("", "sign-in unknown"),
-];
+pub const METHOD_WORDS: [(&str, &str); 4] =
+    [("login", "subscription · browser login"), ("token", "subscription · sign-in token"), ("api_key", "API key · billed per token"), ("", "sign-in unknown")];
 const UNKNOWN_COMMAND: &str = "unknown";
 const EXHAUSTED_PCT: f64 = 100.0;
 const WINDOW_LABELS: [(&str, &str); 2] = [("five_hour", "5-hour"), ("seven_day", "weekly")];
@@ -85,7 +81,11 @@ pub fn method_code(method: &str) -> String {
     if let Some((_, code)) = METHOD_CODES.iter().find(|(word, _)| *word == text) {
         return code.to_string();
     }
-    if !text.is_empty() && METHOD_WORDS.iter().any(|(code, _)| *code == text) { text.to_string() } else { String::new() }
+    if !text.is_empty() && METHOD_WORDS.iter().any(|(code, _)| *code == text) {
+        text.to_string()
+    } else {
+        String::new()
+    }
 }
 
 fn field_str(record: &Value, key: &str) -> String {
@@ -220,7 +220,11 @@ struct UsageRow {
 
 fn add_usage_row(rows: &mut BTreeMap<String, UsageRow>, key: String, field: &str, cost: f64) {
     let row = rows.entry(key).or_default();
-    if field == "turns" { row.turns += 1 } else { row.calls += 1 }
+    if field == "turns" {
+        row.turns += 1
+    } else {
+        row.calls += 1
+    }
     row.cost_usd += cost;
 }
 
@@ -440,14 +444,23 @@ mod tests {
         assert_eq!(command_name("C:\\bin\\cc.CMD"), "cc");
         assert_eq!(command_name(""), "");
         let parsed = parse_account_label("login dev@example.com (Acme, team)");
-        assert_eq!((parsed["method"].clone(), parsed["email"].clone(), parsed["org"].clone(), parsed["plan"].clone()), (json!("login"), json!("dev@example.com"), json!("Acme"), json!("team")));
+        assert_eq!(
+            (parsed["method"].clone(), parsed["email"].clone(), parsed["org"].clone(), parsed["plan"].clone()),
+            (json!("login"), json!("dev@example.com"), json!("Acme"), json!("team"))
+        );
         assert_eq!(parse_account_label("token, cc account claude2")["cc_account"], "claude2");
-        assert_eq!((method_code("API key"), method_code("api_key"), method_code("x"), method_code("")), ("api_key".into(), "api_key".into(), String::new(), String::new()));
+        assert_eq!(
+            (method_code("API key"), method_code("api_key"), method_code("x"), method_code("")),
+            ("api_key".into(), "api_key".into(), String::new(), String::new())
+        );
         let auth = build_turn_auth(&json!({"claude_account": "token dev@example.com"}));
         assert_eq!((auth["auth_method"].clone(), auth["auth_email"].clone()), (json!("token"), json!("dev@example.com")));
         let rows = build_window_rows(Some(&json!({"seven_day": {"pct": 100, "reset_at": 5.0}, "x_y": {"pct": 1}, "five_hour": {"pct": "bad"}})));
         assert_eq!(rows.iter().map(|r| r["key"].as_str().unwrap()).collect::<Vec<_>>(), ["seven_day", "x_y"]);
-        assert_eq!((rows[0]["exhausted"].clone(), rows[0]["label"].clone(), rows[1]["label"].clone(), rows[1]["reset_at"].clone()), (json!(true), json!("weekly"), json!("x y"), Value::Null));
+        assert_eq!(
+            (rows[0]["exhausted"].clone(), rows[0]["label"].clone(), rows[1]["label"].clone(), rows[1]["reset_at"].clone()),
+            (json!(true), json!("weekly"), json!("x y"), Value::Null)
+        );
         assert_eq!((format_g(60.0), format_g(33.3), format_g(0.5), format_g(1234567.0)), ("60".into(), "33.3".into(), "0.5".into(), "1.23457e+06".into()));
         assert_eq!(format_usage_line(&json!({"windows": []})), "usage unknown");
         assert_eq!(format_usage_line(&json!({"windows": [{"key": "five_hour", "label": "5-hour", "pct": 100.0, "exhausted": true}]})), "5-hour 100 % EXHAUSTED");
@@ -455,7 +468,11 @@ mod tests {
 
     #[test]
     fn totals_and_usage_view() {
-        let turns = vec![json!({"claude": "claude", "auth_method": "login", "cost_usd": 1.5}), json!({"claude": "cc", "auth_method": "token", "cost_usd": 0.25}), json!({"auth_method": "login"})];
+        let turns = vec![
+            json!({"claude": "claude", "auth_method": "login", "cost_usd": 1.5}),
+            json!({"claude": "cc", "auth_method": "token", "cost_usd": 0.25}),
+            json!({"auth_method": "login"}),
+        ];
         let totals = build_usage_totals(&turns, &[json!({"claude": "cc.cmd", "cost_usd": 1})]);
         assert_eq!(totals["by_method"][0]["method"], "login");
         assert_eq!((totals["turns"].clone(), totals["calls"].clone(), totals["cost_usd"].clone()), (json!(3), json!(1), json!(2.75)));
@@ -479,7 +496,10 @@ mod tests {
         assert_eq!(service.get_rows(true).len(), 1);
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         let current = service.build_current_account(&json!({"claude": "claude", "claude_switches": 2}));
-        assert_eq!((current["method"].clone(), current["email"].clone(), current["role"].clone(), current["switches"].clone(), current["label"].clone()), (json!("login"), json!("a@b.c"), json!("main"), json!(2), json!("L")));
+        assert_eq!(
+            (current["method"].clone(), current["email"].clone(), current["role"].clone(), current["switches"].clone(), current["label"].clone()),
+            (json!("login"), json!("a@b.c"), json!("main"), json!(2), json!("L"))
+        );
         let mismatch = service.build_current_account(&json!({"claude": "claude", "claude_account": "login other@x.y (Z, max)"}));
         assert_eq!((mismatch["org"].clone(), mismatch["plan"].clone()), (json!("Z"), json!("max")));
         let empty = ClaudeAccountService::new(Arc::new(|| panic!("boom")));

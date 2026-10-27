@@ -87,7 +87,14 @@ impl RepoCatalogService<'_> {
                 continue;
             }
             let path = entry.get("path").filter(|p| engine_state::notify_truthy(Some(p))).and_then(Value::as_str).unwrap_or(key).to_string();
-            let ids: Vec<Value> = entry.get("capabilities").and_then(Value::as_array).into_iter().flatten().filter(|c| c.is_object()).map(|c| c.get("id").cloned().unwrap_or(Value::Null)).collect();
+            let ids: Vec<Value> = entry
+                .get("capabilities")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|c| c.is_object())
+                .map(|c| c.get("id").cloned().unwrap_or(Value::Null))
+                .collect();
             repos.push(json!({
                 "name": entry.get("name").cloned().unwrap_or(json!("")), "path": path, "weak": engine_state::notify_truthy(entry.get("weak")), "stale": self.is_stale(&path, entry),
                 "purpose": entry.get("purpose").cloned().unwrap_or(json!("")), "capability_ids": ids,
@@ -181,7 +188,16 @@ impl RepoCatalogService<'_> {
             }
         };
         self.finish_job(job_id, state, &error);
-        let cost = self.app.catalog_state.lock().unwrap_or_else(|e| e.into_inner()).jobs.iter().find(|(id, _)| id == job_id).map(|(_, j)| j["cost_usd"].clone()).unwrap_or(json!(0));
+        let cost = self
+            .app
+            .catalog_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .jobs
+            .iter()
+            .find(|(id, _)| id == job_id)
+            .map(|(_, j)| j["cost_usd"].clone())
+            .unwrap_or(json!(0));
         self.app.log.info("repo_catalog_finished", &[("job", json!(job_id)), ("state", json!(state)), ("cost_usd", cost)]);
     }
 

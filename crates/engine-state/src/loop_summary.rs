@@ -140,11 +140,8 @@ fn add_repositories_section(add: &mut Vec<String>, meta: &Value, primary_root: &
         let entry = &repos[name];
         let primary = truthy(entry.get("primary"));
         let worktree = if primary { primary_root.to_string() } else { pystr(entry.get("worktree"), "") };
-        let delivery = if worktree.is_empty() {
-            Value::Object(Default::default())
-        } else {
-            load_json(&Path::new(&worktree).join(".specs/project/loop/json/delivery.json"))
-        };
+        let delivery =
+            if worktree.is_empty() { Value::Object(Default::default()) } else { load_json(&Path::new(&worktree).join(".specs/project/loop/json/delivery.json")) };
         add.push(String::new());
         add.push(format!("### {name}{}", if primary { " (primary)" } else { "" }));
         add.push(String::new());
@@ -164,7 +161,11 @@ fn add_repositories_section(add: &mut Vec<String>, meta: &Value, primary_root: &
                 "-30".into()
             };
             let (code, out, _) = git(&worktree, &["log", "--oneline", "--no-decorate", &range]);
-            if code == 0 { out } else { String::new() }
+            if code == 0 {
+                out
+            } else {
+                String::new()
+            }
         } else {
             String::new()
         };
@@ -175,7 +176,11 @@ fn add_repositories_section(add: &mut Vec<String>, meta: &Value, primary_root: &
 
 fn git_out(root: &str, args: &[&str]) -> String {
     let (code, out, _) = git(root, args);
-    if code == 0 { out } else { String::new() }
+    if code == 0 {
+        out
+    } else {
+        String::new()
+    }
 }
 
 pub const USAGE: &str = include_str!("loop_summary_usage.txt");
@@ -200,7 +205,12 @@ pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
     let (mut cost, mut duration, mut turns) = (0.0f64, 0.0f64, 0usize);
     let turns_dir = specs.join("project/loop/internal/turns");
     let mut files: Vec<String> = std::fs::read_dir(&turns_dir)
-        .map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".json") && n.chars().next().is_some_and(|c| c.is_ascii_digit())).collect())
+        .map(|r| {
+            r.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.ends_with(".json") && n.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                .collect()
+        })
         .unwrap_or_default();
     files.sort();
     for name in files {
@@ -235,17 +245,37 @@ pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
     out.push(format!("# Loop summary: {project}"));
     out.push(String::new());
     out.push(format!("- Generated: {stamp} (by script, no Claude)"));
-    out.push(format!("- Loop branch: `{}`{}", if branch.is_empty() { "not reported" } else { &branch }, if base.is_empty() { String::new() } else { format!(" (base `{base}`)") }));
+    out.push(format!(
+        "- Loop branch: `{}`{}",
+        if branch.is_empty() { "not reported" } else { &branch },
+        if base.is_empty() { String::new() } else { format!(" (base `{base}`)") }
+    ));
     out.push(format!("- Work folder: `{root}`"));
     out.push(format!("- Turns run: {turns_shown} | total cost: US$ {cost:.2} | time in turns: {:.0} min", duration / 60000.0));
     let max_cost_flag = opt("--max-cost", "0");
     let cap = {
         let from_meta = number(meta.get("max_cost_usd"));
-        if from_meta != 0.0 { from_meta } else { max_cost_flag.parse::<f64>().unwrap_or(0.0) }
+        if from_meta != 0.0 {
+            from_meta
+        } else {
+            max_cost_flag.parse::<f64>().unwrap_or(0.0)
+        }
     };
-    let spent = if meta.get("cost_usd").is_some() && truthy(meta.get("cost_usd")) { number(meta.get("cost_usd")) } else if meta.get("cost_usd").is_some() { 0.0 } else { cost };
+    let spent = if meta.get("cost_usd").is_some() && truthy(meta.get("cost_usd")) {
+        number(meta.get("cost_usd"))
+    } else if meta.get("cost_usd").is_some() {
+        0.0
+    } else {
+        cost
+    };
     out.push(format!("- Spend: US$ {spent:.2} of the US$ {} cap | turns: {turns_shown}", if cap != 0.0 { format!("{cap:.2}") } else { "no".into() }));
-    let stopped = if truthy(meta.get("stopped")) { pystr(meta.get("stopped"), "") } else if truthy(loop_json.get("status")) { pystr(loop_json.get("status"), "") } else { "not reported".into() };
+    let stopped = if truthy(meta.get("stopped")) {
+        pystr(meta.get("stopped"), "")
+    } else if truthy(loop_json.get("status")) {
+        pystr(loop_json.get("status"), "")
+    } else {
+        "not reported".into()
+    };
     let reason = if truthy(meta.get("reason")) { pystr(meta.get("reason"), "") } else { pystr(loop_json.get("reason").filter(|v| truthy(Some(v))), "") };
     out.push(format!("- Stop reason: **{stopped}**{}", if reason.is_empty() { String::new() } else { format!(" - {reason}") }));
     out.push(format!("- Branch push: {}", if meta.get("push").is_some() { pystr(meta.get("push"), "") } else { "not done".into() }));
@@ -352,7 +382,11 @@ pub fn run_cli(args: &[String], env: &Env) -> (i32, String) {
     }
     let dest = {
         let d = opt("--out", "");
-        if d.is_empty() { default_output_dir(env) } else { d }
+        if d.is_empty() {
+            default_output_dir(env)
+        } else {
+            d
+        }
     };
     let _ = std::fs::create_dir_all(&dest);
     let target = nt_join(&dest, &format!("loop-summary-{project}-{day}.md"));

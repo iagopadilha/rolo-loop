@@ -22,7 +22,8 @@ pub const PROJECT_NAME_MAX_LENGTH: usize = 100;
 const INITIAL_COMMIT_MESSAGE: &str = "chore: initial project structure (loop-harness)";
 
 fn is_windows_reserved(name: &str) -> bool {
-    matches!(name, "con" | "prn" | "aux" | "nul") || ["com", "lpt"].iter().any(|prefix| name.strip_prefix(prefix).is_some_and(|n| matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")))
+    matches!(name, "con" | "prn" | "aux" | "nul")
+        || ["com", "lpt"].iter().any(|prefix| name.strip_prefix(prefix).is_some_and(|n| matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")))
 }
 
 /// `/p/<id>/`
@@ -95,7 +96,14 @@ impl ProjectService<'_> {
             }
             None => {
                 let name = pycompat::last_segment(&pycompat::nt_normpath(&folder)).to_string();
-                Project { id: project_id, name: if name.is_empty() { folder.clone() } else { name }, repo_path: folder.clone(), opened_at: now.clone(), last_opened_at: now, favorite: false }
+                Project {
+                    id: project_id,
+                    name: if name.is_empty() { folder.clone() } else { name },
+                    repo_path: folder.clone(),
+                    opened_at: now.clone(),
+                    last_opened_at: now,
+                    favorite: false,
+                }
             }
         };
         self.app.projects.write_project(&project).map_err(|e| AppError::invalid_path(format!("the project registry cannot be written: {e}")))?;
@@ -109,7 +117,10 @@ impl ProjectService<'_> {
         let parent_dir = Self::validate_existing_folder(parent_path, &self.app.env.home_dir())?;
         let destination = Path::new(&parent_dir).join(&validated_name);
         if destination.exists() && (!destination.is_dir() || std::fs::read_dir(&destination).map(|mut d| d.next().is_some()).unwrap_or(true)) {
-            return Err(AppError::new(Kind::ProjectAlreadyExists, format!("{} already exists with content: choose another name or use Open folder", destination.display())));
+            return Err(AppError::new(
+                Kind::ProjectAlreadyExists,
+                format!("{} already exists with content: choose another name or use Open folder", destination.display()),
+            ));
         }
         let _ = std::fs::create_dir_all(&destination);
         let destination = destination.display().to_string();
@@ -158,7 +169,10 @@ impl ProjectService<'_> {
         let (port, url) = monitor_location(&app_url, &context.project.id);
         let data = json!({"pid": std::process::id(), "port": port, "url": url, "repo": context.repo_path(), "work": work, "started_at": self.app.started_at});
         if let Err(failure) = self.app.specs.write_json_atomic(&path, &data) {
-            self.app.log.warn("monitor_json_not_written", &[("path", json!(path.display().to_string())), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))]);
+            self.app.log.warn(
+                "monitor_json_not_written",
+                &[("path", json!(path.display().to_string())), ("message", json!(failure.to_string().chars().take(200).collect::<String>()))],
+            );
             return;
         }
         let key = path.display().to_string();

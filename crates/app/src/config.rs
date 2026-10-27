@@ -201,7 +201,10 @@ mod tests {
         assert_eq!(notes[0], "b in config.json is not a positive number (-1): using 9");
         assert_eq!(notes[1], "c in config.json is not a positive number ('x'): using 9");
         assert_eq!(notes[2], "d in config.json is not a positive number (True): using 9");
-        assert_eq!((read_float(Some(&json!("8")), 1.0), read_float(Some(&json!(true)), 1.0), read_float(None, 2.0), read_float(Some(&json!([1])), 3.0)), (8.0, 1.0, 2.0, 3.0));
+        assert_eq!(
+            (read_float(Some(&json!("8")), 1.0), read_float(Some(&json!(true)), 1.0), read_float(None, 2.0), read_float(Some(&json!([1])), 3.0)),
+            (8.0, 1.0, 2.0, 3.0)
+        );
         assert_eq!(read_orchestrator_model(&Map::new()), "opus");
         assert_eq!(read_orchestrator_model(json!({"orchestrator_model": " sonnet "}).as_object().unwrap()), "sonnet");
         assert_eq!(read_orchestrator_model(json!({"orchestrator_model": 3}).as_object().unwrap()), "opus");

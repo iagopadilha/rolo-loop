@@ -45,33 +45,123 @@ pub struct Feature {
 }
 
 pub const FEATURES: [Feature; 9] = [
-    Feature { slug: "payments-api", stage: 1, title: "Payments API", kind: "back", scope: "Medium", paths: "services/payments-api", deps: "", prefix: "PAY", file: "services/payments-api/handlers.py",
+    Feature {
+        slug: "payments-api",
+        stage: 1,
+        title: "Payments API",
+        kind: "back",
+        scope: "Medium",
+        paths: "services/payments-api",
+        deps: "",
+        prefix: "PAY",
+        file: "services/payments-api/handlers.py",
         goal: "Authorize, capture and refund card payments behind one idempotent REST API, with provider webhooks verified and replayed safely.",
-        requirements: &["authorize and capture with an idempotency key", "partial and full refunds", "verify webhook signatures", "replay failed webhooks with backoff"] },
-    Feature { slug: "audit-log", stage: 1, title: "Audit log", kind: "back", scope: "Small", paths: "services/audit-log", deps: "", prefix: "AUD", file: "services/audit-log/writer.py",
+        requirements: &["authorize and capture with an idempotency key", "partial and full refunds", "verify webhook signatures", "replay failed webhooks with backoff"],
+    },
+    Feature {
+        slug: "audit-log",
+        stage: 1,
+        title: "Audit log",
+        kind: "back",
+        scope: "Small",
+        paths: "services/audit-log",
+        deps: "",
+        prefix: "AUD",
+        file: "services/audit-log/writer.py",
         goal: "Append-only record of every money movement and admin action, queryable by order and by actor.",
-        requirements: &["append-only writes", "query by order id", "query by actor"] },
-    Feature { slug: "rate-limiter", stage: 1, title: "Rate limiter", kind: "generic", scope: "Small", paths: "infra/rate-limiter", deps: "", prefix: "RTL", file: "infra/rate-limiter/limits.yaml",
+        requirements: &["append-only writes", "query by order id", "query by actor"],
+    },
+    Feature {
+        slug: "rate-limiter",
+        stage: 1,
+        title: "Rate limiter",
+        kind: "generic",
+        scope: "Small",
+        paths: "infra/rate-limiter",
+        deps: "",
+        prefix: "RTL",
+        file: "infra/rate-limiter/limits.yaml",
         goal: "Token-bucket limits per API key at the edge, so a single client cannot starve checkout.",
-        requirements: &["token bucket per API key", "burst allowance", "429 with Retry-After"] },
-    Feature { slug: "cart-service", stage: 2, title: "Cart service", kind: "back", scope: "Medium", paths: "services/cart-service", deps: "payments-api", prefix: "CRT", file: "services/cart-service/cart.py",
+        requirements: &["token bucket per API key", "burst allowance", "429 with Retry-After"],
+    },
+    Feature {
+        slug: "cart-service",
+        stage: 2,
+        title: "Cart service",
+        kind: "back",
+        scope: "Medium",
+        paths: "services/cart-service",
+        deps: "payments-api",
+        prefix: "CRT",
+        file: "services/cart-service/cart.py",
         goal: "Server-side cart with price snapshots, stock reservation for 15 minutes and a single total the payment step trusts.",
-        requirements: &["add, update and remove items", "price snapshot per line", "reserve stock for 15 minutes", "one signed total"] },
-    Feature { slug: "coupon-rules", stage: 2, title: "Coupon rules", kind: "back", scope: "Small", paths: "services/coupon-rules", deps: "cart-service", prefix: "CPN", file: "services/coupon-rules/rules.py",
+        requirements: &["add, update and remove items", "price snapshot per line", "reserve stock for 15 minutes", "one signed total"],
+    },
+    Feature {
+        slug: "coupon-rules",
+        stage: 2,
+        title: "Coupon rules",
+        kind: "back",
+        scope: "Small",
+        paths: "services/coupon-rules",
+        deps: "cart-service",
+        prefix: "CPN",
+        file: "services/coupon-rules/rules.py",
         goal: "Percentage and fixed coupons with expiry, minimum order and one-use-per-customer rules, applied to the cart total.",
-        requirements: &["percentage and fixed coupons", "expiry and minimum order", "one use per customer"] },
-    Feature { slug: "checkout-ui", stage: 2, title: "Checkout UI", kind: "front", scope: "Large", paths: "web/checkout-ui", deps: "cart-service,dir:web/shared", prefix: "CUI", file: "web/checkout-ui/CheckoutPage.tsx",
+        requirements: &["percentage and fixed coupons", "expiry and minimum order", "one use per customer"],
+    },
+    Feature {
+        slug: "checkout-ui",
+        stage: 2,
+        title: "Checkout UI",
+        kind: "front",
+        scope: "Large",
+        paths: "web/checkout-ui",
+        deps: "cart-service,dir:web/shared",
+        prefix: "CUI",
+        file: "web/checkout-ui/CheckoutPage.tsx",
         goal: "Three-step checkout (cart, address, payment) with inline validation, a coupon field and a clear error on declined cards.",
-        requirements: &["cart, address and payment steps", "inline validation", "coupon field", "declined-card message", "keyboard only flow"] },
-    Feature { slug: "invoice-pdf", stage: 3, title: "Invoice PDF", kind: "back", scope: "Medium", paths: "services/invoice-pdf", deps: "payments-api,audit-log", prefix: "INV", file: "services/invoice-pdf/render.py",
+        requirements: &["cart, address and payment steps", "inline validation", "coupon field", "declined-card message", "keyboard only flow"],
+    },
+    Feature {
+        slug: "invoice-pdf",
+        stage: 3,
+        title: "Invoice PDF",
+        kind: "back",
+        scope: "Medium",
+        paths: "services/invoice-pdf",
+        deps: "payments-api,audit-log",
+        prefix: "INV",
+        file: "services/invoice-pdf/render.py",
         goal: "Numbered PDF invoice per captured payment, rendered from a template and stored next to the order.",
-        requirements: &["sequential invoice numbers", "PDF from a template", "store with the order"] },
-    Feature { slug: "email-receipts", stage: 3, title: "Email receipts", kind: "back", scope: "Small", paths: "services/email-receipts", deps: "invoice-pdf", prefix: "EML", file: "services/email-receipts/send.py",
+        requirements: &["sequential invoice numbers", "PDF from a template", "store with the order"],
+    },
+    Feature {
+        slug: "email-receipts",
+        stage: 3,
+        title: "Email receipts",
+        kind: "back",
+        scope: "Small",
+        paths: "services/email-receipts",
+        deps: "invoice-pdf",
+        prefix: "EML",
+        file: "services/email-receipts/send.py",
         goal: "Receipt email with the invoice attached, sent once per order and retried when the mail provider is down.",
-        requirements: &["one receipt per order", "invoice attached", "retry on provider failure"] },
-    Feature { slug: "admin-dashboard", stage: 3, title: "Admin dashboard", kind: "front", scope: "Medium", paths: "web/admin-dashboard", deps: "audit-log,dir:web/shared", prefix: "ADM", file: "web/admin-dashboard/OrdersPage.tsx",
+        requirements: &["one receipt per order", "invoice attached", "retry on provider failure"],
+    },
+    Feature {
+        slug: "admin-dashboard",
+        stage: 3,
+        title: "Admin dashboard",
+        kind: "front",
+        scope: "Medium",
+        paths: "web/admin-dashboard",
+        deps: "audit-log,dir:web/shared",
+        prefix: "ADM",
+        file: "web/admin-dashboard/OrdersPage.tsx",
         goal: "Back-office list of orders with payment status, refunds and the audit trail of each order.",
-        requirements: &["orders list with filters", "refund button with confirmation", "audit trail per order"] },
+        requirements: &["orders list with filters", "refund button with confirmation", "audit trail per order"],
+    },
 ];
 
 pub fn feature(slug: &str) -> &'static Feature {
@@ -79,8 +169,18 @@ pub fn feature(slug: &str) -> &'static Feature {
 }
 
 pub const SCAFFOLD_FOLDERS: [&str; 12] = [
-    "services/payments-api", "services/audit-log", "services/cart-service", "services/coupon-rules", "services/invoice-pdf", "services/email-receipts", "infra/rate-limiter",
-    "infra/prod", "web/shared", "web/checkout-ui", "web/admin-dashboard", "migrations",
+    "services/payments-api",
+    "services/audit-log",
+    "services/cart-service",
+    "services/coupon-rules",
+    "services/invoice-pdf",
+    "services/email-receipts",
+    "infra/rate-limiter",
+    "infra/prod",
+    "web/shared",
+    "web/checkout-ui",
+    "web/admin-dashboard",
+    "migrations",
 ];
 
 pub const PROJECT_TEXT: &str = "# acme-checkout
@@ -278,7 +378,11 @@ fn test_command(item: &Feature) -> String {
 }
 
 fn lint_command(item: &Feature) -> String {
-    if item.kind == "front" { format!("npm run lint --prefix {}", item.paths) } else { format!("ruff check {}", item.paths) }
+    if item.kind == "front" {
+        format!("npm run lint --prefix {}", item.paths)
+    } else {
+        format!("ruff check {}", item.paths)
+    }
 }
 
 fn path_scope_reason(paths: &str) -> String {
@@ -321,9 +425,11 @@ fn build_execution_steps(slugs: &[&'static str], blocks: &[(&'static str, Action
 /// `[(turn number, [steps])]`: turns 1-2 are seeded instantly, the rest are animated.
 pub fn build_turn_plans() -> Vec<TurnPlan> {
     let (stage_1, stage_2, stage_3) = (stage_slugs(1), stage_slugs(2), stage_slugs(3));
-    let migration_block = guard_block("audit-log", "Write", json!({"file_path": "migrations/0007_drop_users.sql"}), "project-deny", "path forbidden by the project: (^|/)migrations/");
+    let migration_block =
+        guard_block("audit-log", "Write", json!({"file_path": "migrations/0007_drop_users.sql"}), "project-deny", "path forbidden by the project: (^|/)migrations/");
     let terraform_block = guard_block("rate-limiter", "Edit", json!({"file_path": "infra/prod/terraform.tfvars"}), "path-scope", path_scope_reason("infra/rate-limiter"));
-    let commit_block = guard_block("admin-dashboard", "Bash", json!({"command": "git commit -am \"wip dashboard\""}), "git-write", "git commit: write git is the orchestrator's only");
+    let commit_block =
+        guard_block("admin-dashboard", "Bash", json!({"command": "git commit -am \"wip dashboard\""}), "git-write", "git commit: write git is the orchestrator's only");
     let mut plans: Vec<TurnPlan> = Vec::new();
 
     let mut turn_1 = build_spec_steps(&stage_1);
@@ -332,7 +438,14 @@ pub fn build_turn_plans() -> Vec<TurnPlan> {
 
     let mut turn_2 = build_gate_step(&stage_1);
     turn_2.extend(build_execution_steps(&["payments-api", "audit-log"], &[("audit-log", migration_block)]));
-    turn_2.last_mut().unwrap().push(end_turn("continue", "payments-api and audit-log verified (2 commits); the guard blocked a migration write.", "", "rate-limiter", &[], &[]));
+    turn_2.last_mut().unwrap().push(end_turn(
+        "continue",
+        "payments-api and audit-log verified (2 commits); the guard blocked a migration write.",
+        "",
+        "rate-limiter",
+        &[],
+        &[],
+    ));
     plans.push((2, turn_2));
 
     let mut turn_3 = build_execution_steps(&["rate-limiter"], &[("rate-limiter", terraform_block)]);
@@ -348,7 +461,14 @@ pub fn build_turn_plans() -> Vec<TurnPlan> {
 
     let mut turn_5 = build_gate_step(&stage_2);
     turn_5.extend(build_execution_steps(&["cart-service"], &[]));
-    turn_5.last_mut().unwrap().push(end_turn("continue", "cart-service verified; coupon-rules and checkout-ui were waiting on it.", "", "coupon-rules + checkout-ui", &[], &[]));
+    turn_5.last_mut().unwrap().push(end_turn(
+        "continue",
+        "cart-service verified; coupon-rules and checkout-ui were waiting on it.",
+        "",
+        "coupon-rules + checkout-ui",
+        &[],
+        &[],
+    ));
     plans.push((5, turn_5));
 
     let mut turn_6 = build_execution_steps(&["coupon-rules"], &[]);
@@ -362,7 +482,14 @@ pub fn build_turn_plans() -> Vec<TurnPlan> {
         agent_return("checkout-ui", "STATUS: NEEDS_CONFIRM\nSUMMARY: coupon field position is a product decision."),
         status("checkout-ui", "approved"),
     ]);
-    turn_6.last_mut().unwrap().push(end_turn("awaiting_user", "coupon-rules verified; checkout-ui needs a decision from you.", QUESTION_REASON, "", &QUESTION_OPTIONS, &QUESTION_TO_CHECK));
+    turn_6.last_mut().unwrap().push(end_turn(
+        "awaiting_user",
+        "coupon-rules verified; checkout-ui needs a decision from you.",
+        QUESTION_REASON,
+        "",
+        &QUESTION_OPTIONS,
+        &QUESTION_TO_CHECK,
+    ));
     turn_6.push(vec![Action::WaitForAnswer { question: QUESTION_REASON.into(), answer: QUESTION_ANSWER.into(), hold_seconds: QUESTION_HOLD_SECONDS }]);
     plans.push((6, turn_6));
 
@@ -379,7 +506,14 @@ pub fn build_turn_plans() -> Vec<TurnPlan> {
 
     let mut turn_9 = build_gate_step(&stage_3);
     turn_9.extend(build_execution_steps(&["invoice-pdf", "admin-dashboard"], &[("admin-dashboard", commit_block)]));
-    turn_9.last_mut().unwrap().push(end_turn("continue", "invoice-pdf and admin-dashboard verified; the guard blocked a git commit from an executor.", "", "email-receipts", &[], &[]));
+    turn_9.last_mut().unwrap().push(end_turn(
+        "continue",
+        "invoice-pdf and admin-dashboard verified; the guard blocked a git commit from an executor.",
+        "",
+        "email-receipts",
+        &[],
+        &[],
+    ));
     plans.push((9, turn_9));
 
     let mut turn_10 = build_execution_steps(&["email-receipts"], &[]);
@@ -399,7 +533,8 @@ mod tests {
     fn the_story_has_ten_turns_and_every_feature_gets_verified() {
         let plans = build_turn_plans();
         assert_eq!(plans.len(), 10);
-        let commits: Vec<&str> = plans.iter().flat_map(|(_, steps)| steps.iter().flatten()).filter_map(|a| if let Action::Commit { slug } = a { Some(*slug) } else { None }).collect();
+        let commits: Vec<&str> =
+            plans.iter().flat_map(|(_, steps)| steps.iter().flatten()).filter_map(|a| if let Action::Commit { slug } = a { Some(*slug) } else { None }).collect();
         assert_eq!(commits.len(), 9);
         for item in &FEATURES {
             assert!(commits.contains(&item.slug), "{} is never committed", item.slug);

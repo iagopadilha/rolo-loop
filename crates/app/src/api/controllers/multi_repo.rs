@@ -3,7 +3,7 @@
 //! and push", the follow-up rounds, reopen planning, the per-repo readiness guard and the quarantine of a blocked feature.
 
 use super::route;
-use crate::api::responses::{context_of, respond_converting_errors, respond_json, respond_with_project_context, guard_repos_free};
+use crate::api::responses::{context_of, guard_repos_free, respond_converting_errors, respond_json, respond_with_project_context};
 use crate::api::router::{Request, Response, Router};
 use crate::domain::project::ProjectContext;
 use crate::services::App;
@@ -86,7 +86,16 @@ fn list_repos(app: &App, request: &Request) -> Response {
 }
 
 fn add_repo(app: &App, request: &Request) -> Response {
-    respond_json(|| app.repo_registry().add_repo(&context_of(app, request)?, &request.value("path"), request.opt("copy"), request.opt("setup"), request.opt("role"), request.opt("reason")))
+    respond_json(|| {
+        app.repo_registry().add_repo(
+            &context_of(app, request)?,
+            &request.value("path"),
+            request.opt("copy"),
+            request.opt("setup"),
+            request.opt("role"),
+            request.opt("reason"),
+        )
+    })
 }
 
 fn set_role(app: &App, request: &Request) -> Response {
@@ -162,7 +171,8 @@ fn check_close_loop(app: &App, request: &Request) -> Response {
 
 /// Forcing and finishing go through wrap-up/finish only (typed confirmation).
 fn close_loop(app: &App, request: &Request) -> Response {
-    let body: serde_json::Map<String, Value> = request.body_map().iter().filter(|(name, _)| !matches!(name.as_str(), "force_remove" | "finished")).map(|(k, v)| (k.clone(), v.clone())).collect();
+    let body: serde_json::Map<String, Value> =
+        request.body_map().iter().filter(|(name, _)| !matches!(name.as_str(), "force_remove" | "finished")).map(|(k, v)| (k.clone(), v.clone())).collect();
     respond_json(|| app.loop_worktrees().close_loop(&context_of(app, request)?, &Value::Object(body)))
 }
 
@@ -248,7 +258,9 @@ fn start_quarantine_summary(app: &App, request: &Request) -> Response {
 }
 
 fn retry_quarantined(app: &App, request: &Request) -> Response {
-    with_context_after_planning(app, request, |context| guard_repos_free(app, context, || reply(app.quarantine().retry_feature(context, request.param("slug"), &request.body))))
+    with_context_after_planning(app, request, |context| {
+        guard_repos_free(app, context, || reply(app.quarantine().retry_feature(context, request.param("slug"), &request.body)))
+    })
 }
 
 fn skip_quarantined(app: &App, request: &Request) -> Response {

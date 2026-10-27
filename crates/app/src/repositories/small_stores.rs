@@ -446,7 +446,11 @@ mod tests {
         assert_eq!(read_feature_tasks(&w, "f")["source"], "none");
         let folder = PathBuf::from(loop_state::feature_dir(&w, "f"));
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("tasks.md"), "### T1: first\n**Files**: a.rs\n\n### T2: second [P]\n**Deps**: T1\n**Files**: b.rs\n\n### T3: third [P]\n**Deps**: T1\n**Files**: c.rs\n").unwrap();
+        std::fs::write(
+            folder.join("tasks.md"),
+            "### T1: first\n**Files**: a.rs\n\n### T2: second [P]\n**Deps**: T1\n**Files**: b.rs\n\n### T3: third [P]\n**Deps**: T1\n**Files**: c.rs\n",
+        )
+        .unwrap();
         task_waves::set_task_status(&w, "f", "T1", "done", "ok").unwrap();
         let read = read_feature_tasks(&w, "f");
         assert_eq!(read["source"], "tasks.md");

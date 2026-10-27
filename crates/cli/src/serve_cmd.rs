@@ -45,7 +45,8 @@ pub fn run(args: Args) -> i32 {
     }
     if let Some(live) = monitor_proc::read_live_app(&env) {
         let app_url = live["url"].as_str().unwrap_or("").to_string();
-        let project_url = if args.project.is_empty() { Some(app_url.clone()) } else { monitor_proc::register_project_in_app(&live, &pycompat::nt_abspath(&args.project)) };
+        let project_url =
+            if args.project.is_empty() { Some(app_url.clone()) } else { monitor_proc::register_project_in_app(&live, &pycompat::nt_abspath(&args.project)) };
         let Some(project_url) = project_url else {
             eprintln!("the live app at {app_url} did not register the project {}", args.project);
             return 1;

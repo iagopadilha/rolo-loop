@@ -128,7 +128,9 @@ impl SpecsFileRepository {
             // Windows: the replace fails while a reader (a poll) holds the target open
             match std::fs::rename(&temporary, path) {
                 Ok(()) => return Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied && attempt + 1 < REPLACE_RETRIES => std::thread::sleep(Duration::from_secs_f64(REPLACE_RETRY_SECONDS)),
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied && attempt + 1 < REPLACE_RETRIES => {
+                    std::thread::sleep(Duration::from_secs_f64(REPLACE_RETRY_SECONDS))
+                }
                 Err(error) => {
                     let _ = std::fs::remove_file(&temporary);
                     return Err(error);

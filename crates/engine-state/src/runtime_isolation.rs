@@ -47,7 +47,10 @@ const PLANNING_SKILLS: [&str; 5] = ["orchestrator", "tlc-spec-driven", "repo-cat
 /// The kit renamed two skills it replaced with its own text: `ui-trace-analysis` (was playwright-trace) and `ui-component-tests` (was
 /// playwright-component-testing).
 const DEFAULT_ALLOWLIST: [(&str, &[&str]); 8] = [
-    ("orchestrator", &["orchestrator", "orchestrator-audit-dependencies", "orchestrator-create-block-rule", "orchestrator-show-progress-graph", "tlc-spec-driven", "repo-catalog"]),
+    (
+        "orchestrator",
+        &["orchestrator", "orchestrator-audit-dependencies", "orchestrator-create-block-rule", "orchestrator-show-progress-graph", "tlc-spec-driven", "repo-catalog"],
+    ),
     ("planning", &PLANNING_SKILLS),
     ("roadmapmap", &PLANNING_SKILLS),
     ("subprojects", &PLANNING_SKILLS),
@@ -171,7 +174,9 @@ pub fn skills_allowlist(project_root: Option<&str>, config: &Map<String, Value>)
         }
     }
     let mut names: Vec<String> = match config.get(EXTRA_SKILLS_KEY) {
-        Some(Value::Array(items)) => items.iter().map(|i| i.as_str().map(String::from).unwrap_or_else(|| i.to_string()).trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        Some(Value::Array(items)) => {
+            items.iter().map(|i| i.as_str().map(String::from).unwrap_or_else(|| i.to_string()).trim().to_string()).filter(|s| !s.is_empty()).collect()
+        }
         _ => vec![],
     };
     if config.get(CAVEMAN_KEY) == Some(&Value::Bool(true)) {
@@ -200,7 +205,11 @@ pub fn all_skill_names(allowlist: &Allowlist) -> Vec<String> {
 
 /// Plugin root of a skill folder `<plugin>/skills/<name>` (empty when the skill folder is empty).
 pub fn plugin_root_of(skill_dir: &str) -> String {
-    if skill_dir.is_empty() { String::new() } else { nt_abspath(&Path::new(skill_dir).join("..").join("..").display().to_string()) }
+    if skill_dir.is_empty() {
+        String::new()
+    } else {
+        nt_abspath(&Path::new(skill_dir).join("..").join("..").display().to_string())
+    }
 }
 
 // ---- bundle ------------------------------------------------------------------------------------------------------------------------
@@ -252,7 +261,13 @@ pub fn installed_plugin_skill_dirs(env: &Env) -> Vec<PathBuf> {
 
 /// `({name: source folder}, [missing names])`: `<user skills>/<name>`, then `<toolkit>/skills/<name>`, then `<plugin>/skills/<name>`, then each
 /// of `other_skill_dirs` (installed plugin caches); a folder needs a SKILL.md.
-pub fn resolve_skill_sources(plugin_dir: &str, user_dir: &Path, names: &[String], toolkit_dir: &str, other_skill_dirs: &[PathBuf]) -> (BTreeMap<String, PathBuf>, Vec<String>) {
+pub fn resolve_skill_sources(
+    plugin_dir: &str,
+    user_dir: &Path,
+    names: &[String],
+    toolkit_dir: &str,
+    other_skill_dirs: &[PathBuf],
+) -> (BTreeMap<String, PathBuf>, Vec<String>) {
     let (mut found, mut skipped) = (BTreeMap::new(), Vec::new());
     let mut bases: Vec<PathBuf> = vec![user_dir.to_path_buf()];
     if !toolkit_dir.is_empty() {
@@ -278,7 +293,8 @@ pub fn list_agent_files(plugin_dir: &str) -> Vec<String> {
         return vec![];
     }
     let folder = Path::new(plugin_dir).join("agents");
-    let mut names: Vec<String> = std::fs::read_dir(folder).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".md")).collect()).unwrap_or_default();
+    let mut names: Vec<String> =
+        std::fs::read_dir(folder).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".md")).collect()).unwrap_or_default();
     names.sort();
     names
 }
@@ -307,7 +323,11 @@ fn read_signature(bundle: &Path) -> Option<Value> {
 pub fn owning_plugin_root(skill_source: &Path) -> String {
     let abs = PathBuf::from(nt_abspath(&skill_source.display().to_string()));
     let root = abs.parent().and_then(Path::parent).map(Path::to_path_buf).unwrap_or_default();
-    if root.join(".claude-plugin").join("plugin.json").is_file() { root.display().to_string() } else { String::new() }
+    if root.join(".claude-plugin").join("plugin.json").is_file() {
+        root.display().to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_ROOT` -> the plugin root with forward slashes. The bundle copies skills and agents as PROJECT
@@ -385,11 +405,27 @@ fn swap_in(temp: &Path, bundle: &Path) -> std::io::Result<()> {
 /// Builds `<data dir>/runtime/bundle` when the source signature changed; cheap when it did not (and a 30 s in-process memo makes a call per
 /// command nearly free). Returns `{"path", "skills", "skipped", "agents", "rebuilt"}` (+ `"error"` when the swap failed and the old bundle
 /// stays). The build happens in a temp folder beside it and is swapped in, so a concurrent run never sees a half bundle.
-pub fn ensure_bundle(data_dir_path: &Path, plugin_root_path: &str, user_skills_path: &Path, names: &[String], use_memo: bool, toolkit_dir: &str, other_skill_dirs: &[PathBuf]) -> Value {
+pub fn ensure_bundle(
+    data_dir_path: &Path,
+    plugin_root_path: &str,
+    user_skills_path: &Path,
+    names: &[String],
+    use_memo: bool,
+    toolkit_dir: &str,
+    other_skill_dirs: &[PathBuf],
+) -> Value {
     let mut sorted: Vec<String> = names.to_vec();
     sorted.sort();
     sorted.dedup();
-    let key = format!("{}|{}|{}|{}|{}|{:?}", nt_abspath(&data_dir_path.display().to_string()), plugin_root_path, user_skills_path.display(), sorted.join(","), toolkit_dir, other_skill_dirs);
+    let key = format!(
+        "{}|{}|{}|{}|{}|{:?}",
+        nt_abspath(&data_dir_path.display().to_string()),
+        plugin_root_path,
+        user_skills_path.display(),
+        sorted.join(","),
+        toolkit_dir,
+        other_skill_dirs
+    );
     let now = Instant::now();
     if use_memo {
         if let Ok(memo) = MEMO.lock() {
@@ -414,7 +450,11 @@ pub fn ensure_bundle(data_dir_path: &Path, plugin_root_path: &str, user_skills_p
         let _guard = BUILD_LOCK.lock();
         if read_signature(&bundle).as_ref() != Some(&signature) {
             let _ = std::fs::create_dir_all(&runtime);
-            let temp = runtime.join(format!("bundle.tmp-{}-{}", std::process::id(), Sha256::digest(format!("{:?}", Instant::now()).as_bytes()).iter().take(3).map(|b| format!("{b:02x}")).collect::<String>()));
+            let temp = runtime.join(format!(
+                "bundle.tmp-{}-{}",
+                std::process::id(),
+                Sha256::digest(format!("{:?}", Instant::now()).as_bytes()).iter().take(3).map(|b| format!("{b:02x}")).collect::<String>()
+            ));
             let built = build_bundle_folder(&temp, &sources, plugin_root_path, &agent_files, &signature).and_then(|_| swap_in(&temp, &bundle));
             match built {
                 Ok(()) => result["rebuilt"] = json!(true),
@@ -503,7 +543,20 @@ pub fn find_caveman_hooks(user_settings: &Value) -> Vec<Value> {
         let kept: Vec<Value> = map
             .get("hooks")
             .and_then(Value::as_array)
-            .map(|hooks| hooks.iter().filter(|h| h.is_object() && h.get("command").map(|c| c.as_str().map(String::from).unwrap_or_else(|| c.to_string())).unwrap_or_default().to_lowercase().contains(CAVEMAN_MARKER)).cloned().collect())
+            .map(|hooks| {
+                hooks
+                    .iter()
+                    .filter(|h| {
+                        h.is_object()
+                            && h.get("command")
+                                .map(|c| c.as_str().map(String::from).unwrap_or_else(|| c.to_string()))
+                                .unwrap_or_default()
+                                .to_lowercase()
+                                .contains(CAVEMAN_MARKER)
+                    })
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default();
         if !kept.is_empty() {
             let mut copy = map.clone();
@@ -552,7 +605,11 @@ pub fn guard_settings(env: &Env, guard_path: &str, profile: &str, user_settings:
     if let Some(auto) = user_settings.get("autoMode") {
         settings.insert("autoMode".into(), auto.clone());
     }
-    if settings.is_empty() { String::new() } else { py_json_dumps(&Value::Object(settings), true) }
+    if settings.is_empty() {
+        String::new()
+    } else {
+        py_json_dumps(&Value::Object(settings), true)
+    }
 }
 
 /// Writes the settings JSON next to the bundle (name by content hash, atomic) and returns its path. A file, never the inline JSON: a batch
@@ -583,7 +640,8 @@ pub fn isolation_env(allowlist_file: &Path) -> Vec<(String, String)> {
 /// failure (the bundle then holds no agents and the report lists the skipped skills).
 pub fn prepare(env: &Env, project_root: Option<&str>, config: &Map<String, Value>, plugin_root_path: &str, toolkit_dir: &str) -> Value {
     let allowlist = skills_allowlist(project_root, config);
-    let bundle = ensure_bundle(&data_dir(env), plugin_root_path, &user_skills_dir(env), &all_skill_names(&allowlist), true, toolkit_dir, &installed_plugin_skill_dirs(env));
+    let bundle =
+        ensure_bundle(&data_dir(env), plugin_root_path, &user_skills_dir(env), &all_skill_names(&allowlist), true, toolkit_dir, &installed_plugin_skill_dirs(env));
     json!({"bundle": bundle, "allowlist_file": write_allowlist_file(env, &data_dir(env), &allowlist).display().to_string()})
 }
 
@@ -617,7 +675,10 @@ mod tests {
     fn allowlist_defaults_extras_and_caveman() {
         let list = skills_allowlist(None, &Map::new());
         let get = |p: &str| list.iter().find(|(n, _)| n == p).map(|(_, s)| s.clone()).unwrap();
-        assert_eq!(list.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), vec!["orchestrator", "planning", "roadmapmap", "subprojects", "systemmap", "spec", "executor", "verifier", "auto"]);
+        assert_eq!(
+            list.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(),
+            vec!["orchestrator", "planning", "roadmapmap", "subprojects", "systemmap", "spec", "executor", "verifier", "auto"]
+        );
         assert_eq!(get("auto"), get("orchestrator"));
         assert!(get("verifier").contains(&"ui-trace-analysis".to_string()) && !get("verifier").iter().any(|s| s.starts_with("playwright-trace")));
         let config: Map<String, Value> = serde_json::from_value(json!({"loop_extra_skills": [" mine ", ""], "loop_caveman": true})).unwrap();
@@ -630,7 +691,11 @@ mod tests {
     #[test]
     fn project_skills_come_from_subprojects_json() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(), ".specs/project/SUBPROJECTS.json", r#"{"repos": {"main": {"projects": [{"path": "a", "skill": "my-skill"}, {"path": "b", "skill": "-"}, {"path": "c", "skill": "skipped", "skip": true}]}}}"#);
+        write(
+            dir.path(),
+            ".specs/project/SUBPROJECTS.json",
+            r#"{"repos": {"main": {"projects": [{"path": "a", "skill": "my-skill"}, {"path": "b", "skill": "-"}, {"path": "c", "skill": "skipped", "skip": true}]}}}"#,
+        );
         let root = dir.path().display().to_string();
         assert_eq!(project_skill_names(&root), vec!["my-skill"]);
         let list = skills_allowlist(Some(&root), &Map::new());
@@ -650,7 +715,10 @@ mod tests {
         let data = dir.path().join("data");
         let names = vec!["orchestrator".to_string(), "mine".to_string(), "absent".to_string()];
         let first = ensure_bundle(&data, &plugin.display().to_string(), &user, &names, false, "", &[]);
-        assert_eq!((first["rebuilt"].clone(), first["skills"].clone(), first["skipped"].clone(), first["agents"].clone()), (json!(true), json!(["mine", "orchestrator"]), json!(["absent"]), json!(["executor-back"])));
+        assert_eq!(
+            (first["rebuilt"].clone(), first["skills"].clone(), first["skipped"].clone(), first["agents"].clone()),
+            (json!(true), json!(["mine", "orchestrator"]), json!(["absent"]), json!(["executor-back"]))
+        );
         let bundle = PathBuf::from(first["path"].as_str().unwrap());
         let skill = std::fs::read_to_string(bundle.join(".claude/skills/orchestrator/SKILL.md")).unwrap();
         assert!(skill.starts_with("run ") && skill.ends_with("/bin/harness.exe") && !skill.contains("${CLAUDE_PLUGIN_ROOT}"));
@@ -666,7 +734,8 @@ mod tests {
     #[test]
     fn settings_carry_the_guard_and_auto_mode() {
         let dir = tempfile::tempdir().unwrap();
-        let env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().join("data").display().to_string()), ("LOOP_CLAUDE_HOME", dir.path().join("home").display().to_string())]);
+        let env =
+            Env::from_pairs([("LOOP_DATA_DIR", dir.path().join("data").display().to_string()), ("LOOP_CLAUDE_HOME", dir.path().join("home").display().to_string())]);
         assert_eq!(guard_command("C:\\Users\\Me\\plugin\\bin\\guard.exe", "auto"), "\"C:/Users/Me/plugin/bin/guard.exe\" --profile auto");
         let settings = guard_settings(&env, "C:\\p\\guard.exe", "auto", Some(&json!({"autoMode": {"allow": ["x & y"]}, "permissions": {"allow": ["Bash"]}})));
         let parsed: Value = serde_json::from_str(&settings).unwrap();

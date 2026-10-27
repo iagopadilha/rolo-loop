@@ -172,7 +172,11 @@ pub fn describe_claude_used(name: &str, account: &str, is_main: bool) -> String 
 /// when the change came from an account that cannot be used.
 pub fn claude_change_subject(name: &str, account: &str, is_main: bool, same_command: bool, unusable: &str) -> String {
     let subject = claude_change_subject_core(name, account, is_main, same_command);
-    if unusable.is_empty() { subject } else { format!("{unusable}, {subject}") }
+    if unusable.is_empty() {
+        subject
+    } else {
+        format!("{unusable}, {subject}")
+    }
 }
 
 /// The part of the subject that names the account the loop is on now.
@@ -219,13 +223,21 @@ pub fn remember_reset(opts: &mut LoopOpts, moment: Option<PrimitiveDateTime>, ph
 
 /// ` (5-hour window, back at 17:05)` for a notice; empty when the window is unknown.
 pub fn limit_suffix(phrase: &str) -> String {
-    if phrase.is_empty() { String::new() } else { format!(" ({phrase})") }
+    if phrase.is_empty() {
+        String::new()
+    } else {
+        format!(" ({phrase})")
+    }
 }
 
 /// Key of a command in meta.json `claude_usage`: its base name, plus `:<account>` when the `cc` picker named one (`cc:claudep`).
 pub fn usage_key(name: &str, cc_account: &str) -> String {
     let base = command_base_name(name);
-    if cc_account.is_empty() { base } else { format!("{base}:{cc_account}") }
+    if cc_account.is_empty() {
+        base
+    } else {
+        format!("{base}:{cc_account}")
+    }
 }
 
 /// Keeps the last usage windows read from a command's output in meta.json: `{"<key>": {"windows", "status", "read_at"}}`. A turn whose
@@ -257,7 +269,11 @@ pub fn other_usage_lines(opts: &LoopOpts, meta: &Value, main_name: &str) -> Vec<
     for (key, entry) in &usage {
         if key.split(':').next().unwrap_or("") != main_base {
             let read_at: String = entry.get("read_at").and_then(Value::as_str).unwrap_or("").chars().skip(11).take(5).collect();
-            lines.push(format!("- `{key}`: {}{}", usage_windows::describe_windows(entry.get("windows")), if read_at.is_empty() { String::new() } else { format!(", read at {read_at}") }));
+            lines.push(format!(
+                "- `{key}`: {}{}",
+                usage_windows::describe_windows(entry.get("windows")),
+                if read_at.is_empty() { String::new() } else { format!(", read at {read_at}") }
+            ));
         }
     }
     let known: Vec<&str> = usage.keys().map(|k| k.split(':').next().unwrap_or("")).collect();
@@ -280,13 +296,25 @@ mod tests {
         assert_eq!(split_account_label("token, cc account claude2"), ("token".to_string(), "cc account claude2".to_string(), String::new()));
         assert_eq!(split_account_label("weird text"), (String::new(), "weird text".to_string(), String::new()));
         let fields = claude_auth_fields("login, dev@example.com (Acme, team)");
-        assert_eq!((fields["auth_method"].as_str(), fields["auth_email"].as_str(), fields["auth_plan"].as_str(), fields["cc_account"].as_str()), (Some("login"), Some("dev@example.com"), Some("team"), Some("")));
+        assert_eq!(
+            (fields["auth_method"].as_str(), fields["auth_email"].as_str(), fields["auth_plan"].as_str(), fields["cc_account"].as_str()),
+            (Some("login"), Some("dev@example.com"), Some("team"), Some(""))
+        );
         assert_eq!(claude_auth_fields("token, cc account claude2")["cc_account"], "claude2");
-        assert_eq!(describe_claude_used("C:/bin/claude.exe", "login, dev@example.com (Acme, team)", true), "the main command `claude` (dev@example.com, subscription, browser login; Acme, team)");
+        assert_eq!(
+            describe_claude_used("C:/bin/claude.exe", "login, dev@example.com (Acme, team)", true),
+            "the main command `claude` (dev@example.com, subscription, browser login; Acme, team)"
+        );
         assert_eq!(describe_claude_used("cc.cmd", "", false), "the backup command `cc` (account unknown)");
-        assert_eq!(claude_change_subject("cc", "token, cc account claude2", false, false, ""), "now on the backup account: cc account claude2 (subscription, sign-in token)");
+        assert_eq!(
+            claude_change_subject("cc", "token, cc account claude2", false, false, ""),
+            "now on the backup account: cc account claude2 (subscription, sign-in token)"
+        );
         assert_eq!(claude_change_subject("claude", "login, a@x.com", true, false, ""), "back on the main account: a@x.com (subscription, browser login)");
-        assert_eq!(claude_change_subject("cc", "token, cc account claude3", false, true, "main account unusable"), "main account unusable, cc switched to cc account claude3 (subscription, sign-in token)");
+        assert_eq!(
+            claude_change_subject("cc", "token, cc account claude3", false, true, "main account unusable"),
+            "main account unusable, cc switched to cc account claude3 (subscription, sign-in token)"
+        );
         assert_eq!(command_base_name("C:/bin/claude.exe"), "claude");
         assert_eq!(usage_key("cc.cmd", "claudep"), "cc:claudep");
     }

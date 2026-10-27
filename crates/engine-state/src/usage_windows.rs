@@ -175,7 +175,11 @@ pub fn describe_windows(windows: Option<&Value>) -> String {
             text
         })
         .collect();
-    if parts.is_empty() { "usage unknown".into() } else { parts.join(", ") }
+    if parts.is_empty() {
+        "usage unknown".into()
+    } else {
+        parts.join(", ")
+    }
 }
 
 #[cfg(test)]

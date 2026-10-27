@@ -102,13 +102,21 @@ impl GitClient {
     /// Short sha of HEAD; empty when it cannot be read (no commit, not a repo).
     pub fn get_short_head(&self, folder: &str) -> String {
         let (code, output, _) = self.run_git(folder, &["rev-parse", "--short", "HEAD"]);
-        if code == 0 { output } else { String::new() }
+        if code == 0 {
+            output
+        } else {
+            String::new()
+        }
     }
 
     /// Current branch name; empty with a detached HEAD or outside a repo.
     pub fn get_current_branch(&self, folder: &str) -> String {
         let (code, output, _) = self.run_git(folder, &["branch", "--show-current"]);
-        if code == 0 { output } else { String::new() }
+        if code == 0 {
+            output
+        } else {
+            String::new()
+        }
     }
 
     /// `git worktree list --porcelain`. The 1st item is the main repo. `branch` comes without `refs/heads/` (empty with a detached HEAD).
@@ -177,7 +185,14 @@ impl GitClient {
     /// Returns `{"worktree_removed", "branch_deleted", "folder_left", "error"}`.
     pub fn remove_worktree_and_branch(&self, main_repo: &str, worktree_path: &str, branch: &str) -> Value {
         let mut result = json!({"worktree_removed": false, "branch_deleted": false, "folder_left": false, "error": ""});
-        let (code, _, error) = self.runner.run_and_wait(&self.argv(main_repo, &["worktree", "remove", "--force", worktree_path]), main_repo, WORKTREE_REMOVE_TIMEOUT_SECONDS, None, &[], None);
+        let (code, _, error) = self.runner.run_and_wait(
+            &self.argv(main_repo, &["worktree", "remove", "--force", worktree_path]),
+            main_repo,
+            WORKTREE_REMOVE_TIMEOUT_SECONDS,
+            None,
+            &[],
+            None,
+        );
         self.run_git(main_repo, &["worktree", "prune"]);
         let still_registered = self.list_worktrees(main_repo).iter().any(|w| same_path(&w.path, worktree_path));
         if still_registered {
@@ -242,14 +257,19 @@ impl GitClient {
                 Err(failure) => (false, failure.to_string()),
             };
         }
-        let args: Vec<&str> = if entry.index == 'A' { vec!["rm", "-f", "--", &entry.path] } else { vec!["restore", "--source=HEAD", "--staged", "--worktree", "--", &entry.path] };
+        let args: Vec<&str> =
+            if entry.index == 'A' { vec!["rm", "-f", "--", &entry.path] } else { vec!["restore", "--source=HEAD", "--staged", "--worktree", "--", &entry.path] };
         let (code, _, error) = self.run_git(folder, &args);
         (code == 0, error)
     }
 
     pub fn get_config(&self, folder: &str, key: &str) -> String {
         let (code, output, _) = self.run_git(folder, &["config", key]);
-        if code == 0 { output } else { String::new() }
+        if code == 0 {
+            output
+        } else {
+            String::new()
+        }
     }
 
     /// `git add -A` + commit (when there is something staged) + push of the CURRENT branch. Only called from a user click. Pushes to the upstream
@@ -322,10 +342,21 @@ impl GitClient {
         if code != 0 {
             return (false, format!("git add failed: {}", describe(&error, code)));
         }
-        let name = if !user.is_empty() { user.to_string() } else { Some(self.get_config(folder, "user.name")).filter(|n| !n.is_empty()).unwrap_or_else(|| DEFAULT_GIT_USER_NAME.into()) };
+        let name = if !user.is_empty() {
+            user.to_string()
+        } else {
+            Some(self.get_config(folder, "user.name")).filter(|n| !n.is_empty()).unwrap_or_else(|| DEFAULT_GIT_USER_NAME.into())
+        };
         let configured = self.get_config(folder, "user.email");
-        let email = if !configured.is_empty() { configured } else if !user.is_empty() { format!("{user}@{NO_REPLY_EMAIL_DOMAIN}") } else { DEFAULT_GIT_USER_EMAIL.to_string() };
-        let (code, _, error) = self.run_git(folder, &["-c", &format!("user.name={name}"), "-c", &format!("user.email={email}"), "commit", "--allow-empty", "-m", message]);
+        let email = if !configured.is_empty() {
+            configured
+        } else if !user.is_empty() {
+            format!("{user}@{NO_REPLY_EMAIL_DOMAIN}")
+        } else {
+            DEFAULT_GIT_USER_EMAIL.to_string()
+        };
+        let (code, _, error) =
+            self.run_git(folder, &["-c", &format!("user.name={name}"), "-c", &format!("user.email={email}"), "commit", "--allow-empty", "-m", message]);
         if code != 0 {
             return (false, format!("git commit failed: {}", describe(&error, code)));
         }
@@ -371,7 +402,10 @@ mod tests {
         let listed = git.list_worktrees(&f);
         assert_eq!((listed.len(), listed[0].is_main, listed[1].branch.as_str(), listed[1].is_main), (2, true, "loop/x", false));
         let removed = git.remove_worktree_and_branch(&f, &wt, "loop/x");
-        assert_eq!((removed["worktree_removed"].clone(), removed["branch_deleted"].clone(), removed["folder_left"].clone(), removed["error"].clone()), (json!(true), json!(true), json!(false), json!("")));
+        assert_eq!(
+            (removed["worktree_removed"].clone(), removed["branch_deleted"].clone(), removed["folder_left"].clone(), removed["error"].clone()),
+            (json!(true), json!(true), json!(false), json!(""))
+        );
         assert_eq!(git.list_worktrees(&f).len(), 1);
         assert_eq!(git.count_unpushed_commits(&f, &["no-such-base".to_string()]), None);
         assert_eq!(default_comparison_bases(" qa "), vec!["qa", "main", "master"]);
@@ -394,13 +428,19 @@ mod tests {
         git.run_git(&f, &["checkout", "-q", "-b", "feature"]);
         std::fs::write(folder.join("b.txt"), "2").unwrap();
         let pushed = git.commit_all_and_push(&f, "feat: b", true);
-        assert_eq!((pushed["ok"].clone(), pushed["committed"].clone(), pushed["pushed"].clone(), pushed["branch"].clone()), (json!(true), json!(true), json!(true), json!("feature")));
+        assert_eq!(
+            (pushed["ok"].clone(), pushed["committed"].clone(), pushed["pushed"].clone(), pushed["branch"].clone()),
+            (json!(true), json!(true), json!(true), json!("feature"))
+        );
         assert_eq!(git.count_unpushed_commits(&f, &[]), Some(0));
         let nothing = git.commit_all_and_push(&f, "empty", false);
         assert_eq!((nothing["ok"].clone(), nothing["committed"].clone()), (json!(true), json!(false)));
         git.run_git(&f, &["checkout", "-q", &branch]);
         git.run_git(&f, &["branch", "-m", "master"]);
         assert_eq!(git.commit_all_and_push(&f, "x", true)["error"], "`master` is a protected branch: nothing is committed or pushed there");
-        assert_eq!(git.init_repo_with_initial_commit(&dir.path().join("nope").display().to_string(), "m", ""), (false, format!("folder does not exist: {}", dir.path().join("nope").display())));
+        assert_eq!(
+            git.init_repo_with_initial_commit(&dir.path().join("nope").display().to_string(), "m", ""),
+            (false, format!("folder does not exist: {}", dir.path().join("nope").display()))
+        );
     }
 }

@@ -156,7 +156,10 @@ pub fn validate(bindings: &[(String, String)]) -> Result<(), String> {
         }
         let text = value.trim();
         if !text.is_empty() && !VALUE_PATTERN.is_match(text) {
-            return Err(format!("{slot}: `{}` is not a skill name (letters, digits, `_`, `.`, `-`, optionally `plugin:skill`)", text.chars().take(60).collect::<String>()));
+            return Err(format!(
+                "{slot}: `{}` is not a skill name (letters, digits, `_`, `.`, `-`, optionally `plugin:skill`)",
+                text.chars().take(60).collect::<String>()
+            ));
         }
     }
     Ok(())
@@ -318,7 +321,11 @@ pub fn run_cli(args: &[String]) -> (i32, String, String) {
             flag @ ("--set" | "--clear") => {
                 index += 1;
                 while index < args.len() && !args[index].starts_with("--") {
-                    if flag == "--set" { sets.push(args[index].clone()) } else { clears.push(args[index].clone()) }
+                    if flag == "--set" {
+                        sets.push(args[index].clone())
+                    } else {
+                        clears.push(args[index].clone())
+                    }
                     index += 1;
                 }
             }

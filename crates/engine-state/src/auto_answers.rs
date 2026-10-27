@@ -19,7 +19,9 @@ use std::sync::LazyLock;
 pub const CRITICAL_DECISION_PREFIX: &str = "critical decision: ";
 
 static HARD_STOP: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(r"authoriz|production|\bprod\b|irreversib|delete|\bdrop\b|truncate|\bpush\b|\bmerge\b|deploy|secret|password|credential|billing|payment|access|business rules?|discrepan|inconsisten|real data")
+    Re::ci(
+        r"authoriz|production|\bprod\b|irreversib|delete|\bdrop\b|truncate|\bpush\b|\bmerge\b|deploy|secret|password|credential|billing|payment|access|business rules?|discrepan|inconsisten|real data",
+    )
 });
 static ABANDON: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\bend\b|finish without|stop|skip|give up|abandon|accept .{0,40}blocked|do not do|cancel"));
 static RECOMMENDED: LazyLock<Re> = LazyLock::new(|| Re::ci(r"recommended"));
@@ -74,7 +76,10 @@ pub fn write_answer(work: &str, text: &str) -> Result<String, String> {
     let state = load_json(&state_file(work, "LOOP.json"));
     if state.get("status").and_then(Value::as_str) != Some("awaiting_user") {
         let current = text_of(state.get("status"));
-        return Err(format!("--answer only applies when the loop stopped at awaiting_user (current status: {})", if current.is_empty() { "no LOOP.json".to_string() } else { current }));
+        return Err(format!(
+            "--answer only applies when the loop stopped at awaiting_user (current status: {})",
+            if current.is_empty() { "no LOOP.json".to_string() } else { current }
+        ));
     }
     let path = state_file(work, "ANSWERS.md");
     let block = format!("\n## Answer {} [pending]\nQuestion: {}\nUser answer: {}\n", now_iso(), clip(text_of(state.get("reason")).trim(), 1500), text.trim());
@@ -127,7 +132,14 @@ pub fn try_auto_answer(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Value,
         return false;
     }
     let Some((number, text, why)) = pick_auto_answer(&state) else { return false };
-    let key = { let f = text_of(state.get("feature")); if f.is_empty() { "general".to_string() } else { f } };
+    let key = {
+        let f = text_of(state.get("feature"));
+        if f.is_empty() {
+            "general".to_string()
+        } else {
+            f
+        }
+    };
     let used_here = counter(&auto_state.per_feature, &key);
     if auto_state.total >= opts.max_auto_answers || used_here >= opts.auto_answers_per_feature {
         println!("[loop] automatic answer limit reached ({} in total, {used_here} on {key}): stopping for you to decide", auto_state.total);
@@ -155,7 +167,12 @@ pub fn try_auto_answer(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Value,
 
 /// Features quarantined because they failed the gate (note=gate-...): only the spec is on paper, nothing was implemented yet.
 pub fn gate_blocked_features(specs: &str) -> Vec<String> {
-    parse_roadmap(&read(&Path::new(specs).join("ROADMAP.md"))).0.iter().filter(|(_, f)| f.status() == "blocked" && f.text("note").contains("gate") && NO_TIEBREAK.search(f.text("note")).is_none()).map(|(s, _)| s.clone()).collect()
+    parse_roadmap(&read(&Path::new(specs).join("ROADMAP.md")))
+        .0
+        .iter()
+        .filter(|(_, f)| f.status() == "blocked" && f.text("note").contains("gate") && NO_TIEBREAK.search(f.text("note")).is_none())
+        .map(|(s, _)| s.clone())
+        .collect()
 }
 
 /// Gate tiebreak: after the gate rounds the script tells the orchestrator to APPROVE the spec, treat the remaining findings as notes
@@ -192,7 +209,15 @@ pub fn try_gate_tiebreak(work: &str, turn: i64, opts: &AutoOpts, meta: &mut Valu
         bump(&mut auto_state.tiebreaks, slug);
     }
     meta_list(meta, "gate_tiebreaks").push(json!({"turn": turn, "features": stuck}));
-    decisions::append(work, &slugs, Some(turn), "important", "gate tiebreak: spec approved without a new gate after several rejections", "run with the remaining findings as notes; build and regression decide", "--answer asking to redo the gate");
+    decisions::append(
+        work,
+        &slugs,
+        Some(turn),
+        "important",
+        "gate tiebreak: spec approved without a new gate after several rejections",
+        "run with the remaining findings as notes; build and regression decide",
+        "--answer asking to redo the gate",
+    );
     println!("[loop] warning: gate tiebreak for {slugs} (spec approved, findings become notes); noted in .specs/project/loop/VALIDATE.md");
     true
 }

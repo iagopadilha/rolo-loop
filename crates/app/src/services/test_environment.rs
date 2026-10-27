@@ -135,7 +135,9 @@ impl TestEnvironmentService<'_> {
         if target != TARGET_PROJECT {
             return Err(AppError::invalid_request("target must be 'project': the project's .env.test is the only credential file"));
         }
-        let Some(map) = values.as_object().filter(|m| !m.is_empty()) else { return Err(AppError::invalid_request("values must be an object {NAME: value} with at least one name")) };
+        let Some(map) = values.as_object().filter(|m| !m.is_empty()) else {
+            return Err(AppError::invalid_request("values must be an object {NAME: value} with at least one name"));
+        };
         if map.len() > MAX_VALUES_PER_REQUEST {
             return Err(AppError::invalid_request(format!("too many values in one request (at most {MAX_VALUES_PER_REQUEST})")));
         }
@@ -143,13 +145,18 @@ impl TestEnvironmentService<'_> {
         let mut unknown: Vec<String> = map.keys().filter(|name| !known.contains(name)).cloned().collect();
         unknown.sort();
         if !unknown.is_empty() {
-            return Err(AppError::new(Kind::UnknownCredentialName, format!("not a name of TEST-ENVIRONMENT.md: {}", unknown.iter().take(8).cloned().collect::<Vec<_>>().join(", "))).with_code(UNKNOWN_NAME_CODE));
+            return Err(AppError::new(
+                Kind::UnknownCredentialName,
+                format!("not a name of TEST-ENVIRONMENT.md: {}", unknown.iter().take(8).cloned().collect::<Vec<_>>().join(", ")),
+            )
+            .with_code(UNKNOWN_NAME_CODE));
         }
         let pairs: Vec<(String, String)> = map.iter().map(|(name, value)| (name.clone(), text_of(Some(value)))).collect();
         {
             let _guard = self.app.test_environment_lock.lock().unwrap_or_else(|e| e.into_inner());
             self.repository().write_project_values(context.credentials_dir(), &pairs)?;
-            self.app.specs_structure().ensure_env_files_in_gitignore(context.credentials_dir()); // keeps .env.test out of git
+            self.app.specs_structure().ensure_env_files_in_gitignore(context.credentials_dir());
+            // keeps .env.test out of git
         }
         let saved: Vec<String> = map.keys().cloned().collect();
         self.app.log.info("test_environment_values_saved", &[("project", json!(context.project.id)), ("names", json!(saved))]); // names only
@@ -186,7 +193,10 @@ impl TestEnvironmentService<'_> {
             let _guard = self.app.test_environment_lock.lock().unwrap_or_else(|e| e.into_inner());
             test_env_fallback::import_names(&self.app.env, context.credentials_dir(), &cleaned, replace)
         };
-        self.app.log.info("test_environment_names_imported", &[("project", json!(context.project.id)), ("added", result["added"].clone()), ("replaced", result["replaced"].clone())]);
+        self.app.log.info(
+            "test_environment_names_imported",
+            &[("project", json!(context.project.id)), ("added", result["added"].clone()), ("replaced", result["replaced"].clone())],
+        );
         let changed = |key: &str| result[key].as_array().is_some_and(|a| !a.is_empty());
         if changed("added") || changed("replaced") {
             self.app.on_plan_changed(context);
@@ -234,11 +244,17 @@ mod tests {
         std::fs::write(Path::new(&ctx.work_dir()).join(".specs/project/TEST-ENVIRONMENT.md"), "needs $API_TOKEN and $DB_URL\nFILL_IN here\n").unwrap();
         let service = app.test_environment();
         let before = service.get_test_environment(&ctx);
-        assert_eq!((before["ready"].clone(), before["names"][0]["source"].clone(), before["fill_in"][0].clone()), (json!(false), json!("missing"), json!("FILL_IN here")));
+        assert_eq!(
+            (before["ready"].clone(), before["names"][0]["source"].clone(), before["fill_in"][0].clone()),
+            (json!(false), json!("missing"), json!("FILL_IN here"))
+        );
         assert_eq!(service.save_values(&ctx, &json!({}), "project").unwrap_err().kind, Kind::InvalidRequest);
         assert_eq!(service.save_values(&ctx, &json!({"A": "x"}), "machine").unwrap_err().kind, Kind::InvalidRequest);
         let unknown = service.save_values(&ctx, &json!({"NOPE": "x"}), "project").unwrap_err();
-        assert_eq!((unknown.kind, unknown.code.as_deref(), unknown.message.clone()), (Kind::UnknownCredentialName, Some("unknown_name"), "not a name of TEST-ENVIRONMENT.md: NOPE".to_string()));
+        assert_eq!(
+            (unknown.kind, unknown.code.as_deref(), unknown.message.clone()),
+            (Kind::UnknownCredentialName, Some("unknown_name"), "not a name of TEST-ENVIRONMENT.md: NOPE".to_string())
+        );
         let saved = service.save_values(&ctx, &json!({"API_TOKEN": "supersecretvalue", "DB_URL": "http://localhost:5000"}), "project").unwrap();
         assert_eq!(saved["saved"], json!(["API_TOKEN", "DB_URL"]));
         let after = service.get_test_environment(&ctx);
@@ -250,7 +266,10 @@ mod tests {
         let ignore = std::fs::read_to_string(Path::new(ctx.repo_path()).join(".gitignore")).unwrap();
         assert!(ignore.contains(".specs/project/.env.test"));
         assert_eq!(service.import_names(&ctx, &json!(["A_B"]), &json!(false), &json!(false)).unwrap_err().message, "confirm must be true");
-        assert_eq!(service.import_names(&ctx, &json!(["1bad"]), &json!(false), &json!(true)).unwrap_err().message, "each name must be letters, digits and _ (starting with a letter or _)");
+        assert_eq!(
+            service.import_names(&ctx, &json!(["1bad"]), &json!(false), &json!(true)).unwrap_err().message,
+            "each name must be letters, digits and _ (starting with a letter or _)"
+        );
         let imported = service.import_names(&ctx, &json!(["API_TOKEN"]), &json!(false), &json!(true)).unwrap();
         assert_eq!((imported["kept"].clone(), imported["ok"].clone()), (json!(["API_TOKEN"]), json!(true)));
         assert_eq!(service.list_sources(&ctx)["ok"], true);

@@ -81,7 +81,13 @@ fn print_diagnostics(diagnostics: &Value) {
     let toolkit_path = text(&toolkit["path"]);
     println!("toolkit .......... {}", if toolkit_path.is_empty() { "(not found)" } else { &toolkit_path });
     for row in diagnostics["toolkit_skills"].as_array().into_iter().flatten() {
-        let note = if row["present"] == true { "" } else if row["required"] == true { " (required)" } else { " (optional)" };
+        let note = if row["present"] == true {
+            ""
+        } else if row["required"] == true {
+            " (required)"
+        } else {
+            " (optional)"
+        };
         println!("{}", format!("[{}] toolkit skill {:<28}{note}", mark(row["present"] == true), text(&row["skill"])).trim_end());
     }
     let guard_path = text(&guard["path"]);
@@ -90,11 +96,19 @@ fn print_diagnostics(diagnostics: &Value) {
     let claude = &diagnostics["claude"];
     println!("[{}] `claude` available", mark(claude["on_path"] == true));
     let version = text(&claude["version"]);
-    println!("claude version ... {} (JSON contract tested with {})", if version.is_empty() { "unknown" } else { &version }, claude["min_tested_version"].as_str().unwrap_or("?"));
+    println!(
+        "claude version ... {} (JSON contract tested with {})",
+        if version.is_empty() { "unknown" } else { &version },
+        claude["min_tested_version"].as_str().unwrap_or("?")
+    );
     for command in diagnostics["claude_commands"].as_array().into_iter().flatten() {
         let state = if command["found"] == true {
             let label = text(&command["label"]);
-            if !label.is_empty() { label } else { Some(text(&command["auth"]["error"])).filter(|e| !e.is_empty()).unwrap_or_else(|| "account unknown".into()) }
+            if !label.is_empty() {
+                label
+            } else {
+                Some(text(&command["auth"]["error"])).filter(|e| !e.is_empty()).unwrap_or_else(|| "account unknown".into())
+            }
         } else {
             "not found (skipped, never blocks)".to_string()
         };
@@ -107,10 +121,19 @@ fn print_diagnostics(diagnostics: &Value) {
     println!("[{}] .env file found", mark(diagnostics["env_loaded"] == true));
     for channel in diagnostics["notify_channels"].as_array().into_iter().flatten() {
         let py = |v: &Value| if *v == true { "True" } else { "False" };
-        println!("[{}] channel {:<9} enabled={} required={}", mark(channel["configured"] == true), text(&channel["name"]), py(&channel["enabled"]), py(&channel["required"]));
+        println!(
+            "[{}] channel {:<9} enabled={} required={}",
+            mark(channel["configured"] == true),
+            text(&channel["name"]),
+            py(&channel["enabled"]),
+            py(&channel["required"])
+        );
     }
     let live = &diagnostics["live_app"];
-    println!("live app ......... {}", if live.is_null() { "none".to_string() } else { format!("{} (pid {})", text(&live["url"]), live["pid"].as_i64().map_or("None".to_string(), |p| p.to_string())) });
+    println!(
+        "live app ......... {}",
+        if live.is_null() { "none".to_string() } else { format!("{} (pid {})", text(&live["url"]), live["pid"].as_i64().map_or("None".to_string(), |p| p.to_string())) }
+    );
     for row in diagnostics["standards"].as_array().into_iter().flatten() {
         println!("[{}] standards {:<13} {} ({})", mark(row["resolved"] == true), text(&row["slot"]), text(&row["skill"]), text(&row["folder"]));
     }
@@ -120,7 +143,15 @@ fn print_diagnostics(diagnostics: &Value) {
         .into_iter()
         .flatten()
         .filter(|row| row["allow"] == true)
-        .map(|row| format!("{} ({}{}{})", text(&row["server"]), if row["kind"] == "sql" { "database" } else { "other" }, if row["production"] == true { ", production" } else { "" }, if row["read_only"] == true { ", read-only" } else { "" }))
+        .map(|row| {
+            format!(
+                "{} ({}{}{})",
+                text(&row["server"]),
+                if row["kind"] == "sql" { "database" } else { "other" },
+                if row["production"] == true { ", production" } else { "" },
+                if row["read_only"] == true { ", read-only" } else { "" }
+            )
+        })
         .collect();
     println!("mcp for loops .... {}", if allowed.is_empty() { "none allowed (a loop cannot use any MCP server)".to_string() } else { allowed.join(", ") });
     for pattern in mcp["extra"].as_array().into_iter().flatten() {
@@ -152,7 +183,8 @@ pub fn run(args: Args) -> i32 {
     let mut diagnostics = build_diagnostics(&env, &folders);
     if args.toolkit_optional {
         let all: Vec<Value> = diagnostics["problems"].as_array().cloned().unwrap_or_default();
-        let (missing, rest): (Vec<Value>, Vec<Value>) = all.into_iter().partition(|p| p.as_str().is_some_and(|t| TOOLKIT_PROBLEM_PREFIXES.iter().any(|prefix| t.starts_with(prefix))));
+        let (missing, rest): (Vec<Value>, Vec<Value>) =
+            all.into_iter().partition(|p| p.as_str().is_some_and(|t| TOOLKIT_PROBLEM_PREFIXES.iter().any(|prefix| t.starts_with(prefix))));
         let mut warnings = diagnostics["warnings"].as_array().cloned().unwrap_or_default();
         warnings.extend(missing);
         diagnostics["problems"] = Value::Array(rest);
@@ -163,5 +195,9 @@ pub fn run(args: Args) -> i32 {
     } else {
         print_diagnostics(&diagnostics);
     }
-    if diagnostics["problems"].as_array().is_some_and(|p| !p.is_empty()) { 1 } else { 0 }
+    if diagnostics["problems"].as_array().is_some_and(|p| !p.is_empty()) {
+        1
+    } else {
+        0
+    }
 }

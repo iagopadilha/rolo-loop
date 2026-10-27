@@ -116,7 +116,8 @@ static KNOWN_CAUSES: LazyLock<Vec<Cause>> = LazyLock::new(|| {
 const TIMEOUT_CAUSE: usize = 3;
 const BACKGROUND_TASKS_HAPPENED: &str = "The verifier (a background agent) was still running when the turn ended, so it was stopped.";
 const BACKGROUND_TASKS_HINT: &str = "The engine now waits for background agents, so this should not repeat; if the feature stays in building, try again.";
-const GUARD_NOTE: &str = "The guard stopped it: it worked and nothing was changed. This is not a problem; many blocks of the same rule only mean an agent kept retrying a forbidden command.";
+const GUARD_NOTE: &str =
+    "The guard stopped it: it worked and nothing was changed. This is not a problem; many blocks of the same rule only mean an agent kept retrying a forbidden command.";
 
 fn guard_rule_reason(rule: &str) -> &'static str {
     match rule {
@@ -195,7 +196,24 @@ struct ItemSpec {
 
 impl ItemSpec {
     fn new(id: String, kind: &'static str, severity: &'static str, title: String) -> Self {
-        ItemSpec { id, kind, severity, title, detail: String::new(), hint: String::new(), when: Value::Null, turn: None, recover: vec![], count: 1, happened: String::new(), turns: vec![], turn_counts: BTreeMap::new(), attempts: vec![], rule: None, profile: None }
+        ItemSpec {
+            id,
+            kind,
+            severity,
+            title,
+            detail: String::new(),
+            hint: String::new(),
+            when: Value::Null,
+            turn: None,
+            recover: vec![],
+            count: 1,
+            happened: String::new(),
+            turns: vec![],
+            turn_counts: BTreeMap::new(),
+            attempts: vec![],
+            rule: None,
+            profile: None,
+        }
     }
 
     fn build(self) -> Value {
@@ -263,7 +281,11 @@ impl ErrorCenterService<'_> {
         };
         items.sort_by_key(|item| {
             let kind = item["kind"].as_str().unwrap_or("");
-            (rank(item["severity"].as_str().unwrap_or("")), if kind == KIND_LOOP { "" } else { "z" }, if kind == KIND_GUARD { 0 } else { -item["turn"].as_i64().unwrap_or(0) })
+            (
+                rank(item["severity"].as_str().unwrap_or("")),
+                if kind == KIND_LOOP { "" } else { "z" },
+                if kind == KIND_GUARD { 0 } else { -item["turn"].as_i64().unwrap_or(0) },
+            )
         });
         let count = |severity: &str| items.iter().filter(|i| i["severity"] == severity).count();
         let (errors, warnings, infos) = (count(SEVERITY_ERROR), count(SEVERITY_WARNING), count(SEVERITY_INFO));
@@ -315,7 +337,11 @@ impl ErrorCenterService<'_> {
         let when = if notify_truthy(meta.get("finished_at")) { meta["finished_at"].clone() } else { summary["json"].get("at").cloned().unwrap_or(Value::Null) };
         let turn = match STOP_TURN.search(&reason) {
             Some(found) => found[1].parse::<i64>().ok(),
-            None => summary["json"].get("turn").filter(|t| notify_truthy(Some(t))).and_then(|t| t.as_i64().or_else(|| t.as_f64().map(|f| f as i64))).or_else(|| numbers.last().map(|n| *n as i64)),
+            None => summary["json"]
+                .get("turn")
+                .filter(|t| notify_truthy(Some(t)))
+                .and_then(|t| t.as_i64().or_else(|| t.as_f64().map(|f| f as i64)))
+                .or_else(|| numbers.last().map(|n| *n as i64)),
         };
         let mut item = ItemSpec::new("loop-stop".into(), KIND_LOOP, SEVERITY_ERROR, title);
         (item.detail, item.hint, item.when, item.turn, item.recover, item.happened) = (reason, fix, when, turn, recover, happened);
@@ -338,7 +364,11 @@ impl ErrorCenterService<'_> {
                 item.happened = cause.happened.into();
                 item
             } else if exit_code.is_some_and(|c| !c.is_null() && c.as_f64() != Some(0.0)) || notify_truthy(turn.get("is_error")) {
-                let detail = if !stderr.is_empty() { stderr } else { ["result", "sample", "reason"].iter().map(|k| text_or_empty(turn.get(*k))).find(|t| !t.is_empty()).unwrap_or_default() };
+                let detail = if !stderr.is_empty() {
+                    stderr
+                } else {
+                    ["result", "sample", "reason"].iter().map(|k| text_or_empty(turn.get(*k))).find(|t| !t.is_empty()).unwrap_or_default()
+                };
                 let code = py_str(exit_code);
                 let mut item = ItemSpec::new(format!("turn-{number}-failed"), KIND_TURN, SEVERITY_ERROR, format!("Turn {number} failed (exit code {code})"));
                 item.detail = detail;
@@ -350,7 +380,8 @@ impl ErrorCenterService<'_> {
                 let mut item = ItemSpec::new(format!("turn-{number}-stderr"), KIND_TURN, SEVERITY_INFO, title);
                 item.detail = stderr;
                 item.hint = if background { BACKGROUND_TASKS_HINT.into() } else { String::new() };
-                item.happened = if background { BACKGROUND_TASKS_HAPPENED.into() } else { format!("Turn {number} finished normally but wrote to stderr; it did not fail.") };
+                item.happened =
+                    if background { BACKGROUND_TASKS_HAPPENED.into() } else { format!("Turn {number} finished normally but wrote to stderr; it did not fail.") };
                 item
             } else {
                 continue;
@@ -372,7 +403,10 @@ impl ErrorCenterService<'_> {
                 item.detail = format!("{} failures. {}", feature.get("tries").unwrap_or("?"), feature.get("note").unwrap_or(""));
                 item.hint = "Answer in the panel: try again with guidance, or skip it.".into();
                 item.turns = self.find_turns_blocked(work_dir, slug);
-                item.happened = format!("The feature failed {} times (gate, execution or verification) and was put in quarantine. The loop carries on with what does not depend on it.", feature.get("tries").unwrap_or("several"));
+                item.happened = format!(
+                    "The feature failed {} times (gate, execution or verification) and was put in quarantine. The loop carries on with what does not depend on it.",
+                    feature.get("tries").unwrap_or("several")
+                );
                 item.build()
             })
             .collect()
@@ -409,7 +443,8 @@ impl ErrorCenterService<'_> {
         let lines = |e: &&Map<String, Value>| text_or_empty(e.get("line"));
         let fatal = problems.iter().any(|e| LAUNCH_FATAL_PATTERN.search(&lines(e)).is_some());
         let shown: Vec<String> = problems[problems.len().saturating_sub(LAUNCH_LINES_LIMIT)..].iter().map(lines).collect();
-        let mut item = ItemSpec::new("launch-last".into(), KIND_LAUNCH, if fatal { SEVERITY_WARNING } else { SEVERITY_INFO }, "The last launch of the loop printed problems".into());
+        let mut item =
+            ItemSpec::new("launch-last".into(), KIND_LAUNCH, if fatal { SEVERITY_WARNING } else { SEVERITY_INFO }, "The last launch of the loop printed problems".into());
         item.detail = shown.join("\n");
         item.hint = "If the loop is running fine this is only noise.".into();
         item.when = problems.last().and_then(|e| e.get("t")).cloned().unwrap_or(Value::Null);
@@ -443,7 +478,8 @@ impl ErrorCenterService<'_> {
                 attempts.truncate(GUARD_ATTEMPTS_LIMIT);
                 let counts = count_turns(&blocks);
                 let last = blocks.last().unwrap();
-                let mut item = ItemSpec::new(format!("guard-{profile}-{rule}"), KIND_GUARD, SEVERITY_INFO, format!("Guard blocked {} x {rule} ({profile})", blocks.len()));
+                let mut item =
+                    ItemSpec::new(format!("guard-{profile}-{rule}"), KIND_GUARD, SEVERITY_INFO, format!("Guard blocked {} x {rule} ({profile})", blocks.len()));
                 item.detail = text_or_empty(last.get("detail"));
                 item.when = last.get("t").cloned().unwrap_or(Value::Null);
                 item.turns = counts.keys().copied().collect();
@@ -492,7 +528,11 @@ mod tests {
         write_turn(4, json!({"exit_code": 0}));
         let guard = crate::repositories::loop_command_file::get_loop_internal_dir(&w).join("guard.log");
         std::fs::create_dir_all(guard.parent().unwrap()).unwrap();
-        std::fs::write(&guard, json!({"t": "2026-01-01T10:00:00", "profile": "loop", "rule": "git-write", "decision": "blocked", "detail": "git commit", "turn": 2}).to_string() + "\n").unwrap();
+        std::fs::write(
+            &guard,
+            json!({"t": "2026-01-01T10:00:00", "profile": "loop", "rule": "git-write", "decision": "blocked", "detail": "git commit", "turn": 2}).to_string() + "\n",
+        )
+        .unwrap();
         let body = app.error_center().build_errors(&context);
         let ids: Vec<&str> = body["items"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["turn-2-failed", "turn-1-timeout", "feature-a", "turn-3-stderr", "guard-loop-git-write"]);

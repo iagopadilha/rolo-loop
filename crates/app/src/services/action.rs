@@ -129,14 +129,20 @@ impl ActionService<'_> {
     }
 
     fn context_integration_branch(&self, context: &ProjectContext) -> String {
-        let text = std::fs::read(std::path::Path::new(&context.specs_dir()).join("project").join("ROADMAP.md")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        let text = std::fs::read(std::path::Path::new(&context.specs_dir()).join("project").join("ROADMAP.md"))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
         get_integration_branch(self.app, &text)
     }
 
     // ------------------------------------------------ GET actions
     fn build_deliver_preview(&self, context: &ProjectContext, meta: &Map<String, Value>, block_reason: Option<&str>) -> Value {
         let base = self.context_integration_branch(context);
-        let existing_pr = if crate::repositories::loop_read_formatting::text_or_empty(meta.get("pr_status")).starts_with("PR") { meta.get("pr").cloned().unwrap_or(Value::Null) } else { Value::Null };
+        let existing_pr = if crate::repositories::loop_read_formatting::text_or_empty(meta.get("pr_status")).starts_with("PR") {
+            meta.get("pr").cloned().unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
         let mut deliver = json!({
             "id": ACTION_DELIVER, "title": format!("Deliver: push the branch + PR to {base}"), "available": false, "unavailable_reason": block_reason,
             "preview": {"branch": meta.get("branch"), "base": base, "existing_pr": existing_pr, "open_features": self.app.loop_commands.list_open_features(&context.work_dir()), "push": null},
@@ -178,7 +184,13 @@ impl ActionService<'_> {
         let generate_summary = json!({"id": ACTION_SUMMARY, "title": action_title(ACTION_SUMMARY), "available": block_reason.is_none(), "unavailable_reason": block_reason, "preview": {"destination": self.get_output_dir()}});
         let loop_running = summary["running"] == true || block_reason == Some(LOOP_RUNNING_REASON);
         let worktrees = if loop_running { vec![] } else { self.app.loop_worktrees().list_loop_worktrees(context) };
-        let worktree_reason = if loop_running { Some(LOOP_RUNNING_REASON) } else if worktrees.is_empty() { Some(NO_LOOP_WORKTREE_REASON) } else { None };
+        let worktree_reason = if loop_running {
+            Some(LOOP_RUNNING_REASON)
+        } else if worktrees.is_empty() {
+            Some(NO_LOOP_WORKTREE_REASON)
+        } else {
+            None
+        };
         let push = json!({"id": ACTION_PUSH, "title": action_title(ACTION_PUSH), "available": worktree_reason.is_none(), "unavailable_reason": worktree_reason, "preview": {"worktrees": worktrees}});
         let clean = json!({"id": ACTION_CLEAN_WORKTREES, "title": action_title(ACTION_CLEAN_WORKTREES), "available": worktree_reason.is_none(), "unavailable_reason": worktree_reason, "preview": {"worktrees": worktrees, "backup_dir": self.get_output_dir()}});
         (200, json!({"actions": [deliver, generate_summary, push, clean]}))
@@ -187,7 +199,8 @@ impl ActionService<'_> {
     // ------------------------------------------------ POST action/run
     pub fn run_confirmed_action(&self, context: &ProjectContext, body: &Value) -> Reply {
         let Some(action) = body.get("action").and_then(Value::as_str).filter(|a| ALLOWED_ACTIONS.contains(a)) else {
-            return failure(400, format!("action outside the allowed list: {}", ALLOWED_ACTIONS.join(", "))); // nothing outside the whitelist, by any path
+            return failure(400, format!("action outside the allowed list: {}", ALLOWED_ACTIONS.join(", ")));
+            // nothing outside the whitelist, by any path
         };
         if body.get("confirm") != Some(&Value::Bool(true)) {
             return failure(400, "confirm must be exactly true");
@@ -251,9 +264,14 @@ impl ActionService<'_> {
         if targets.is_empty() {
             return failure(400, "no target: give targets from the /api/actions preview");
         }
-        self.app.log.info("action_launched", &[("project", json!(context.project.id)), ("action", json!(action)), ("targets", json!(targets.len())), ("force", json!(force))]);
+        self.app
+            .log
+            .info("action_launched", &[("project", json!(context.project.id)), ("action", json!(action)), ("targets", json!(targets.len())), ("force", json!(force))]);
         let service = self.app.loop_worktrees();
-        let results: Vec<Value> = targets.iter().map(|target| if action == ACTION_PUSH { service.push_worktree_branch(target) } else { service.clean_worktree_with_backup(context, target, force) }).collect();
+        let results: Vec<Value> = targets
+            .iter()
+            .map(|target| if action == ACTION_PUSH { service.push_worktree_branch(target) } else { service.clean_worktree_with_backup(context, target, force) })
+            .collect();
         let ok = results.iter().all(|item| item["ok"] == true);
         let py = |value: &Value| match value {
             Value::Null => "None".to_string(),
@@ -263,7 +281,13 @@ impl ActionService<'_> {
         let summary = results
             .iter()
             .map(|item| {
-                let shown = if action == ACTION_PUSH { py(&item["push"]) } else if engine_state::notify_truthy(item.get("error")) { py(&item["error"]) } else { "deleted".to_string() };
+                let shown = if action == ACTION_PUSH {
+                    py(&item["push"])
+                } else if engine_state::notify_truthy(item.get("error")) {
+                    py(&item["error"])
+                } else {
+                    "deleted".to_string()
+                };
                 format!("{}: {shown}", py(&item["branch"]))
             })
             .collect::<Vec<_>>()
@@ -321,7 +345,9 @@ impl ActionService<'_> {
             }
             json!({"state": JOB_STATE_OK, "reply": proposal["explanation"], "cost_usd": returned.get("cost_usd"), "error": null, "thread": null, "proposal": proposal})
         }));
-        let result = outcome.unwrap_or_else(|_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": null, "proposal": null}));
+        let result = outcome.unwrap_or_else(
+            |_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": null, "proposal": null}),
+        );
         self.app.chat_jobs.finish_job(job_id, result.as_object().unwrap());
         self.app.log.info("router_job_finished", &[("project", json!(context.project.id)), ("job", json!(job_id)), ("state", result["state"].clone())]);
     }
@@ -356,6 +382,9 @@ mod tests {
         assert_eq!(service.propose_action_from_text(&context, &json!({"text": " "})), failure(400, "empty text"));
         let (status, listing) = service.list_available_actions(&context);
         assert_eq!(status, 200);
-        assert_eq!((listing["actions"][1]["unavailable_reason"].clone(), listing["actions"][2]["unavailable_reason"].clone()), (json!(NO_LOOP_REASON), json!(NO_LOOP_WORKTREE_REASON)));
+        assert_eq!(
+            (listing["actions"][1]["unavailable_reason"].clone(), listing["actions"][2]["unavailable_reason"].clone()),
+            (json!(NO_LOOP_REASON), json!(NO_LOOP_WORKTREE_REASON))
+        );
     }
 }

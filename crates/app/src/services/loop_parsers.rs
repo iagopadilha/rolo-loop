@@ -115,7 +115,8 @@ fn parse_launch(marker: &str, body: &str) -> Launch {
     let token = marker.split_whitespace().next().unwrap_or("");
     let launch_epoch = parse_epoch(token);
     let launch_time = launch_epoch.map(|_| token.chars().take(19).collect::<String>());
-    let (mut lines, mut turn_starts, mut current, mut first_turn): (Vec<(String, Option<i64>)>, BTreeMap<i64, f64>, Option<i64>, Option<i64>) = (vec![], BTreeMap::new(), None, None);
+    let (mut lines, mut turn_starts, mut current, mut first_turn): (Vec<(String, Option<i64>)>, BTreeMap<i64, f64>, Option<i64>, Option<i64>) =
+        (vec![], BTreeMap::new(), None, None);
     let mut day_offset = 0i64;
     let (mut previous, mut base_date): (Option<i64>, Option<Date>) = (None, None);
     if let Some(epoch) = launch_epoch {
@@ -191,7 +192,12 @@ static GOT_LINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^\W*(?:received|actual
 static EXPECTED_GOT_INLINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"expected\s+(.+?),?\s+(?:but\s+)?(?:got|received|was|found)\s+(.+)\z"));
 
 fn new_entry(name: &str) -> Map<String, Value> {
-    Map::from_iter([("name".to_string(), json!(clip_redacted_text(name, NAME_LIMIT))), ("why".to_string(), Value::Null), ("expected".to_string(), Value::Null), ("got".to_string(), Value::Null)])
+    Map::from_iter([
+        ("name".to_string(), json!(clip_redacted_text(name, NAME_LIMIT))),
+        ("why".to_string(), Value::Null),
+        ("expected".to_string(), Value::Null),
+        ("got".to_string(), Value::Null),
+    ])
 }
 
 /// Sets a field once (the first reading wins) from a text already known to be non-empty.
@@ -311,7 +317,10 @@ mod tests {
         let ends: BTreeMap<i64, f64> = [(1, 100.0), (2, 200.0)].into();
         let starts: BTreeMap<i64, f64> = [(2, 120.0)].into();
         let timeline = TurnTimeline::build(&ends, &starts, &BTreeMap::new(), Some(3));
-        assert_eq!((timeline.turn_at(Some(150.0)), timeline.turn_at(Some(119.0)), timeline.turn_at(Some(250.0)), timeline.turn_at(None)), (Some(2), Some(2), Some(3), None));
+        assert_eq!(
+            (timeline.turn_at(Some(150.0)), timeline.turn_at(Some(119.0)), timeline.turn_at(Some(250.0)), timeline.turn_at(None)),
+            (Some(2), Some(2), Some(3), None)
+        );
         assert_eq!(timeline.turn_at(Some(50.0)), None); // turn 1 has no known start
         let durations: BTreeMap<i64, f64> = [(1, 40.0)].into();
         let timeline = TurnTimeline::build(&ends, &BTreeMap::new(), &durations, None);

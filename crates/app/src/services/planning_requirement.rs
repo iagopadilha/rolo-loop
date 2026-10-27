@@ -11,15 +11,16 @@
 //! "Ran a loop" = any trace the engine leaves: the loop worktree (or a project opened on it), LOOP.json with a status, `meta.json` with turns, a turn
 //! file or a live `LOOP.lock`. Everything is read from disk on each call (small files).
 
+use super::App;
 use crate::domain::errors::{AppError, Kind, PLANNING_REQUIRED_CODE};
 use crate::domain::project::{ProjectContext, LOOP_WORKTREE_SUFFIX};
-use super::App;
 use engine_state::loop_state;
 use std::path::Path;
 
 /// Lives in `project/loop/json/` (the `loop_path` rule for `*.json`).
 pub const REOPENED_MARKER_NAME: &str = "PLANNING-REOPENED.json";
-pub const PLANNING_REQUIRED_MESSAGE: &str = "planning mode: approve the roadmap in the planning screen first (the loop, the chat and the actions open after the approval)";
+pub const PLANNING_REQUIRED_MESSAGE: &str =
+    "planning mode: approve the roadmap in the planning screen first (the loop, the chat and the actions open after the approval)";
 
 pub struct PlanningRequirementService<'a> {
     pub app: &'a App,
@@ -100,7 +101,14 @@ mod tests {
     fn context(dir: &Path, name: &str) -> ProjectContext {
         let repo = dir.join(name);
         std::fs::create_dir_all(&repo).unwrap();
-        ProjectContext::new(Project { id: "p".into(), name: name.into(), repo_path: repo.display().to_string(), opened_at: String::new(), last_opened_at: String::new(), favorite: false })
+        ProjectContext::new(Project {
+            id: "p".into(),
+            name: name.into(),
+            repo_path: repo.display().to_string(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        })
     }
 
     #[test]

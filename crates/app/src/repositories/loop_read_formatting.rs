@@ -29,7 +29,13 @@ pub fn clip_redacted_text(text: &str, limit: usize) -> String {
 
 pub fn to_text_list(value: &Value) -> Vec<String> {
     match value {
-        Value::Array(items) => items.iter().map(|i| match i { Value::String(s) => s.clone(), other => pycompat::json::py_json_dumps(other, false) }).collect(),
+        Value::Array(items) => items
+            .iter()
+            .map(|i| match i {
+                Value::String(s) => s.clone(),
+                other => pycompat::json::py_json_dumps(other, false),
+            })
+            .collect(),
         Value::String(s) => LIST_SPLIT.split(s).into_iter().filter(|p| !p.is_empty()).collect(),
         _ => vec![],
     }
@@ -37,7 +43,11 @@ pub fn to_text_list(value: &Value) -> Vec<String> {
 
 /// A JSON number (never a bool) as `f64`.
 pub fn to_number(value: &Value) -> Option<f64> {
-    if value.is_number() { value.as_f64() } else { None }
+    if value.is_number() {
+        value.as_f64()
+    } else {
+        None
+    }
 }
 
 /// Python `round()` (banker's rounding) of a number of milliseconds into seconds.
@@ -115,7 +125,11 @@ pub fn compute_seconds_between(start: &str, end: &str) -> Option<i64> {
 pub fn sum_usage_tokens(usage: &Value) -> Option<i64> {
     let map = usage.as_object()?;
     let values: Vec<f64> = map.iter().filter(|(key, _)| key.ends_with("_tokens")).filter_map(|(_, v)| to_number(v)).collect();
-    if values.is_empty() { None } else { Some(values.iter().sum::<f64>() as i64) }
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.iter().sum::<f64>() as i64)
+    }
 }
 
 #[cfg(test)]

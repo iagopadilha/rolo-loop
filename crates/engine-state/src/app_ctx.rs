@@ -49,7 +49,8 @@ impl AppCtx {
         let locator = Locator::new(env.clone(), repo_root.clone());
         let configured = config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("");
         let skill_dir = locator.locate_orchestrator_skill_dir(configured);
-        let (plugin_root, guard) = if skill_dir.as_os_str().is_empty() { (PathBuf::new(), PathBuf::new()) } else { (plugin_root_of(&skill_dir), locator.locate_guard(&skill_dir)) };
+        let (plugin_root, guard) =
+            if skill_dir.as_os_str().is_empty() { (PathBuf::new(), PathBuf::new()) } else { (plugin_root_of(&skill_dir), locator.locate_guard(&skill_dir)) };
         let toolkit_root = locator.find_toolkit_root(&config);
         AppCtx { env: env.clone(), repo_root, config, skill_dir, plugin_root, guard, toolkit_root, app_exe: std::env::current_exe().unwrap_or_default() }
     }
@@ -74,6 +75,11 @@ impl AppCtx {
     pub fn describe_guard_search_paths(&self) -> String {
         let locator = Locator::new(self.env.clone(), self.repo_root.clone());
         let configured = self.config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("");
-        locator.list_skill_dir_candidates(configured).iter().map(|f| f.join("..").join("..").join("bin").join("guard.exe").display().to_string()).collect::<Vec<_>>().join(", ")
+        locator
+            .list_skill_dir_candidates(configured)
+            .iter()
+            .map(|f| f.join("..").join("..").join("bin").join("guard.exe").display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }

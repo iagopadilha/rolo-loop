@@ -13,7 +13,15 @@ pub const TIMEOUT_MESSAGE: &str = "timed out";
 /// What the services need from the operating system, so tests can replace it.
 pub trait ProcessRunner: Send + Sync {
     /// Runs and waits. Returns `(code, output, error)` as UTF-8 text. A timeout kills the tree and returns [`TIMEOUT_CODE`].
-    fn run_and_wait(&self, argv: &[String], folder: &str, timeout_seconds: u64, input_text: Option<&str>, extra_env: &[(String, String)], env: Option<&[(String, String)]>) -> (i32, String, String);
+    fn run_and_wait(
+        &self,
+        argv: &[String],
+        folder: &str,
+        timeout_seconds: u64,
+        input_text: Option<&str>,
+        extra_env: &[(String, String)],
+        env: Option<&[(String, String)]>,
+    ) -> (i32, String, String);
     /// Starts the process independently of this one (it outlives the app), output and error in `log_path`. Returns the pid.
     fn spawn_detached(&self, argv: &[String], folder: &str, log_path: &str, extra_env: &[(String, String)]) -> std::io::Result<i64>;
     /// True if the pid exists and is still running.
@@ -42,12 +50,24 @@ pub fn build_env(env: Option<&[(String, String)]>, extra_env: &[(String, String)
 }
 
 impl ProcessRunner for SystemProcesses {
-    fn run_and_wait(&self, argv: &[String], folder: &str, timeout_seconds: u64, input_text: Option<&str>, extra_env: &[(String, String)], env: Option<&[(String, String)]>) -> (i32, String, String) {
+    fn run_and_wait(
+        &self,
+        argv: &[String],
+        folder: &str,
+        timeout_seconds: u64,
+        input_text: Option<&str>,
+        extra_env: &[(String, String)],
+        env: Option<&[(String, String)]>,
+    ) -> (i32, String, String) {
         if argv.is_empty() {
             return (START_FAILURE_CODE, String::new(), "could not start ?: no command".into());
         }
         let full_env = build_env(env, extra_env).unwrap_or_else(|| std::env::vars().collect());
-        let cwd = if !folder.is_empty() && Path::new(folder).is_dir() { folder.to_string() } else { std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default() };
+        let cwd = if !folder.is_empty() && Path::new(folder).is_dir() {
+            folder.to_string()
+        } else {
+            std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()
+        };
         let ProcessResult { code, stdout, stderr, timed_out } = match run_process_checked(argv, &cwd, &full_env, input_text.unwrap_or(""), timeout_seconds) {
             Ok(result) => result,
             Err(failure) => {

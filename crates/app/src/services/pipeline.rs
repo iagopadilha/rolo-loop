@@ -92,7 +92,8 @@ pub fn compute_waves(features: &[Value]) -> HashMap<String, i64> {
     let dependencies: HashMap<String, Vec<String>> = features
         .iter()
         .map(|f| {
-            let deps = f["deps"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|d| !d.starts_with(loop_state::DIR_PREFIX)).map(String::from).collect();
+            let deps =
+                f["deps"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|d| !d.starts_with(loop_state::DIR_PREFIX)).map(String::from).collect();
             (f["id"].as_str().unwrap_or("").to_string(), deps)
         })
         .collect();
@@ -121,7 +122,11 @@ pub fn compute_waves(features: &[Value]) -> HashMap<String, i64> {
 
 /// Pipeline step of an agent role; `None` for roles outside the six steps (the orchestrator, mappers...).
 pub fn get_step_for_role(role: &str) -> Option<usize> {
-    if role.starts_with("executor") { Some(STEP_EXEC) } else { step_by_role(role) }
+    if role.starts_with("executor") {
+        Some(STEP_EXEC)
+    } else {
+        step_by_role(role)
+    }
 }
 
 /// RUNNING while it runs; FAIL when it failed or returned FAIL/BLOCKED (BLOCKED for the reviewer, which blocks a spec); else DONE.
@@ -409,7 +414,10 @@ mod tests {
         let events = vec![make_event("a", STEP_REVIEW, EVENT_DONE, "ok", Some("v001:x"), "spec-reviewer"), make_event("a", STEP_GATE, EVENT_DONE, "", None, "gate")];
         assert_eq!(build_turn_label(&events, &waves), "spec review · wave 2");
         assert_eq!(build_turn_label(&[], &waves), "orchestration");
-        assert_eq!((get_step_for_role("executor-back"), get_step_for_role("verifier-flow"), get_step_for_role("orchestrator")), (Some(STEP_EXEC), Some(STEP_VERIFY), None));
+        assert_eq!(
+            (get_step_for_role("executor-back"), get_step_for_role("verifier-flow"), get_step_for_role("orchestrator")),
+            (Some(STEP_EXEC), Some(STEP_VERIFY), None)
+        );
         assert_eq!(event_status_for_agent(&json!({"state": "done", "return_status": "BLOCKED"}), STEP_REVIEW), EVENT_BLOCKED);
         assert_eq!(event_status_for_agent(&json!({"state": "done", "return_status": "BLOCKED"}), STEP_EXEC), EVENT_FAIL);
     }
@@ -436,7 +444,10 @@ mod tests {
         assert_eq!((body["turns"].as_array().unwrap().len(), body["quarantine"].clone(), body["live_turn"].clone()), (2, json!(["a"]), json!(2)));
         assert_eq!(body["features"][1]["wave"], 2);
         let second = &body["turns"][1];
-        assert_eq!((second["events"][0]["status"].clone(), second["events"][0]["step"].clone(), second["events"][0]["agent"].clone()), (json!("BLOCKED"), json!(STEP_GATE), json!("gate")));
+        assert_eq!(
+            (second["events"][0]["status"].clone(), second["events"][0]["step"].clone(), second["events"][0]["agent"].clone()),
+            (json!("BLOCKED"), json!(STEP_GATE), json!("gate"))
+        );
         assert_eq!(app.pipeline().list_feature_events(&context, "a")[0]["turn"], 2);
         assert_eq!(app.pipeline().build_pipeline(&context), body);
     }

@@ -55,14 +55,22 @@ impl SetupCommitService<'_> {
             return Err(refuse("the folder is on a detached HEAD: check out a branch first", DETACHED_CODE, &[]));
         }
         if PROTECTED_BRANCHES.contains(&branch.to_lowercase().as_str()) {
-            return Err(refuse(format!("`{branch}` is a protected branch: the app never commits or pushes there. Switch to your working branch (for example developer)"), PROTECTED_CODE, &[("branch", json!(branch))]));
+            return Err(refuse(
+                format!("`{branch}` is a protected branch: the app never commits or pushes there. Switch to your working branch (for example developer)"),
+                PROTECTED_CODE,
+                &[("branch", json!(branch))],
+            ));
         }
         if confirm_branch.as_str().map(str::trim) != Some(branch.as_str()) {
             return Err(AppError::new(Kind::InvalidRepo, format!("confirm_branch must be the current branch `{branch}`")).with_extra("branch", json!(branch)));
         }
         let (remote, upstream_branch, upstream) = self.read_upstream(&repo.path, &branch);
         if upstream.is_empty() {
-            return Err(refuse(format!("`{branch}` has no upstream branch: set one first (git push -u origin {branch})"), NO_UPSTREAM_CODE, &[("branch", json!(branch))]));
+            return Err(refuse(
+                format!("`{branch}` has no upstream branch: set one first (git push -u origin {branch})"),
+                NO_UPSTREAM_CODE,
+                &[("branch", json!(branch))],
+            ));
         }
         if self.app.loop_status().is_loop_running(context) || self.app.jobs().get_running_job(context.repo_path()).is_some() {
             return Err(refuse("a loop or a job is running in this project: wait for it to finish", BUSY_CODE, &[]));
@@ -77,9 +85,15 @@ impl SetupCommitService<'_> {
         let (code, _, error) = git.run_git(&repo.path, &["push", &remote, &format!("HEAD:refs/heads/{upstream_branch}")]);
         if code != 0 {
             let last = error.lines().last().map(String::from).unwrap_or_else(|| code.to_string());
-            return Err(refuse(format!("the commit {commit} was made but the push failed: {last}"), PUSH_FAILED_CODE, &[("committed", json!(commit)), ("branch", json!(branch))]));
+            return Err(refuse(
+                format!("the commit {commit} was made but the push failed: {last}"),
+                PUSH_FAILED_CODE,
+                &[("committed", json!(commit)), ("branch", json!(branch))],
+            ));
         }
-        self.app.log.info("setup_commit_pushed", &[("project", json!(context.project.id)), ("repo", json!(repo.name)), ("branch", json!(branch)), ("files", json!(paths.len()))]);
+        self.app
+            .log
+            .info("setup_commit_pushed", &[("project", json!(context.project.id)), ("repo", json!(repo.name)), ("branch", json!(branch)), ("files", json!(paths.len()))]);
         Ok(json!({"ok": true, "repo": repo.name, "branch": branch, "commit": commit, "pushed_to": upstream, "files": paths}))
     }
 

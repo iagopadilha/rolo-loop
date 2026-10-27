@@ -3,8 +3,7 @@
 //! are settled; plus `--rewind` and the loop lock.
 
 use crate::loop_io::{
-    atomic_write_text, git, lock_holder_alive, load_json, process_start_time, read, read_lock_holder, save_meta, status_rows, worktree_of, StatusRow,
-    LOCK_START_SUFFIX,
+    atomic_write_text, git, load_json, lock_holder_alive, process_start_time, read, read_lock_holder, save_meta, status_rows, worktree_of, StatusRow, LOCK_START_SUFFIX,
 };
 use crate::loop_state::{self, feature_repo_paths, loop_path, parse_roadmap, Features};
 use crate::system_map::SYSTEM_DOCUMENT;
@@ -234,7 +233,11 @@ pub fn feature_scope_rows(rows: &[StatusRow], repo_name: &str, features: &Featur
     for row in rows {
         let path = row.path.trim_end_matches('/').to_string();
         let covered = scopes.iter().any(|s| !s.is_empty() && (path == *s || path.starts_with(&format!("{s}/")) || s.starts_with(&format!("{path}/"))));
-        if covered { inside.push(row.clone()) } else { outside.push(row.clone()) }
+        if covered {
+            inside.push(row.clone())
+        } else {
+            outside.push(row.clone())
+        }
     }
     (inside, outside)
 }
@@ -256,7 +259,11 @@ pub fn commit_leftovers(path: &str, rows: &[StatusRow], message: &str) -> (bool,
         }
     }
     let (code, _, err) = git(path, &["commit", "-m", message, "--no-verify"]);
-    if code == 0 { (true, String::new()) } else { (false, format!("git commit failed: {}", tail(&err, 200))) }
+    if code == 0 {
+        (true, String::new())
+    } else {
+        (false, format!("git commit failed: {}", tail(&err, 200)))
+    }
 }
 
 fn delete_path(path: &str, name: &str) {
@@ -324,7 +331,12 @@ pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &Le
         if !inside.is_empty() {
             let (saved, problem) = commit_leftovers(&path, &inside, &format!("chore(loop): checkpoint of work left uncommitted by turn {}", turn - 1));
             if saved {
-                println!("[loop] checkpoint: {} file(s) left by turn {} committed on the loop branch{}", inside.len(), turn - 1, if name.is_empty() { String::new() } else { format!(" (repo {name})") });
+                println!(
+                    "[loop] checkpoint: {} file(s) left by turn {} committed on the loop branch{}",
+                    inside.len(),
+                    turn - 1,
+                    if name.is_empty() { String::new() } else { format!(" (repo {name})") }
+                );
                 if let Some(map) = meta.as_object_mut() {
                     let list = map.entry("checkpoints").or_insert_with(|| json!([]));
                     if let Some(a) = list.as_array_mut() {
@@ -406,7 +418,8 @@ pub fn create_lock_file(path: &Path) -> std::io::Result<()> {
     drop(file);
     if let Some(started) = process_start_time(i64::from(std::process::id())) {
         let sidecar = PathBuf::from(format!("{}{LOCK_START_SUFFIX}", path.display()));
-        let _ = atomic_write_text(&sidecar, &py_json_dumps(&json!({"pid": std::process::id(), "started": started}), true)); // without the sidecar the lock is judged by the PID alone
+        let _ = atomic_write_text(&sidecar, &py_json_dumps(&json!({"pid": std::process::id(), "started": started}), true));
+        // without the sidecar the lock is judged by the PID alone
     }
     Ok(())
 }
@@ -468,7 +481,8 @@ mod tests {
         let work = dir.path().display().to_string();
         let road = dir.path().join(".specs").join("project");
         std::fs::create_dir_all(&road).unwrap();
-        std::fs::write(road.join("ROADMAP.md"), "## Stage 1\n- [a] status=verified\n- [b] status=blocked\n- [c] scope=x status=building\n- [d] status=pending\n").unwrap();
+        std::fs::write(road.join("ROADMAP.md"), "## Stage 1\n- [a] status=verified\n- [b] status=blocked\n- [c] scope=x status=building\n- [d] status=pending\n")
+            .unwrap();
         assert_eq!(roadmap_score(&work), (10, 4, 2));
         assert_eq!(unquote_git_path("\"configura\\303\\247\\303\\243o.txt\""), "configuração.txt");
         assert_eq!(unquote_git_path("\"a\\tb\\\"c\""), "a\tb\"c");

@@ -65,7 +65,12 @@ fn failure(status: u16, message: impl Into<String>) -> Reply {
 
 /// Python `str.isprintable` (no control, format or separator characters other than the plain space).
 fn is_printable(text: &str) -> bool {
-    text.chars().all(|c| c == ' ' || !(c.is_control() || c.is_whitespace() || matches!(c, '\u{00ad}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{feff}')))
+    text.chars().all(|c| {
+        c == ' '
+            || !(c.is_control()
+                || c.is_whitespace()
+                || matches!(c, '\u{00ad}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{feff}'))
+    })
 }
 
 /// Normalized scope `{"type","agent_id","turn"}` or `None` when invalid. `error` adds `error_id` and `quarantine` adds `feature`.
@@ -139,7 +144,10 @@ impl ChatService<'_> {
         }
         let slug = agent_id.split(':').next().unwrap_or("");
         if !agent_id.is_empty() && agent_id != ORCHESTRATOR_AGENT_ID && FEATURE_SLUG.full_match(slug) {
-            return (None, format!("Agent {agent_id} (feature {slug}). Feature files: {}\n\n{}", Self::describe_feature_dir(work_dir, slug), Self::build_general_context(work_dir)));
+            return (
+                None,
+                format!("Agent {agent_id} (feature {slug}). Feature files: {}\n\n{}", Self::describe_feature_dir(work_dir, slug), Self::build_general_context(work_dir)),
+            );
         }
         (None, Self::build_general_context(work_dir))
     }
@@ -157,7 +165,12 @@ impl ChatService<'_> {
             (files.and_then(|f| read_transcript_summary(&f.1)), files.and_then(|f| self.app.transcripts.read_agent_type(&f.2)))
         };
         let Some(summary) = summary else { return (None, Self::build_general_context(work_dir)) };
-        let actions: Vec<String> = summary["actions"].as_array().into_iter().flatten().map(|a| format!("- {} {}", a["type"].as_str().unwrap_or(""), a["text"].as_str().unwrap_or("").chars().take(CONTEXT_ACTION_TEXT_LIMIT).collect::<String>())).collect();
+        let actions: Vec<String> = summary["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|a| format!("- {} {}", a["type"].as_str().unwrap_or(""), a["text"].as_str().unwrap_or("").chars().take(CONTEXT_ACTION_TEXT_LIMIT).collect::<String>()))
+            .collect();
         let actions = &actions[actions.len().saturating_sub(LAST_ACTIONS_COUNT)..];
         let text_or = |key: &str, fallback: &str| summary.get(key).and_then(Value::as_str).filter(|t| !t.is_empty()).unwrap_or(fallback).to_string();
         let feature = summary.get("feature").and_then(Value::as_str).filter(|f| !f.is_empty());
@@ -238,7 +251,9 @@ impl ChatService<'_> {
             }
             job_id = match self.app.chat_jobs.reserve_job(&context.project.id, Some(&thread_id), MAX_CONCURRENT_JOBS, None) {
                 Ok(id) => id,
-                Err(reason) => return failure(409, if reason == THREAD_BUSY_REASON { "this thread already has a reply in progress".to_string() } else { busy_jobs_error() }),
+                Err(reason) => {
+                    return failure(409, if reason == THREAD_BUSY_REASON { "this thread already has a reply in progress".to_string() } else { busy_jobs_error() })
+                }
             };
             if let Some(Value::Array(messages)) = thread.get_mut("messages") {
                 messages.push(json!({"role": "user", "text": text.trim(), "t": now_iso(), "cost_usd": null, "mode": QUESTION_MODE}));
@@ -256,12 +271,23 @@ impl ChatService<'_> {
             ..CommandOptions::default()
         };
         let argv = self.app.claude.build_command(&options);
-        let stdin_text = format!("{READ_ONLY_PREFIX}\n\n{}{USER_QUESTION_HEADER}{}", if context_text.is_empty() { String::new() } else { format!("{context_text}\n\n") }, text.trim());
+        let stdin_text =
+            format!("{READ_ONLY_PREFIX}\n\n{}{USER_QUESTION_HEADER}{}", if context_text.is_empty() { String::new() } else { format!("{context_text}\n\n") }, text.trim());
         let run_dir = if std::path::Path::new(&work_dir).is_dir() { work_dir.clone() } else { context.repo_path().to_string() };
-        self.app.log.info("chat_job_started", &[("project", json!(context.project.id)), ("job", json!(job_id)), ("thread", json!(thread_id)), ("resuming_session", json!(session.is_some()))]);
+        self.app.log.info(
+            "chat_job_started",
+            &[("project", json!(context.project.id)), ("job", json!(job_id)), ("thread", json!(thread_id)), ("resuming_session", json!(session.is_some()))],
+        );
         let (app, job_context, job, thread_for_job) = (self.app.shared(), context.clone(), job_id.clone(), thread_id.clone());
-        if std::thread::Builder::new().name(format!("chat-{job_id}")).spawn(move || app.chat().run_chat_job(&job_context, &job, &thread_for_job, &argv, &stdin_text, &run_dir)).is_err() {
-            self.app.chat_jobs.finish_job(&job_id, json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": UNEXPECTED_FAILURE, "thread": thread_id}).as_object().unwrap());
+        if std::thread::Builder::new()
+            .name(format!("chat-{job_id}"))
+            .spawn(move || app.chat().run_chat_job(&job_context, &job, &thread_for_job, &argv, &stdin_text, &run_dir))
+            .is_err()
+        {
+            self.app.chat_jobs.finish_job(
+                &job_id,
+                json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": UNEXPECTED_FAILURE, "thread": thread_id}).as_object().unwrap(),
+            );
             return failure(500, "the reply thread cannot start");
         }
         (202, json!({"ok": true, "job": job_id, "thread": thread_id}))
@@ -285,7 +311,8 @@ impl ChatService<'_> {
                 json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": error, "thread": thread_id})
             }
         }));
-        let result = outcome.unwrap_or_else(|_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": thread_id}));
+        let result =
+            outcome.unwrap_or_else(|_| json!({"state": JOB_STATE_ERROR, "reply": null, "cost_usd": null, "error": "failed to run claude: panic", "thread": thread_id}));
         self.app.chat_jobs.finish_job(job_id, result.as_object().unwrap());
         self.app.log.info("chat_job_finished", &[("project", json!(context.project.id)), ("job", json!(job_id)), ("state", result["state"].clone())]);
     }

@@ -23,7 +23,11 @@ const SERVER_ANSWER_LIMIT: usize = 200;
 pub fn chosen_provider(env: &Env) -> String {
     let v = env.text("LOOP_EMAIL_PROVIDER");
     let v = v.trim();
-    if v.is_empty() { DEFAULT_PROVIDER.to_string() } else { v.to_lowercase() }
+    if v.is_empty() {
+        DEFAULT_PROVIDER.to_string()
+    } else {
+        v.to_lowercase()
+    }
 }
 
 /// Variables the chosen provider needs (an unknown provider needs LOOP_EMAIL_PROVIDER to be fixed).
@@ -44,7 +48,11 @@ fn clip(text: &str, n: usize) -> String {
 }
 
 fn mask(text: &str, secret: &str) -> String {
-    if secret.is_empty() { text.to_string() } else { text.replace(secret, "***") }
+    if secret.is_empty() {
+        text.to_string()
+    } else {
+        text.replace(secret, "***")
+    }
 }
 
 /// `(ok, detail)` of sending `html_body` through the chosen provider; `None` when the provider is unknown.
@@ -61,7 +69,14 @@ fn send_smtp(env: &Env, recipients: &[String], subject: &str, html_body: &str) -
     let port = env.text("LOOP_SMTP_PORT").trim().parse::<u16>().unwrap_or(DEFAULT_SMTP_PORT);
     let (user, password) = (env.text("LOOP_SMTP_USER"), env.text("LOOP_SMTP_PASSWORD"));
     let sender = env.text("LOOP_SMTP_FROM");
-    let security = { let s = env.text("LOOP_SMTP_SECURITY"); if s.trim().is_empty() { "starttls".to_string() } else { s.trim().to_lowercase() } };
+    let security = {
+        let s = env.text("LOOP_SMTP_SECURITY");
+        if s.trim().is_empty() {
+            "starttls".to_string()
+        } else {
+            s.trim().to_lowercase()
+        }
+    };
     let from: Mailbox = match sender.parse() {
         Ok(m) => m,
         Err(e) => return (false, format!("no response from the SMTP server: {}", clip(&e.to_string(), ERROR_DETAIL_LIMIT))),

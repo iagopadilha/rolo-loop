@@ -31,11 +31,7 @@ pub fn py_repr(value: &Value) -> String {
             }
         }
         Value::String(s) => {
-            let quote = if s.contains('\'') && !s.contains('"') {
-                '"'
-            } else {
-                '\''
-            };
+            let quote = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
             let mut out = String::new();
             out.push(quote);
             for c in s.chars() {
@@ -55,28 +51,16 @@ pub fn py_repr(value: &Value) -> String {
             out
         }
         Value::Array(items) => {
-            format!(
-                "[{}]",
-                items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-            )
+            format!("[{}]", items.iter().map(py_repr).collect::<Vec<_>>().join(", "))
         }
-        Value::Object(map) => format!(
-            "{{{}}}",
-            map.iter()
-                .map(|(k, v)| format!("{}: {}", py_repr(&Value::String(k.clone())), py_repr(v)))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
+        Value::Object(map) => {
+            format!("{{{}}}", map.iter().map(|(k, v)| format!("{}: {}", py_repr(&Value::String(k.clone())), py_repr(v))).collect::<Vec<_>>().join(", "))
+        }
     }
 }
 
 /// A positive whole number from config.json, else `default` and a note (absent key = default, no note).
-pub fn read_positive_threshold(
-    config: &Map<String, Value>,
-    key: &str,
-    default: i64,
-    notes: &mut Vec<String>,
-) -> i64 {
+pub fn read_positive_threshold(config: &Map<String, Value>, key: &str, default: i64, notes: &mut Vec<String>) -> i64 {
     let Some(value) = config.get(key) else {
         return default;
     };
@@ -86,10 +70,7 @@ pub fn read_positive_threshold(
     };
     let usable = number.is_some_and(|f| f.is_finite() && f > 0.0);
     if !usable || (number.unwrap_or(0.0) as i64) <= 0 {
-        notes.push(format!(
-            "{key} in config.json is not a positive number ({}): using {default}",
-            py_repr(value)
-        ));
+        notes.push(format!("{key} in config.json is not a positive number ({}): using {default}", py_repr(value)));
         return default;
     }
     number.unwrap_or(0.0) as i64
@@ -134,63 +115,24 @@ mod tests {
     #[test]
     fn threshold_notes_quote_the_value_like_python() {
         let mut notes = vec![];
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({"k": "abc"})), "k", 5, &mut notes),
-            5
-        );
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({"k": 0})), "k", 5, &mut notes),
-            5
-        );
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({"k": 0.5})), "k", 5, &mut notes),
-            5
-        );
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({"k": true})), "k", 5, &mut notes),
-            5
-        );
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({"k": 7})), "k", 5, &mut notes),
-            7
-        );
-        assert_eq!(
-            read_positive_threshold(&cfg(json!({})), "k", 5, &mut notes),
-            5
-        );
-        assert_eq!(
-            notes[0],
-            "k in config.json is not a positive number ('abc'): using 5"
-        );
-        assert_eq!(
-            notes[1],
-            "k in config.json is not a positive number (0): using 5"
-        );
-        assert_eq!(
-            notes[2],
-            "k in config.json is not a positive number (0.5): using 5"
-        );
-        assert_eq!(
-            notes[3],
-            "k in config.json is not a positive number (True): using 5"
-        );
+        assert_eq!(read_positive_threshold(&cfg(json!({"k": "abc"})), "k", 5, &mut notes), 5);
+        assert_eq!(read_positive_threshold(&cfg(json!({"k": 0})), "k", 5, &mut notes), 5);
+        assert_eq!(read_positive_threshold(&cfg(json!({"k": 0.5})), "k", 5, &mut notes), 5);
+        assert_eq!(read_positive_threshold(&cfg(json!({"k": true})), "k", 5, &mut notes), 5);
+        assert_eq!(read_positive_threshold(&cfg(json!({"k": 7})), "k", 5, &mut notes), 7);
+        assert_eq!(read_positive_threshold(&cfg(json!({})), "k", 5, &mut notes), 5);
+        assert_eq!(notes[0], "k in config.json is not a positive number ('abc'): using 5");
+        assert_eq!(notes[1], "k in config.json is not a positive number (0): using 5");
+        assert_eq!(notes[2], "k in config.json is not a positive number (0.5): using 5");
+        assert_eq!(notes[3], "k in config.json is not a positive number (True): using 5");
         assert_eq!(notes.len(), 4);
     }
 
     #[test]
     fn orchestrator_model_rules() {
         assert_eq!(read_orchestrator_model(&cfg(json!({}))), "opus");
-        assert_eq!(
-            read_orchestrator_model(&cfg(json!({"orchestrator_model": " sonnet "}))),
-            "sonnet"
-        );
-        assert_eq!(
-            read_orchestrator_model(&cfg(json!({"orchestrator_model": ""}))),
-            ""
-        );
-        assert_eq!(
-            read_orchestrator_model(&cfg(json!({"orchestrator_model": 3}))),
-            "opus"
-        );
+        assert_eq!(read_orchestrator_model(&cfg(json!({"orchestrator_model": " sonnet "}))), "sonnet");
+        assert_eq!(read_orchestrator_model(&cfg(json!({"orchestrator_model": ""}))), "");
+        assert_eq!(read_orchestrator_model(&cfg(json!({"orchestrator_model": 3}))), "opus");
     }
 }

@@ -153,7 +153,7 @@ impl P<'_> {
             s
         };
         let lo = digits(&mut j);
-        
+
         let hi = if self.c.get(j) == Some(&',') {
             j += 1;
             digits(&mut j)
@@ -178,7 +178,11 @@ impl P<'_> {
             'b' => Ok(!in_set),
             'A' | 'B' | 'Z' | 'z' if !in_set => Ok(true),
             'x' | 'u' | 'U' => {
-                let need = match next { 'x' => 2, 'u' => 4, _ => 8 };
+                let need = match next {
+                    'x' => 2,
+                    'u' => 4,
+                    _ => 8,
+                };
                 let digits: String = self.c[self.i..].iter().take(need).take_while(|d| d.is_ascii_hexdigit()).collect();
                 if digits.len() != need {
                     let seen: String = self.c[at..(self.i + digits.len()).min(self.c.len())].iter().collect();
@@ -211,7 +215,10 @@ impl P<'_> {
                 // up to two digits are a group reference (three octal digits are an octal escape)
                 let mut number = next.to_digit(10).unwrap_or(0) as usize;
                 if let Some(d) = self.c.get(self.i).and_then(|d| d.to_digit(10)) {
-                    let octal3 = next <= '3' && ('0'..='7').contains(&self.c[at + 1]) && ('0'..='7').contains(&self.c[self.i]) && self.c.get(self.i + 1).is_some_and(|x| ('0'..='7').contains(x));
+                    let octal3 = next <= '3'
+                        && ('0'..='7').contains(&self.c[at + 1])
+                        && ('0'..='7').contains(&self.c[self.i])
+                        && self.c.get(self.i + 1).is_some_and(|x| ('0'..='7').contains(x));
                     if octal3 {
                         self.i += 2;
                         return Ok(false);

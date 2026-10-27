@@ -47,7 +47,8 @@ impl ActivityMonitor {
 
     pub fn is_any_provider_busy(&self) -> bool {
         let providers: Vec<Arc<dyn BusyProvider>> = self.busy_providers.lock().map(|l| l.clone()).unwrap_or_default();
-        providers.iter().any(|p| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| p.is_busy())).unwrap_or(true)) // when in doubt, do not shut down
+        providers.iter().any(|p| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| p.is_busy())).unwrap_or(true))
+        // when in doubt, do not shut down
     }
 
     fn idle_for(&self) -> f64 {

@@ -195,7 +195,11 @@ impl Router {
             }
             path_exists = true;
         }
-        if path_exists { Found::MethodNotAllowed } else { Found::NotFound }
+        if path_exists {
+            Found::MethodNotAllowed
+        } else {
+            Found::NotFound
+        }
     }
 }
 

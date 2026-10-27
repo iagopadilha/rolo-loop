@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 pub const HEADLESS_MODE_VARIABLE: &str = "LOOP_HEADLESS";
 
 /// Name of the engine script in the old layout -> the subcommand of the binary.
-const SUBCOMMANDS: [(&str, &str); 6] = [("run_loop", "loop"), ("delivery", "deliver"), ("loop_summary", "summary"), ("loop_state", "state"), ("close_loop", "close-loop"), ("notify", "notify")];
+const SUBCOMMANDS: [(&str, &str); 6] =
+    [("run_loop", "loop"), ("delivery", "deliver"), ("loop_summary", "summary"), ("loop_state", "state"), ("close_loop", "close-loop"), ("notify", "notify")];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EngineScriptResult {
@@ -67,7 +68,14 @@ impl EngineScriptService<'_> {
     }
 
     /// `harness <command> <target_dir> <args...>` with cwd = target_dir.
-    pub fn run_engine_script_and_wait(&self, script_name: &str, target_dir: &str, args: &[String], timeout_seconds: u64, extra_env: &[(String, String)]) -> EngineScriptResult {
+    pub fn run_engine_script_and_wait(
+        &self,
+        script_name: &str,
+        target_dir: &str,
+        args: &[String],
+        timeout_seconds: u64,
+        extra_env: &[(String, String)],
+    ) -> EngineScriptResult {
         let mut argv = self.app.engine_argv(script_name);
         argv.push(target_dir.to_string());
         argv.extend(args.iter().cloned());

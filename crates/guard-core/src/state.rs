@@ -57,11 +57,7 @@ pub fn loop_file(specs_dir: &str, name: &str) -> String {
 
 /// One `KEY=value` of the app's `.env` (`<LOOP_DATA_DIR or ~/.loop-harness>/.env`); empty when absent or unreadable.
 pub fn app_env_value(g: &G, name: &str) -> String {
-    let data = g
-        .env
-        .get("LOOP_DATA_DIR")
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| nt_join(&g.home(), APP_DATA_DIR_NAME));
+    let data = g.env.get("LOOP_DATA_DIR").filter(|v| !v.is_empty()).unwrap_or_else(|| nt_join(&g.home(), APP_DATA_DIR_NAME));
     let Ok(bytes) = std::fs::read(nt_join(&data, ".env")) else {
         return String::new();
     };
@@ -74,21 +70,14 @@ pub fn app_env_value(g: &G, name: &str) -> String {
         }
         let (key, sep, value) = partition(line, "=");
         if sep && key.trim() == name {
-            return value
-                .trim()
-                .trim_matches(|c| c == '"' || c == '\'')
-                .to_string();
+            return value.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
         }
     }
     String::new()
 }
 
 fn first_non_empty(values: &[String]) -> String {
-    values
-        .iter()
-        .find(|v| !v.is_empty())
-        .cloned()
-        .unwrap_or_default()
+    values.iter().find(|v| !v.is_empty()).cloned().unwrap_or_default()
 }
 
 /// The branch a push/PR may never target.
@@ -106,10 +95,7 @@ pub fn integration_branch(g: &G) -> String {
 /// `LOOP_SPECS_DIR`: absolute path of the PRIMARY `.specs` folder, when it is an existing folder named `.specs`.
 pub fn specs_dir_from_env(g: &G) -> Option<String> {
     let raw = g.env.text("LOOP_SPECS_DIR");
-    let value = raw
-        .trim()
-        .trim_matches(|c| c == '"' || c == '\'')
-        .to_string();
+    let value = raw.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
     if !value.is_empty() && nt_isabs(&value) && Path::new(&value).is_dir() {
         let normalized = nt_normpath(&value);
         if normalized.rsplit('\\').next() == Some(".specs") {
@@ -126,9 +112,7 @@ pub fn find_specs_dir(g: &G, cwd: Option<&str>) -> Option<String> {
     }
     let start = match cwd.filter(|c| !c.is_empty()) {
         Some(c) => c.to_string(),
-        None => std::env::current_dir()
-            .map(|p| p.display().to_string())
-            .unwrap_or_default(),
+        None => std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default(),
     };
     let mut here = crate::pyre::nt_abspath(&start);
     let mut nearest: Option<String> = None;
@@ -138,11 +122,7 @@ pub fn find_specs_dir(g: &G, cwd: Option<&str>) -> Option<String> {
             nearest = Some(candidate.clone());
         }
         if Path::new(&nt_join(&here, ".git")).exists() {
-            return if Path::new(&candidate).is_dir() {
-                Some(candidate)
-            } else {
-                nearest
-            };
+            return if Path::new(&candidate).is_dir() { Some(candidate) } else { nearest };
         }
         let parent = nt_dirname(&here);
         if parent == here {
@@ -176,16 +156,9 @@ pub fn load_permissions(specs_dir: Option<&str>) -> (Permissions, String) {
     let bytes = match std::fs::read(&path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (permissions, String::new()),
-        Err(e) => {
-            return (
-                permissions,
-                format!("guard: PERMISSIONS.json unreadable ({e}); no exception applied\n"),
-            )
-        }
+        Err(e) => return (permissions, format!("guard: PERMISSIONS.json unreadable ({e}); no exception applied\n")),
     };
-    let parsed = String::from_utf8(bytes)
-        .map_err(|e| e.to_string())
-        .and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| e.to_string()));
+    let parsed = String::from_utf8(bytes).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| e.to_string()));
     match parsed {
         Ok(Value::Object(map)) => {
             if let Some(Value::Array(items)) = map.get("allow") {
@@ -205,7 +178,9 @@ pub fn load_permissions(specs_dir: Option<&str>) -> (Permissions, String) {
             }
             (permissions, String::new())
         }
-        Ok(_) => (permissions, "guard: PERMISSIONS.json unreadable (dictionary update sequence element #0 has length 1; 2 is required); no exception applied\n".to_string()),
+        Ok(_) => {
+            (permissions, "guard: PERMISSIONS.json unreadable (dictionary update sequence element #0 has length 1; 2 is required); no exception applied\n".to_string())
+        }
         Err(error) => (permissions, format!("guard: PERMISSIONS.json unreadable ({error}); no exception applied\n")),
     }
 }
@@ -255,30 +230,16 @@ pub fn current_turn(g: &G, specs_dir: Option<&str>) -> Option<u64> {
 pub fn describe_attempt(payload: &Value) -> String {
     let tool = payload.get("tool_name").map(value_text).unwrap_or_default();
     let input = payload.get("tool_input").cloned().unwrap_or(Value::Null);
-    let input = if input.is_null() || input == Value::Bool(false) {
-        Value::Object(Default::default())
-    } else {
-        input
-    };
+    let input = if input.is_null() || input == Value::Bool(false) { Value::Object(Default::default()) } else { input };
     let text = if tool == "Bash" || tool == "PowerShell" {
         input.get("command").map(value_text).unwrap_or_default()
     } else if ["Write", "Edit", "MultiEdit", "NotebookEdit", "Read"].contains(&tool.as_str()) {
-        let path = input
-            .get("file_path")
-            .filter(|v| truthy(v))
-            .or_else(|| input.get("notebook_path"))
-            .map(value_text)
-            .unwrap_or_default();
+        let path = input.get("file_path").filter(|v| truthy(v)).or_else(|| input.get("notebook_path")).map(value_text).unwrap_or_default();
         format!("{tool} {path}")
     } else {
         tool.clone()
     };
-    text.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(ATTEMPT_LIMIT)
-        .collect()
+    text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(ATTEMPT_LIMIT).collect()
 }
 
 /// Python's `str(value)` for the JSON types the payload carries.
@@ -311,34 +272,17 @@ fn now_local_stamp() -> String {
 }
 
 /// Appends one JSON line to `guard.log`. Never raises.
-pub fn log(
-    g: &G,
-    specs_dir: Option<&str>,
-    profile: &str,
-    rule: &str,
-    decision: &str,
-    detail: &str,
-    attempt: Option<&str>,
-    extra: Option<&[(&str, Value)]>,
-) {
+pub fn log(g: &G, specs_dir: Option<&str>, profile: &str, rule: &str, decision: &str, detail: &str, attempt: Option<&str>, extra: Option<&[(&str, Value)]>) {
     let Some(specs) = specs_dir.filter(|s| !s.is_empty()) else {
         return;
     };
     let mut line = serde_json::Map::new();
     line.insert("t".into(), Value::String(now_local_stamp()));
-    line.insert(
-        "turn".into(),
-        current_turn(g, Some(specs))
-            .map(|n| Value::Number(n.into()))
-            .unwrap_or(Value::Null),
-    );
+    line.insert("turn".into(), current_turn(g, Some(specs)).map(|n| Value::Number(n.into())).unwrap_or(Value::Null));
     line.insert("profile".into(), Value::String(profile.to_string()));
     line.insert("rule".into(), Value::String(rule.to_string()));
     line.insert("decision".into(), Value::String(decision.to_string()));
-    line.insert(
-        "detail".into(),
-        Value::String(detail.chars().take(200).collect()),
-    );
+    line.insert("detail".into(), Value::String(detail.chars().take(200).collect()));
     if let Some(a) = attempt.filter(|a| !a.is_empty()) {
         line.insert("attempt".into(), Value::String(a.to_string()));
     }
@@ -351,11 +295,7 @@ pub fn log(
     if let Some(parent) = Path::new(&path).parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(file, "{}", py_json_dumps(&Value::Object(line), false));
     }
 }
@@ -367,25 +307,14 @@ pub fn notify_command(g: &G) -> Vec<String> {
         if !home.is_empty() {
             home
         } else {
-            let data = g
-                .env
-                .get("LOOP_DATA_DIR")
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| nt_join(&g.home(), APP_DATA_DIR_NAME));
-            cfg::locator::read_user_config(Path::new(&data))
-                .get("app_root_dir")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string()
+            let data = g.env.get("LOOP_DATA_DIR").filter(|v| !v.is_empty()).unwrap_or_else(|| nt_join(&g.home(), APP_DATA_DIR_NAME));
+            cfg::locator::read_user_config(Path::new(&data)).get("app_root_dir").and_then(Value::as_str).unwrap_or("").to_string()
         }
     };
     if app.is_empty() {
         return vec![];
     }
-    for candidate in [
-        nt_join(&app, "harness.exe"),
-        nt_join(&nt_join(&app, "bin"), "harness.exe"),
-    ] {
+    for candidate in [nt_join(&app, "harness.exe"), nt_join(&nt_join(&app, "bin"), "harness.exe")] {
         if Path::new(&candidate).is_file() {
             return vec![candidate, "notify".to_string()];
         }
@@ -395,16 +324,7 @@ pub fn notify_command(g: &G) -> Vec<String> {
 
 /// A fail-open must not be silent: logs it and warns through the notify channels, once an hour. Never raises.
 pub fn alert(g: &G, specs_dir: Option<&str>, profile: &str, message: &str) {
-    log(
-        g,
-        specs_dir,
-        profile,
-        "guard-failopen",
-        "error",
-        message,
-        None,
-        None,
-    );
+    log(g, specs_dir, profile, "guard-failopen", "error", message, None, None);
     let marker = match specs_dir.filter(|s| !s.is_empty()) {
         Some(specs) => {
             let m = loop_file(specs, ".guard-alert");
@@ -413,27 +333,18 @@ pub fn alert(g: &G, specs_dir: Option<&str>, profile: &str, message: &str) {
             }
             m
         }
-        None => nt_join(
-            &std::env::temp_dir().display().to_string(),
-            "loop-guard-alert",
-        ),
+        None => nt_join(&std::env::temp_dir().display().to_string(), "loop-guard-alert"),
     };
     if let Ok(meta) = std::fs::metadata(&marker) {
         if meta.is_file() {
-            if let Ok(age) = meta
-                .modified()
-                .and_then(|m| m.elapsed().map_err(std::io::Error::other))
-            {
+            if let Ok(age) = meta.modified().and_then(|m| m.elapsed().map_err(std::io::Error::other)) {
                 if age.as_secs() < 3600 {
                     return;
                 }
             }
         }
     }
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0);
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
     if std::fs::write(&marker, stamp.to_string()).is_err() {
         return;
     }
@@ -447,12 +358,7 @@ pub fn alert(g: &G, specs_dir: Option<&str>, profile: &str, message: &str) {
     );
     let _ = std::process::Command::new(&notify[0])
         .args(&notify[1..])
-        .args([
-            "--subject",
-            "[guard] internal failure: the gatekeeper let it through",
-            "--body",
-            &body,
-        ])
+        .args(["--subject", "[guard] internal failure: the gatekeeper let it through", "--body", &body])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -494,12 +400,7 @@ pub fn current_branch(cwd: Option<&str>) -> String {
 /// `split_commands`: split on `&&`, `||`, `;`, `|`, newline, and a single `&`.
 pub fn split_commands(command: &str) -> Vec<String> {
     static SPLIT: LazyLock<Re> = LazyLock::new(|| Re::new(r"&&|\|\||;|\||\n|&(?!&)"));
-    SPLIT
-        .split(command)
-        .into_iter()
-        .map(|p| p.trim().to_string())
-        .filter(|p| !p.is_empty())
-        .collect()
+    SPLIT.split(command).into_iter().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
 }
 
 #[cfg(test)]
@@ -509,41 +410,21 @@ mod tests {
 
     #[test]
     fn split_commands_matches_python() {
-        assert_eq!(
-            split_commands("a && b || c; d | e\nf & g"),
-            vec!["a", "b", "c", "d", "e", "f", "g"]
-        );
+        assert_eq!(split_commands("a && b || c; d | e\nf & g"), vec!["a", "b", "c", "d", "e", "f", "g"]);
     }
 
     #[test]
     fn describe_attempt_shapes() {
-        assert_eq!(
-            describe_attempt(
-                &json!({"tool_name": "Bash", "tool_input": {"command": "git   push\norigin"}})
-            ),
-            "git push origin"
-        );
-        assert_eq!(
-            describe_attempt(&json!({"tool_name": "Write", "tool_input": {"file_path": "a.txt"}})),
-            "Write a.txt"
-        );
-        assert_eq!(
-            describe_attempt(&json!({"tool_name": "WebFetch", "tool_input": {}})),
-            "WebFetch"
-        );
+        assert_eq!(describe_attempt(&json!({"tool_name": "Bash", "tool_input": {"command": "git   push\norigin"}})), "git push origin");
+        assert_eq!(describe_attempt(&json!({"tool_name": "Write", "tool_input": {"file_path": "a.txt"}})), "Write a.txt");
+        assert_eq!(describe_attempt(&json!({"tool_name": "WebFetch", "tool_input": {}})), "WebFetch");
     }
 
     #[test]
     fn integration_branch_precedence() {
-        let g = G::new(cfg::Env::from_pairs([(
-            "LOOP_DATA_DIR",
-            "C:\\nonexistent-data-dir",
-        )]));
+        let g = G::new(cfg::Env::from_pairs([("LOOP_DATA_DIR", "C:\\nonexistent-data-dir")]));
         assert_eq!(integration_branch(&g), "developer");
-        let g = G::new(cfg::Env::from_pairs([
-            ("LOOP_DATA_DIR", "C:\\nonexistent-data-dir"),
-            ("LOOP_INTEGRATION_BRANCH", " Release/Next "),
-        ]));
+        let g = G::new(cfg::Env::from_pairs([("LOOP_DATA_DIR", "C:\\nonexistent-data-dir"), ("LOOP_INTEGRATION_BRANCH", " Release/Next ")]));
         assert_eq!(integration_branch(&g), "release/next");
     }
 }

@@ -48,7 +48,11 @@ pub fn read_file_tail(path: &Path, limit: u64) -> String {
         return String::new();
     }
     let text = String::from_utf8_lossy(&data).into_owned();
-    if start > 0 { text.split_once('\n').map(|p| p.1.to_string()).unwrap_or_default() } else { text }
+    if start > 0 {
+        text.split_once('\n').map(|p| p.1.to_string()).unwrap_or_default()
+    } else {
+        text
+    }
 }
 
 /// `time` of an egress.log line as local ISO text like guard.log's `t`; the Node preload writes UTC, the others local time.
@@ -57,10 +61,7 @@ pub fn egress_local_time(raw: &Map<String, Value>) -> String {
     if raw.get("layer").and_then(Value::as_str) != Some(NODE_PRELOAD_LAYER) {
         return moment;
     }
-    parse_iso_date(&moment)
-        .and_then(|m| loop_io::local_from_epoch(m.seconds.floor() as i64))
-        .map(loop_io::iso_seconds)
-        .unwrap_or(moment)
+    parse_iso_date(&moment).and_then(|m| loop_io::local_from_epoch(m.seconds.floor() as i64)).map(loop_io::iso_seconds).unwrap_or(moment)
 }
 
 fn text_or_empty(value: &Value) -> String {
@@ -330,7 +331,8 @@ impl LoopFileRepository {
         let egress = self.read_egress_lines(work_dir);
         if !egress.is_empty() {
             items.extend(egress);
-            items.sort_by_key(|item| text_or_empty(item.get("t").unwrap_or(&Value::Null))); // stable: equal times keep the file order
+            items.sort_by_key(|item| text_or_empty(item.get("t").unwrap_or(&Value::Null)));
+            // stable: equal times keep the file order
         }
         items
     }
@@ -404,7 +406,10 @@ mod tests {
         std::fs::write(data.join("egress.log"), "{\"time\": \"2026-01-01T10:00:01\", \"project\": \"C:\\\\x\\\\app\", \"host\": \"evil.example.com\", \"port\": 443, \"method\": \"get\", \"path\": \"/p?q=1\", \"reason\": \"not allowed\", \"turn\": 3}\n{\"project\": \"other\", \"host\": \"h\"}\n").unwrap();
         let lines = repository.read_guard_lines(&work);
         assert_eq!(lines.len(), 2);
-        assert_eq!((lines[0]["rule"].clone(), lines[0]["detail"].clone(), lines[0]["turn"].clone()), (json!("egress-runtime"), json!("GET evil.example.com:443/p - not allowed"), json!(3)));
+        assert_eq!(
+            (lines[0]["rule"].clone(), lines[0]["detail"].clone(), lines[0]["turn"].clone()),
+            (json!("egress-runtime"), json!("GET evil.example.com:443/p - not allowed"), json!(3))
+        );
         assert_eq!(lines[1]["rule"], "a");
         assert_eq!(repository.read_cached_text(&guard), repository.read_text(&guard));
         assert!(repository.read_action_lines(&work).is_empty());

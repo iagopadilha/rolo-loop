@@ -118,7 +118,8 @@ pub fn request_local_json(url: &str, relative: &str, body: Option<&Value>, token
 /// GET `<url>api/health` answers ok for the SAME work. Only talks to 127.0.0.1/localhost.
 pub fn monitor_answers_health(info: &Value, work: &str) -> bool {
     let url = info.get("url").and_then(Value::as_str).unwrap_or("");
-    request_local_json(url, "api/health", None, "", HEALTH_TIMEOUT_SECONDS).is_some_and(|b| b.get("ok") == Some(&Value::Bool(true)) && same_path(b.get("work").and_then(Value::as_str).unwrap_or(""), work))
+    request_local_json(url, "api/health", None, "", HEALTH_TIMEOUT_SECONDS)
+        .is_some_and(|b| b.get("ok") == Some(&Value::Bool(true)) && same_path(b.get("work").and_then(Value::as_str).unwrap_or(""), work))
 }
 
 /// GET `<url>api/health` answers `ok=true`. Only 127.0.0.1/localhost, without a proxy.
@@ -192,7 +193,8 @@ pub fn monitor_url_from_log(work: &str, offset: u64) -> Option<String> {
     let bytes = std::fs::read(loop_path(work, "monitor.log")).ok()?;
     let tail = bytes.get(offset as usize..)?;
     let text = String::from_utf8_lossy(tail);
-    let urls: Vec<String> = pycompat::splitlines(&text).into_iter().map(str::trim).filter_map(|l| l.strip_prefix(MONITOR_URL_PREFIX).map(|u| u.trim().to_string())).collect();
+    let urls: Vec<String> =
+        pycompat::splitlines(&text).into_iter().map(str::trim).filter_map(|l| l.strip_prefix(MONITOR_URL_PREFIX).map(|u| u.trim().to_string())).collect();
     urls.last().filter(|u| !u.is_empty()).cloned()
 }
 
@@ -204,7 +206,8 @@ pub fn answered_url(work: &str, offset: u64) -> Option<String> {
         }
     }
     let info = read_monitor_info(work)?;
-    (same_path(info.get("work").and_then(Value::as_str).unwrap_or(""), work) && monitor_answers_health(&info, work)).then(|| info["url"].as_str().unwrap_or("").to_string())
+    (same_path(info.get("work").and_then(Value::as_str).unwrap_or(""), work) && monitor_answers_health(&info, work))
+        .then(|| info["url"].as_str().unwrap_or("").to_string())
 }
 
 pub fn wait_for_monitor(work: &str, pid: i64, offset: u64, wait_seconds: f64) -> Option<String> {

@@ -159,17 +159,28 @@ pub fn read_fallbacks(value: &Value) -> Vec<String> {
 /// What goes in argv[0]: the resolved path, else the name as given (the OS then reports it missing).
 pub fn executable(name: &str) -> String {
     let resolved = resolve(name);
-    if resolved.is_empty() { name.to_string() } else { resolved }
+    if resolved.is_empty() {
+        name.to_string()
+    } else {
+        resolved
+    }
 }
 
 /// Start of the argv: a `.py` (the tests' fake claude) runs with `python`.
 pub fn base_argv(name: &str) -> Vec<String> {
     let binary = executable(name);
-    if binary.ends_with(".py") { vec!["python".into(), binary] } else { vec![binary] }
+    if binary.ends_with(".py") {
+        vec!["python".into(), binary]
+    } else {
+        vec![binary]
+    }
 }
 
 pub fn is_batch(argv: &[String]) -> bool {
-    argv.first().is_some_and(|a| { let l = a.to_lowercase(); BATCH_EXTENSIONS.iter().any(|e| l.ends_with(e)) })
+    argv.first().is_some_and(|a| {
+        let l = a.to_lowercase();
+        BATCH_EXTENSIONS.iter().any(|e| l.ends_with(e))
+    })
 }
 
 /// `(argv, stdin_text)` safe for the command: for a batch wrapper the prompt argument right after `-p` moves to stdin (joined after any
@@ -301,7 +312,16 @@ pub fn account_label(auth: &Value, account: &str) -> String {
     if !s(auth.get("error")).is_empty() && account.is_empty() {
         return String::new();
     }
-    let who = { let e = s(auth.get("email")); if !e.is_empty() { e } else if !account.is_empty() { format!("cc account {account}") } else { String::new() } };
+    let who = {
+        let e = s(auth.get("email"));
+        if !e.is_empty() {
+            e
+        } else if !account.is_empty() {
+            format!("cc account {account}")
+        } else {
+            String::new()
+        }
+    };
     let extra: Vec<String> = ["org", "plan"].iter().map(|k| s(auth.get(*k))).filter(|v| !v.is_empty()).collect();
     let text: Vec<String> = [s(auth.get("method")), who].into_iter().filter(|v| !v.is_empty()).collect();
     format!("{}{}", text.join(", "), if extra.is_empty() { String::new() } else { format!(" ({})", extra.join(", ")) })
@@ -369,7 +389,10 @@ mod tests {
     #[test]
     fn account_text() {
         assert_eq!(account_from_stderr("x\n[cc] conta: claude2\n"), "claude2");
-        assert_eq!(account_label(&json!({"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team", "error": ""}), ""), "login, dev@example.com (Acme, team)");
+        assert_eq!(
+            account_label(&json!({"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team", "error": ""}), ""),
+            "login, dev@example.com (Acme, team)"
+        );
         assert_eq!(account_label(&json!({"method": "token", "error": ""}), "claude"), "token, cc account claude");
         assert_eq!(account_label(&json!({"error": "boom"}), ""), "");
         assert_eq!(read_fallbacks(&json!([" a ", 3, ""])), vec!["a"]);

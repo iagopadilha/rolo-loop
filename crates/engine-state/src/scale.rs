@@ -11,8 +11,8 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 const CODE_EXT: [&str; 22] = [
-    ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".go", ".rb", ".php", ".sql", ".vue", ".svelte", ".kt", ".rs", ".cpp", ".c", ".h", ".razor",
-    ".cshtml", ".scss", ".css",
+    ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".go", ".rb", ".php", ".sql", ".vue", ".svelte", ".kt", ".rs", ".cpp", ".c", ".h", ".razor", ".cshtml", ".scss",
+    ".css",
 ];
 pub const INVENTORY_ROOT_NAME: &str = "_root";
 pub const INVENTORY_RELATIVE_DIR: [&str; 5] = [".specs", "project", "loop", "internal", "inventory"];
@@ -35,10 +35,17 @@ fn git_files(root: &str) -> Option<Vec<String>> {
     let out = std::process::Command::new("git").args(["-C", root, "ls-files"]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     if out.status.success() && !text.trim().is_empty() {
-        Some(text.lines().map(String::from).collect::<Vec<_>>().into_iter().filter(|line| {
-            let segments: Vec<String> = line.replace('\\', "/").split('/').map(String::from).collect();
-            !segments[..segments.len().saturating_sub(1)].iter().any(|s| is_skip(s))
-        }).collect())
+        Some(
+            text.lines()
+                .map(String::from)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .filter(|line| {
+                    let segments: Vec<String> = line.replace('\\', "/").split('/').map(String::from).collect();
+                    !segments[..segments.len().saturating_sub(1)].iter().any(|s| is_skip(s))
+                })
+                .collect(),
+        )
     } else {
         None
     }
@@ -77,7 +84,12 @@ pub fn code_files(root: &str) -> Vec<String> {
 }
 
 fn last_commit_time(folder: &str) -> Option<i64> {
-    let out = std::process::Command::new("git").args(["-C", folder, "log", "-1", "--format=%ct", "--", "."]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output().ok()?;
+    let out = std::process::Command::new("git")
+        .args(["-C", folder, "log", "-1", "--format=%ct", "--", "."])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
     let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if out.status.success() && !text.is_empty() {
         text.parse().ok()

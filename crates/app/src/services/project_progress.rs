@@ -7,8 +7,8 @@
 //! (`planning_gates::build_planning_gates`).
 
 use super::planning_gates::{
-    are_gates_ok, build_planning_gates, build_subproject_conformance_gate, build_subproject_map_gate, build_subprojects_gates, check_sent_imports_coverage, describe_map_documents,
-    read_subproject_state, GATE_CONFORMANCE, GATE_FLOWS, GATE_GIT, GATE_MAP, GATE_REPOS, GATE_STRUCTURE, GATE_SUBPROJECTS,
+    are_gates_ok, build_planning_gates, build_subproject_conformance_gate, build_subproject_map_gate, build_subprojects_gates, check_sent_imports_coverage,
+    describe_map_documents, read_subproject_state, GATE_CONFORMANCE, GATE_FLOWS, GATE_GIT, GATE_MAP, GATE_REPOS, GATE_STRUCTURE, GATE_SUBPROJECTS,
 };
 use super::roadmap::extract_open_questions;
 use super::App;
@@ -55,7 +55,8 @@ const ROADMAP_JOB_TYPE_PREFIX: &str = "roadmap";
 const MISSING_ITEMS_SHOWN: usize = 6;
 /// How long the last gates may answer a chat send's prerequisites refusal without a new check.
 pub const PLANNING_GATES_CACHE_SECONDS: u64 = 10;
-const NAMES_THAT_ARE_NOT_CODE: [&str; 11] = [".git", ".specs", ".claude", ".vscode", ".idea", "claude.md", "readme.md", ".gitignore", ".gitattributes", "license", "license.md"];
+const NAMES_THAT_ARE_NOT_CODE: [&str; 11] =
+    [".git", ".specs", ".claude", ".vscode", ".idea", "claude.md", "readme.md", ".gitignore", ".gitattributes", "license", "license.md"];
 static REGRESSION_REQUIRED: LazyLock<Re> = LazyLock::new(|| Re::new(r"\bregression=(yes|baseline)\b"));
 
 fn text_of(value: Option<&Value>) -> String {
@@ -268,7 +269,9 @@ impl ProjectProgressService<'_> {
                 match self.app.system_maps().status(context, None) {
                     Ok(system) => description["system"] = system, // the map gate waits for the system map when it is due
                     Err(failure) => {
-                        self.app.log.warn("system_map_status_unreadable", &[("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))]);
+                        self.app
+                            .log
+                            .warn("system_map_status_unreadable", &[("type", json!(format!("{:?}", failure.kind))), ("message", json!(clip(&failure.message, 200)))]);
                     }
                 }
             }
@@ -305,7 +308,15 @@ impl ProjectProgressService<'_> {
     }
 
     /// ROADMAP, PROJECT.md, FLOWS.md and the approval.
-    fn read_roadmap_facts(&self, work: &str, project_dir: &Path, roadmap_text: Option<&str>, features: &loop_state::Features, parse_errors: &[String], repo: Option<&str>) -> Value {
+    fn read_roadmap_facts(
+        &self,
+        work: &str,
+        project_dir: &Path,
+        roadmap_text: Option<&str>,
+        features: &loop_state::Features,
+        parse_errors: &[String],
+        repo: Option<&str>,
+    ) -> Value {
         let flows_text = self.app.specs.read_text(&project_dir.join("FLOWS.md"));
         let field_errors = loop_state::check_fields(features, None);
         let slugs = features.slugs();
@@ -404,16 +415,34 @@ impl ProjectProgressService<'_> {
         let mut steps = vec![
             create_step("folder", "Project folder", folder_exists, if folder_exists { "exists".into() } else { "the folder no longer exists".into() }, false),
             create_step("git", "Git repository", is_git, if is_git { "ok".into() } else { "the folder is not a git repository (the loop needs git)".into() }, false),
-            create_step("structure", ".specs/ structure", structure_ok, if structure_ok && structure["missing"].as_array().is_some_and(Vec::is_empty) { "complete".into() } else { format!("missing: {}", missing.join(", ")) }, false),
+            create_step(
+                "structure",
+                ".specs/ structure",
+                structure_ok,
+                if structure_ok && structure["missing"].as_array().is_some_and(Vec::is_empty) { "complete".into() } else { format!("missing: {}", missing.join(", ")) },
+                false,
+            ),
         ];
-        steps.extend(build_subprojects_gates(facts).iter().map(|g| create_step(&text_of(g.get("id")), &text_of(g.get("label")), g["ok"] == true, text_of(g.get("detail")), false)));
+        steps.extend(
+            build_subprojects_gates(facts).iter().map(|g| create_step(&text_of(g.get("id")), &text_of(g.get("label")), g["ok"] == true, text_of(g.get("detail")), false)),
+        );
         steps.push(self.build_conformance_step(facts));
         steps.push(Self::build_map_step(facts, job));
         steps.push(create_step("roadmap", "Roadmap", features_present && !t(facts.get("roadmap_errors")), Self::describe_roadmap(facts), false));
         steps.push(create_step("flows", "Flows (FLOWS.md)", has_every_flow, Self::describe_flows(facts), approved && !has_every_flow));
-        steps.push(create_step("approval", "Approved roadmap", approved, if approved { format!("approved on {}", text_of(approval.get("at"))) } else { text_of(approval.get("reason")) }, false));
+        steps.push(create_step(
+            "approval",
+            "Approved roadmap",
+            approved,
+            if approved { format!("approved on {}", text_of(approval.get("at"))) } else { text_of(approval.get("reason")) },
+            false,
+        ));
         steps.push(Self::build_test_environment_step(facts));
-        let loop_text = format!("{}{}", text_of(loop_status.get("status")), if t(loop_status.get("reason")) { format!(": {}", text_of(loop_status.get("reason"))) } else { String::new() });
+        let loop_text = format!(
+            "{}{}",
+            text_of(loop_status.get("status")),
+            if t(loop_status.get("reason")) { format!(": {}", text_of(loop_status.get("reason"))) } else { String::new() }
+        );
         steps.push(create_step("loop", "Loop", loop_status["status"] == LOOP_STATUS_DONE, loop_text, false));
         steps
     }
@@ -436,7 +465,13 @@ impl ProjectProgressService<'_> {
         let map_running = job.is_some_and(|j| j["type"] == MAP_JOB_TYPE);
         if read_subproject_state(facts).0 {
             let gate = build_subproject_map_gate(facts);
-            return create_step("map", &text_of(gate.get("label")), gate["ok"] == true, text_of(gate.get("detail")), gate["optional"] == true || t(facts.get("features")));
+            return create_step(
+                "map",
+                &text_of(gate.get("label")),
+                gate["ok"] == true,
+                text_of(gate.get("detail")),
+                gate["optional"] == true || t(facts.get("features")),
+            );
         }
         let mut detail = if t(facts.get("map_files")) {
             describe_map_documents(facts)
@@ -548,12 +583,17 @@ impl ProjectProgressService<'_> {
         if !t(facts.get("flows_exists")) {
             return "FLOWS.md missing".into();
         }
-        let missing: Vec<String> = facts["flow_coverage"]["missing"].as_array().map(|m| m.iter().take(MISSING_ITEMS_SHOWN).map(|i| text_of(Some(i))).collect()).unwrap_or_default();
+        let missing: Vec<String> =
+            facts["flow_coverage"]["missing"].as_array().map(|m| m.iter().take(MISSING_ITEMS_SHOWN).map(|i| text_of(Some(i))).collect()).unwrap_or_default();
         if !missing.is_empty() {
             return format!("without a flow: {}", missing.join(", "));
         }
         let count = facts["features"].as_object().map(|f| f.len()).unwrap_or(0);
-        if count > 0 { format!("{count} flow(s), one per feature") } else { "no feature in the ROADMAP yet".into() }
+        if count > 0 {
+            format!("{count} flow(s), one per feature")
+        } else {
+            "no feature in the ROADMAP yet".into()
+        }
     }
 
     fn describe_roadmap(facts: &Value) -> String {
@@ -637,7 +677,8 @@ mod tests {
 
     #[test]
     fn facts_helpers_and_roadmap_description() {
-        let (features, _) = loop_state::parse_roadmap("- [a] status=verified title=\"A\" scope=Small stage=1 paths=x\n- [b] status=blocked title=\"B\" scope=Small stage=2 paths=y\n");
+        let (features, _) =
+            loop_state::parse_roadmap("- [a] status=verified title=\"A\" scope=Small stage=1 paths=x\n- [b] status=blocked title=\"B\" scope=Small stage=2 paths=y\n");
         let value = features_to_value(&features);
         assert_eq!(value["a"]["status"], "verified");
         assert_eq!(features_with_slug(&features)[1]["slug"], "b");
@@ -645,7 +686,10 @@ mod tests {
         assert_eq!(ProjectProgressService::describe_roadmap(&facts), "2 feature(s) in 2 stage(s)");
         assert_eq!(ProjectProgressService::describe_roadmap(&json!({"features": {}, "roadmap_exists": false})), "ROADMAP.md missing");
         assert_eq!(ProjectProgressService::describe_roadmap(&json!({"features": {}, "roadmap_exists": true, "roadmap_errors": ["bad"]})), "outside the grammar: bad");
-        assert_eq!(ProjectProgressService::describe_flows(&json!({"flows_exists": true, "features": value, "flow_coverage": {"missing": ["a", "b"]}})), "without a flow: a, b");
+        assert_eq!(
+            ProjectProgressService::describe_flows(&json!({"flows_exists": true, "features": value, "flow_coverage": {"missing": ["a", "b"]}})),
+            "without a flow: a, b"
+        );
         assert!(ProjectProgressService::repo_has_code(&std::env::current_dir().unwrap().display().to_string()));
     }
 }

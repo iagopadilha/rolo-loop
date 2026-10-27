@@ -68,7 +68,11 @@ pub fn describe_detected(items: &Value) -> String {
             format!("- {key}: {}", if list.is_empty() { "none".to_string() } else { list.join(", ") })
         })
         .collect();
-    let sections: Vec<String> = items.get("sections").and_then(Value::as_object).map(|m| m.iter().filter(|(_, present)| engine_state::notify_truthy(Some(present))).map(|(name, _)| name.clone()).collect()).unwrap_or_default();
+    let sections: Vec<String> = items
+        .get("sections")
+        .and_then(Value::as_object)
+        .map(|m| m.iter().filter(|(_, present)| engine_state::notify_truthy(Some(present))).map(|(name, _)| name.clone()).collect())
+        .unwrap_or_default();
     lines.push(format!("- core sections present: {}", if sections.is_empty() { "none".to_string() } else { sections.join(", ") }));
     lines.join("\n")
 }
@@ -78,7 +82,11 @@ pub fn sanitize_name(name: &str) -> String {
     let base = lowered.trim_matches(['-', '.']);
     let cut: String = base.chars().take(NAME_LIMIT).collect();
     let cut = cut.trim_matches(['-', '.']).to_string();
-    if cut.is_empty() { DEFAULT_IMPORT_NAME.into() } else { cut }
+    if cut.is_empty() {
+        DEFAULT_IMPORT_NAME.into()
+    } else {
+        cut
+    }
 }
 
 pub fn imported_root(work_dir: &str) -> PathBuf {
@@ -143,7 +151,12 @@ impl PlanningImportService<'_> {
     }
 
     fn public_entry(entry: &Value) -> Value {
-        Value::Object(entry.as_object().map(|m| m.iter().filter(|(k, _)| k.as_str() != "text" && k.as_str() != "refusal").map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default())
+        Value::Object(
+            entry
+                .as_object()
+                .map(|m| m.iter().filter(|(k, _)| k.as_str() != "text" && k.as_str() != "refusal").map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default(),
+        )
     }
 
     fn read_source_path(body: &Value) -> Result<String, AppError> {
@@ -213,9 +226,12 @@ impl PlanningImportService<'_> {
             return Err(error);
         }
         if Self::feature_folder_exists(context, slug) {
-            return Err(AppError::new(Kind::RepoConflict, format!("{} already exists and was not imported by the app: rename the source folder or remove it by hand", Self::feature_relative_folder(slug)))
-                .with_code(FEATURE_FOLDER_EXISTS_CODE)
-                .with_extra("feature_dir", json!(Self::feature_relative_folder(slug))));
+            return Err(AppError::new(
+                Kind::RepoConflict,
+                format!("{} already exists and was not imported by the app: rename the source folder or remove it by hand", Self::feature_relative_folder(slug)),
+            )
+            .with_code(FEATURE_FOLDER_EXISTS_CODE)
+            .with_extra("feature_dir", json!(Self::feature_relative_folder(slug))));
         }
         Ok(())
     }
@@ -297,7 +313,12 @@ impl PlanningImportService<'_> {
             .filter_map(|entry| {
                 let meta = self.app.specs.read_json(&root.join(&entry).join(META_FILE_NAME));
                 (meta.get("import_id").and_then(Value::as_str) == Some(entry.as_str())).then(|| {
-                    Value::Object(["import_id", "files", "main", "at", "source", "sent_at"].iter().map(|k| (k.to_string(), meta.get(*k).cloned().unwrap_or(Value::Null))).collect::<Map<String, Value>>())
+                    Value::Object(
+                        ["import_id", "files", "main", "at", "source", "sent_at"]
+                            .iter()
+                            .map(|k| (k.to_string(), meta.get(*k).cloned().unwrap_or(Value::Null)))
+                            .collect::<Map<String, Value>>(),
+                    )
                 })
             })
             .collect();
@@ -313,7 +334,8 @@ impl PlanningImportService<'_> {
             return Err(AppError::new(Kind::JobNotFound, "import not found"));
         }
         let folder = Self::relative_folder(context, import_id);
-        let files: Vec<String> = meta.get("files").and_then(Value::as_array).map(|a| a.iter().map(|n| format!("- {folder}/{}", text_of(Some(n)))).collect()).unwrap_or_default();
+        let files: Vec<String> =
+            meta.get("files").and_then(Value::as_array).map(|a| a.iter().map(|n| format!("- {folder}/{}", text_of(Some(n)))).collect()).unwrap_or_default();
         let slug = Some(text_of(meta.get("slug"))).filter(|s| !s.is_empty()).unwrap_or_else(|| import_id.to_string());
         let feature_dir = Some(text_of(meta.get("feature_dir"))).filter(|s| !s.is_empty()).unwrap_or_else(|| Self::feature_relative_folder(&slug));
         let items = meta.get("items").filter(|i| t(Some(i))).cloned().unwrap_or(json!({}));

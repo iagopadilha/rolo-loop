@@ -129,7 +129,8 @@ impl DemoGitRepository {
     }
 
     pub fn run(&self, args: &[&str]) -> Result<String, String> {
-        let output = Command::new("git").arg("-C").arg(&self.repo_dir).args(args).env("GIT_TERMINAL_PROMPT", "0").output().map_err(|e| format!("git cannot start: {e}"))?;
+        let output =
+            Command::new("git").arg("-C").arg(&self.repo_dir).args(args).env("GIT_TERMINAL_PROMPT", "0").output().map_err(|e| format!("git cannot start: {e}"))?;
         if !output.status.success() {
             let text = String::from_utf8_lossy(if output.stderr.is_empty() { &output.stdout } else { &output.stderr }).trim().to_string();
             return Err(format!("git {} failed: {}", args.join(" "), text.chars().take(300).collect::<String>()));
@@ -161,7 +162,11 @@ impl DemoGitRepository {
     }
 
     pub fn get_head(&self, short: bool) -> Result<String, String> {
-        if short { self.run(&["rev-parse", "--short=7", "HEAD"]) } else { self.run(&["rev-parse", "HEAD"]) }
+        if short {
+            self.run(&["rev-parse", "--short=7", "HEAD"])
+        } else {
+            self.run(&["rev-parse", "HEAD"])
+        }
     }
 
     /// Back to `head`, dropping the story's commits and files (ignored `.specs/` stays).

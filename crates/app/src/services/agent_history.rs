@@ -254,7 +254,10 @@ impl AgentHistoryService<'_> {
             return Some((log, notify_truthy(transcript.get("truncated"))));
         }
         if name == ORCHESTRATOR_ID && notify_truthy(record.get("result")) {
-            return Some((vec![json!({"type": "ai", "text": redact_value(record.get("result"), Some(LOG_TEXT_LIMIT)), "result": "", "t": format_minutes_clock(0)})], false));
+            return Some((
+                vec![json!({"type": "ai", "text": redact_value(record.get("result"), Some(LOG_TEXT_LIMIT)), "result": "", "t": format_minutes_clock(0)})],
+                false,
+            ));
         }
         Some((vec![], false))
     }
@@ -338,13 +341,23 @@ impl AgentHistoryService<'_> {
             }
             let sum_field = |key: &str| {
                 let numbers: Vec<&Value> = own.iter().filter_map(|e| e.get(key)).filter(|v| v.is_number()).collect();
-                if numbers.is_empty() { Value::Null } else { sum_numbers(&numbers) }
+                if numbers.is_empty() {
+                    Value::Null
+                } else {
+                    sum_numbers(&numbers)
+                }
             };
             [sum_field("tokens"), sum_field("cost_usd"), sum_field("duration_s")]
         };
         let mut orchestrator_log = Self::build_orchestrator_log_head(&last_turn);
         orchestrator_log.extend(events_by_agent.get(ORCHESTRATOR_ID).into_iter().flatten().map(build_event_log_item));
-        let orchestrator_state = if running { "running" } else if loop_summary["status"] == LOOP_DONE_STATUS { "done" } else { "idle" };
+        let orchestrator_state = if running {
+            "running"
+        } else if loop_summary["status"] == LOOP_DONE_STATUS {
+            "done"
+        } else {
+            "idle"
+        };
         let summary = redact_value(last_turn.get("result"), Some(ORCHESTRATOR_STATE_SUMMARY_LIMIT)).replace('\n', " ");
         let default_totals = [
             json!(sum_usage_tokens(last_turn.get("usage").unwrap_or(&Value::Null))),
@@ -387,7 +400,13 @@ impl AgentHistoryService<'_> {
             }
             let role = get_inferred_role(feature);
             let agent_id = format!("{}:{role}", text_or_empty(feature.get("id")));
-            let state = if !running { "idle" } else if WORKING_STATUSES.contains(&status) { "running" } else { "queued" };
+            let state = if !running {
+                "idle"
+            } else if WORKING_STATUSES.contains(&status) {
+                "running"
+            } else {
+                "queued"
+            };
             let own_log: Vec<Value> = events_by_agent.get(&agent_id).into_iter().flatten().map(build_event_log_item).collect();
             let [tokens, cost, duration] = sum_totals(&agent_id, [Value::Null, Value::Null, Value::Null]);
             agents.push(json!({
@@ -421,7 +440,11 @@ mod tests {
         let w = work.display().to_string();
         let turn = app.loop_files.get_turn_path(&w, 2);
         std::fs::create_dir_all(turn.parent().unwrap()).unwrap();
-        std::fs::write(&turn, json!({"result": "- Chose X\nmore", "total_cost_usd": 1, "duration_ms": 61000, "usage": {"input_tokens": 3, "output_tokens": 4}}).to_string()).unwrap();
+        std::fs::write(
+            &turn,
+            json!({"result": "- Chose X\nmore", "total_cost_usd": 1, "duration_ms": 61000, "usage": {"input_tokens": 3, "output_tokens": 4}}).to_string(),
+        )
+        .unwrap();
         let service = app.agent_history();
         assert_eq!(history_id(2, "orch"), "v002:orch");
         assert!(service.get_history_log(&w, "nope").is_none());
@@ -430,10 +453,24 @@ mod tests {
         assert_eq!(service.get_history_log(&w, "v009:abc").unwrap(), (vec![], false));
         let record = app.loop_files.read_turn(&w, 2);
         let agent = service.build_orchestrator_agent(&w, 2, &record, None);
-        assert_eq!((agent["tokens"].clone(), agent["decision"].clone(), agent["state"].clone(), agent["duration_s"].clone()), (json!(7), json!("Chose X"), json!("done"), json!(61)));
-        let state_agents = service.build_state_agents(&w, &json!({"running": false, "status": "done"}), &[json!({"id": "a", "status": "building", "kind": "back", "note": null})], &[2]);
-        assert_eq!((state_agents[0]["state"].clone(), state_agents[0]["cost_usd"].clone(), state_agents[1]["id"].clone(), state_agents[1]["state"].clone()), (json!("done"), json!(1), json!("a:executor-back"), json!("idle")));
-        let history = service.build_history(&ProjectContext::new(crate::domain::project::Project { id: "x".into(), name: "x".into(), repo_path: w.clone(), opened_at: String::new(), last_opened_at: String::new(), favorite: false }));
+        assert_eq!(
+            (agent["tokens"].clone(), agent["decision"].clone(), agent["state"].clone(), agent["duration_s"].clone()),
+            (json!(7), json!("Chose X"), json!("done"), json!(61))
+        );
+        let state_agents =
+            service.build_state_agents(&w, &json!({"running": false, "status": "done"}), &[json!({"id": "a", "status": "building", "kind": "back", "note": null})], &[2]);
+        assert_eq!(
+            (state_agents[0]["state"].clone(), state_agents[0]["cost_usd"].clone(), state_agents[1]["id"].clone(), state_agents[1]["state"].clone()),
+            (json!("done"), json!(1), json!("a:executor-back"), json!("idle"))
+        );
+        let history = service.build_history(&ProjectContext::new(crate::domain::project::Project {
+            id: "x".into(),
+            name: "x".into(),
+            repo_path: w.clone(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        }));
         assert_eq!(history["turns"][0]["agents"][0]["id"], "v002:orch");
     }
 }

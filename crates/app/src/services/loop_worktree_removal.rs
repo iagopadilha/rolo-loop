@@ -12,8 +12,8 @@ use super::App;
 use crate::domain::project::ProjectContext;
 use crate::infrastructure::git_client::{remove_emptied_folder, OTHER_COMPARISON_BASES};
 use crate::repositories::specs_file::is_link_or_junction;
-use engine_state::project_repos::{self, RepoRef};
 use engine_state::loop_state;
+use engine_state::project_repos::{self, RepoRef};
 use pycompat::nt_normpath;
 use serde_json::{json, Map, Value};
 use std::path::Path;
@@ -78,7 +78,9 @@ impl LoopWorktreeRemovalService<'_> {
         }
         let registered = self.app.git.list_worktrees(&repo.path);
         let Some(main) = registered.first() else { return (None, Some("the repo is not a git repository".into())) };
-        let Some(entry) = registered.iter().find(|item| is_same_path(&item.path, &path)) else { return (None, Some("the folder is not a git worktree of this repo".into())) };
+        let Some(entry) = registered.iter().find(|item| is_same_path(&item.path, &path)) else {
+            return (None, Some("the folder is not a git worktree of this repo".into()));
+        };
         if is_same_path(&entry.path, &main.path) {
             return (None, Some("it is the main checkout".into()));
         }
@@ -150,14 +152,20 @@ impl LoopWorktreeRemovalService<'_> {
             if outcome["worktree_removed"] == true {
                 removed.push(item(&[("branch_deleted", outcome["branch_deleted"].clone()), ("folder_left", json!(outcome["folder_left"] == true))]));
                 if engine_state::notify_truthy(outcome.get("error")) {
-                    failures.push(item(&[("error", outcome["error"].clone())])); // the worktree is gone but the branch could not be deleted, or its emptied folder is still held open
+                    failures.push(item(&[("error", outcome["error"].clone())]));
+                    // the worktree is gone but the branch could not be deleted, or its emptied folder is still held open
                 }
             } else {
                 failures.push(item(&[("error", outcome["error"].clone())]));
             }
             self.app.log.info(
                 if outcome["worktree_removed"] == true { "reset_worktree_removed" } else { "reset_worktree_not_removed" },
-                &[("project", json!(context.project.id)), ("repo", json!(found.repo)), ("branch", json!(found.branch)), ("branch_deleted", outcome["branch_deleted"].clone())],
+                &[
+                    ("project", json!(context.project.id)),
+                    ("repo", json!(found.repo)),
+                    ("branch", json!(found.branch)),
+                    ("branch_deleted", outcome["branch_deleted"].clone()),
+                ],
             );
         }
         json!({"worktrees_removed": removed, "worktree_failures": failures})
@@ -180,7 +188,10 @@ mod tests {
         let leftover = dir.path().join("proj-worktree-loop");
         std::fs::create_dir_all(&leftover).unwrap();
         let preview = service.preview_removable_worktrees(&context);
-        assert!(preview["skipped"][0]["reason"].as_str().unwrap().starts_with("the repo is not a git repository") || preview["skipped"][0]["reason"].as_str().unwrap().starts_with("the folder"));
+        assert!(
+            preview["skipped"][0]["reason"].as_str().unwrap().starts_with("the repo is not a git repository")
+                || preview["skipped"][0]["reason"].as_str().unwrap().starts_with("the folder")
+        );
         let outcome = service.remove_loop_worktrees(&context);
         assert_eq!((outcome["worktrees_removed"].as_array().unwrap().len(), outcome["worktree_failures"].as_array().unwrap().len()), (1, 0));
         assert!(!leftover.exists());

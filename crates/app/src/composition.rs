@@ -68,7 +68,10 @@ pub fn write_app_registry(assembled: &Assembled) -> std::io::Result<()> {
 
 pub fn delete_app_registry(assembled: &Assembled) {
     let path = assembled.app.config.app_registry_path();
-    let ours = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|r| r["pid"].as_u64() == Some(u64::from(std::process::id())));
+    let ours = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .is_some_and(|r| r["pid"].as_u64() == Some(u64::from(std::process::id())));
     if ours {
         let _ = std::fs::remove_file(path);
     }
@@ -94,7 +97,8 @@ pub fn start_application(assembled: &Assembled, initial_project_path: &str) -> s
     write_app_registry(assembled)?;
     let mut initial_url = app_url.clone();
     if !initial_project_path.is_empty() {
-        let project = assembled.app.project_service().open_existing_project(initial_project_path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.message))?;
+        let project =
+            assembled.app.project_service().open_existing_project(initial_project_path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.message))?;
         initial_url = assembled.project_url(&project.id);
     }
     use std::io::Write;

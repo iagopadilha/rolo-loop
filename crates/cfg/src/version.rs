@@ -5,19 +5,13 @@
 use regex::Regex;
 use std::sync::LazyLock;
 
-static PREFIX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\s*v?(\d+)\.(\d+)(?:\.(\d+))?").expect("valid regex"));
-static PRERELEASE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\s*v?\d+(?:\.\d+){0,2}\s*[-+]").expect("valid regex"));
+static PREFIX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*v?(\d+)\.(\d+)(?:\.(\d+))?").expect("valid regex"));
+static PRERELEASE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*v?\d+(?:\.\d+){0,2}\s*[-+]").expect("valid regex"));
 
 /// `(major, minor, patch)` from `0.3.0` (a pre-release suffix is ignored), or `None`.
 pub fn version_tuple(text: &str) -> Option<(u64, u64, u64)> {
     let caps = PREFIX.captures(text)?;
-    let part = |i: usize| -> u64 {
-        caps.get(i)
-            .map(|m| m.as_str().parse::<u64>().unwrap_or(u64::MAX))
-            .unwrap_or(0)
-    };
+    let part = |i: usize| -> u64 { caps.get(i).map(|m| m.as_str().parse::<u64>().unwrap_or(u64::MAX)).unwrap_or(0) };
     Some((part(1), part(2), part(3)))
 }
 

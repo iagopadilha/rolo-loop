@@ -103,7 +103,9 @@ fn open_project(app: &App, request: &Request) -> Response {
 fn create_project(app: &App, request: &Request) -> Response {
     let conformance = request.opt("conformance").and_then(Value::as_str).filter(|c| !c.is_empty());
     let init_git = request.field("init_git") != Some(&Value::Bool(false));
-    respond_converting_errors(|| app.project_service().create_project_from_scratch(request.text("parent_path"), request.text("name"), init_git, conformance).map(|p| build_project_response(&p)))
+    respond_converting_errors(|| {
+        app.project_service().create_project_from_scratch(request.text("parent_path"), request.text("name"), init_git, conformance).map(|p| build_project_response(&p))
+    })
 }
 
 fn pick_folder(app: &App, request: &Request) -> Response {
@@ -142,7 +144,9 @@ fn initialize_structure(app: &App, request: &Request) -> Response {
 }
 
 fn write_conformance(app: &App, request: &Request) -> Response {
-    respond_json(|| app.specs_structure().write_project_conformance(&context_of(app, request)?, request.text("value")).map(|value| json!({"ok": true, "conformance": value})))
+    respond_json(|| {
+        app.specs_structure().write_project_conformance(&context_of(app, request)?, request.text("value")).map(|value| json!({"ok": true, "conformance": value}))
+    })
 }
 
 // ------------------------------------------------ roadmap and jobs
@@ -208,7 +212,9 @@ fn get_planning(app: &App, request: &Request) -> Response {
 }
 
 fn send_planning_message(app: &App, request: &Request) -> Response {
-    respond_converting_errors(|| app.planning().send_message(&context_of(app, request)?, &request.value("text"), None).map(|job| Response::json(JOB_ACCEPTED_STATUS, job)))
+    respond_converting_errors(|| {
+        app.planning().send_message(&context_of(app, request)?, &request.value("text"), None).map(|job| Response::json(JOB_ACCEPTED_STATUS, job))
+    })
 }
 
 fn get_planning_job(app: &App, request: &Request) -> Response {
@@ -232,7 +238,9 @@ fn list_imports(app: &App, request: &Request) -> Response {
 }
 
 fn send_import(app: &App, request: &Request) -> Response {
-    respond_converting_errors(|| app.planning_imports().send_import(&context_of(app, request)?, request.param("import_id")).map(|job| Response::json(JOB_ACCEPTED_STATUS, job)))
+    respond_converting_errors(|| {
+        app.planning_imports().send_import(&context_of(app, request)?, request.param("import_id")).map(|job| Response::json(JOB_ACCEPTED_STATUS, job))
+    })
 }
 
 fn get_readiness(app: &App, request: &Request) -> Response {
@@ -344,4 +352,3 @@ fn map_system(app: &App, request: &Request) -> Response {
         Ok(Response::json(JOB_ACCEPTED_STATUS, json!({"ok": true, "job": started["job"]})))
     })
 }
-

@@ -267,9 +267,7 @@ pub fn check_fields(features: &Features, repo_names: Option<&[String]>) -> Vec<S
             if tries.is_empty() || !tries.chars().all(|c| c.is_ascii_digit()) {
                 errors.push(format!("[{slug}] tries must be an integer (got {})", py_repr(tries)));
             } else if tries.parse::<u64>().unwrap_or(u64::MAX) >= MAX_TRIES && status != "blocked" {
-                errors.push(format!(
-                    "[{slug}] tries={tries} (cap {MAX_TRIES}) but status={status}: with {MAX_TRIES} failures the feature must be blocked"
-                ));
+                errors.push(format!("[{slug}] tries={tries} (cap {MAX_TRIES}) but status={status}: with {MAX_TRIES} failures the feature must be blocked"));
             }
         }
         if ["approved", "building", "verified"].contains(&status) && f.text("paths").is_empty() {
@@ -299,10 +297,7 @@ pub fn check_fields(features: &Features, repo_names: Option<&[String]>) -> Vec<S
         if status == "building" {
             let waiting: Vec<&String> = slugs.iter().filter(|d| features.status_of(d).is_some_and(|s| s != "verified")).collect();
             if !waiting.is_empty() {
-                errors.push(format!(
-                    "[{slug}] is building but depends on {} which is not verified",
-                    waiting.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-                ));
+                errors.push(format!("[{slug}] is building but depends on {} which is not verified", waiting.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")));
             }
         }
     }
@@ -550,9 +545,7 @@ pub fn validate(
         }
     }
     if newly_verified > new_commits {
-        errors.push(format!(
-            "{newly_verified} feature(s) became verified but there were {new_commits} new commit(s): verified requires the feature's commit"
-        ));
+        errors.push(format!("{newly_verified} feature(s) became verified but there were {new_commits} new commit(s): verified requires the feature's commit"));
     }
     let building: Vec<String> = new.iter().filter(|(_, f)| f.status() == "building").map(|(s, _)| s.clone()).collect();
     for c in conflicts(&new, &building, primary_name) {
@@ -641,11 +634,10 @@ pub fn next_work(everything: &Features, wave: i64, headless: bool, primary_name:
     let cap = wave.max(1);
     let approved: Vec<String> = by("approved").into_iter().filter(|s| ready(everything, s)).collect();
     let waiting: Vec<String> = by("approved").into_iter().filter(|s| !ready(everything, s)).collect();
-    let mut lanes: Vec<(String, &str)> =
-        by("building").into_iter().chain(by("speccing")).take(cap as usize).map(|s| (s, LANE_RECOVER)).collect();
+    let mut lanes: Vec<(String, &str)> = by("building").into_iter().chain(by("speccing")).take(cap as usize).map(|s| (s, LANE_RECOVER)).collect();
     let room = cap - lanes.len() as i64;
     let mut chosen = if room > 0 { pick_wave(&features, &approved, room, headless, primary_name) } else { vec![] };
-    
+
     let alone = if chosen.iter().any(|s| alone_in_wave(features.get(s).expect("exists"), headless)) {
         chosen = if lanes.is_empty() { chosen.into_iter().take(1).collect() } else { vec![] };
         !chosen.is_empty()
@@ -661,8 +653,7 @@ pub fn next_work(everything: &Features, wave: i64, headless: bool, primary_name:
     }
     let slugs: Vec<String> = lanes.iter().map(|(s, _)| s.clone()).collect();
     let deferred_by_collision: Vec<String> = approved.iter().filter(|s| !slugs.contains(s)).cloned().collect();
-    let deferred_by_wave: Vec<String> =
-        ["specced", "pending"].iter().flat_map(|st| by(st)).filter(|s| !slugs.contains(s)).collect();
+    let deferred_by_wave: Vec<String> = ["specced", "pending"].iter().flat_map(|st| by(st)).filter(|s| !slugs.contains(s)).collect();
     let mut steps: Vec<&str> = Vec::new();
     for (_, step) in &lanes {
         if !steps.contains(step) {
@@ -708,7 +699,16 @@ pub const JSON_FOLDER_NAME: &str = "json";
 pub const INTERNAL_FOLDER_NAME: &str = "internal";
 const READABLE_NAMES: [&str; 1] = ["NOTICE.txt"];
 const LOOP_FILES: [&str; 11] = [
-    "LOOP.json", "LOOP.lock", "SCOPE.json", "PERMISSIONS.json", "rules.tests.json", "guard.log", ".guard-alert", "ANSWERS.md", "DEPENDENCIES.md", "GRAPH.md",
+    "LOOP.json",
+    "LOOP.lock",
+    "SCOPE.json",
+    "PERMISSIONS.json",
+    "rules.tests.json",
+    "guard.log",
+    ".guard-alert",
+    "ANSWERS.md",
+    "DEPENDENCIES.md",
+    "GRAPH.md",
     "VALIDATE.md",
 ];
 const OLD_LOGS_FOLDER_NAME: &str = "loop-logs";

@@ -282,7 +282,10 @@ mod tests {
         assert_eq!((one["ok"].clone(), one["result"].clone(), one["total_cost_usd"].clone()), (json!(true), json!("done"), json!(0.5)));
         let stream = "warning: update available\n{\"type\":\"system\"}\n{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed_warning\",\"rateLimitType\":\"five_hour\",\"resetsAt\":1792702800,\"unifiedWindows\":{\"five_hour\":{\"utilization\":0.6,\"resetsAt\":1792702800},\"seven_day\":{\"utilization\":33,\"resetsAt\":1793000000},\"bad\":{\"utilization\":\"x\"}}}}\n{\"type\":\"result\",\"result\":\"ok\",\"cost_usd\":\"1.25\",\"num_turns\":\"3\"}\ntrailing";
         let data = parse(stream);
-        assert_eq!((data["ok"].clone(), data["total_cost_usd"].clone(), data["num_turns"].clone(), data["is_error"].clone()), (json!(true), json!(1.25), json!(3), json!(false)));
+        assert_eq!(
+            (data["ok"].clone(), data["total_cost_usd"].clone(), data["num_turns"].clone(), data["is_error"].clone()),
+            (json!(true), json!(1.25), json!(3), json!(false))
+        );
         assert_eq!(data["rate_limit"]["windows"]["five_hour"], json!({"pct": 60.0, "reset_at": 1792702800}));
         assert_eq!(data["rate_limit"]["windows"]["seven_day"]["pct"], json!(33.0));
         assert!(data["rate_limit"]["windows"].get("bad").is_none());

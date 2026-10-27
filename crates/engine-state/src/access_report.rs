@@ -40,9 +40,33 @@ const MCP_PROFILES: [&str; 8] = ["orchestrator", "planning", "roadmapmap", "subp
 /// What Claude Code itself ships (never flagged): the agents/skills below are built into the CLI, the plugin name `builtin` is its own.
 const BUILTIN_AGENTS: [&str; 7] = ["general-purpose", "explore", "plan", "statusline-setup", "claude-code-guide", "bash", "claude"];
 const BUILTIN_SKILLS: [&str; 27] = [
-    "update-config", "keybindings-help", "code-review", "simplify", "fewer-permission-prompts", "loop", "schedule", "claude-api", "workflow-authoring", "run",
-    "plugin-authoring", "init", "security-review", "review", "debug", "batch", "verify", "compact", "deep-research", "dataviz", "run-skill-generator", "context",
-    "cost", "help", "model", "clear", "usage",
+    "update-config",
+    "keybindings-help",
+    "code-review",
+    "simplify",
+    "fewer-permission-prompts",
+    "loop",
+    "schedule",
+    "claude-api",
+    "workflow-authoring",
+    "run",
+    "plugin-authoring",
+    "init",
+    "security-review",
+    "review",
+    "debug",
+    "batch",
+    "verify",
+    "compact",
+    "deep-research",
+    "dataviz",
+    "run-skill-generator",
+    "context",
+    "cost",
+    "help",
+    "model",
+    "clear",
+    "usage",
 ];
 const BUILTIN_SKILLS_MORE: [&str; 5] = ["config", "memory", "resume", "status", "doctor"];
 
@@ -58,7 +82,11 @@ fn text(value: &Value) -> String {
 
 /// `<plugin root>/bin/guard.exe`.
 pub fn guard_path(plugin_root_path: &str) -> String {
-    if plugin_root_path.is_empty() { String::new() } else { Path::new(plugin_root_path).join("bin").join("guard.exe").display().to_string() }
+    if plugin_root_path.is_empty() {
+        String::new()
+    } else {
+        Path::new(plugin_root_path).join("bin").join("guard.exe").display().to_string()
+    }
 }
 
 /// `{profile: sorted tool patterns the guard's `mcp-allowlist` lets through}`, from config.json; `{}` when there is no guard.
@@ -109,7 +137,10 @@ pub fn build_static(env: &Env, ctx: &AppCtx, project_root: &str, config: &Map<St
     report.insert("guard".into(), json!(if guard_exists { guard.clone() } else { String::new() }));
     report.insert("isolation".into(), json!(enabled));
     report.insert("slot_skills".into(), json!(slot_skill_labels(project_root)));
-    report.insert("mcp_servers".into(), json!(access["servers"].as_array().into_iter().flatten().map(|row| json!({"server": row["server"], "tools": row["tools"]})).collect::<Vec<_>>()));
+    report.insert(
+        "mcp_servers".into(),
+        json!(access["servers"].as_array().into_iter().flatten().map(|row| json!({"server": row["server"], "tools": row["tools"]})).collect::<Vec<_>>()),
+    );
     report.insert("mcp_config_path".into(), access["config_path"].clone());
     report.insert("mcp_policy".into(), mcp_access::describe_policy(env, None, ""));
     report.insert("mcp_allow_by_profile".into(), mcp_allow_by_profile(env, if guard_exists { &guard } else { "" }));
@@ -119,7 +150,8 @@ pub fn build_static(env: &Env, ctx: &AppCtx, project_root: &str, config: &Map<St
     if enabled {
         let prepared = runtime_isolation::prepare(env, Some(project_root), config, &root, &ctx.toolkit_text());
         let bundle = &prepared["bundle"];
-        let kept: Map<String, Value> = ["path", "skills", "skipped", "agents", "rebuilt", "error"].iter().filter_map(|key| bundle.get(*key).map(|v| (key.to_string(), v.clone()))).collect();
+        let kept: Map<String, Value> =
+            ["path", "skills", "skipped", "agents", "rebuilt", "error"].iter().filter_map(|key| bundle.get(*key).map(|v| (key.to_string(), v.clone()))).collect();
         report.insert("bundle".into(), Value::Object(kept));
         report.insert("allowlist_file".into(), prepared["allowlist_file"].clone());
     }
@@ -217,7 +249,14 @@ pub fn analyze_init(init: &Value, static_part: &Value) -> Value {
     let plugins = list("plugins");
     let bundle = &static_part["bundle"];
     let allowed_servers: Vec<&str> = static_part["mcp_servers"].as_array().into_iter().flatten().filter_map(|r| r["server"].as_str()).collect();
-    let allowed_skills: Vec<String> = static_part["skills_allowlist"].as_object().into_iter().flat_map(|m| m.values()).flat_map(|v| v.as_array().into_iter().flatten()).filter_map(Value::as_str).map(str::to_lowercase).collect();
+    let allowed_skills: Vec<String> = static_part["skills_allowlist"]
+        .as_object()
+        .into_iter()
+        .flat_map(|m| m.values())
+        .flat_map(|v| v.as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .map(str::to_lowercase)
+        .collect();
     let bundle_agents: Vec<String> = bundle["agents"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_lowercase).collect();
     let mut flags: Vec<String> = Vec::new();
     for name in &servers {
@@ -267,7 +306,10 @@ pub fn run_probe(env: &Env, static_part: &Value, config: &Map<String, Value>, pr
 // ---- guard.log ---------------------------------------------------------------------------------------------------------------------------
 
 fn read_guard_log(project_root: &str, limit: usize) -> (String, Vec<Map<String, Value>>) {
-    let candidates = [Path::new(project_root).join(".specs").join("project").join("loop").join("internal").join("guard.log"), Path::new(project_root).join(".specs").join("project").join("guard.log")];
+    let candidates = [
+        Path::new(project_root).join(".specs").join("project").join("loop").join("internal").join("guard.log"),
+        Path::new(project_root).join(".specs").join("project").join("guard.log"),
+    ];
     for path in candidates {
         if !path.is_file() {
             continue;
@@ -337,7 +379,11 @@ pub fn build_report(env: &Env, ctx: &AppCtx, project_root: &str, probe: bool, se
 fn format_counts(counts: &Value) -> String {
     let mut pairs: Vec<(String, i64)> = counts.as_object().into_iter().flatten().map(|(k, v)| (k.clone(), v.as_i64().unwrap_or(0))).collect();
     pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    if pairs.is_empty() { "(none)".into() } else { pairs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", ") }
+    if pairs.is_empty() {
+        "(none)".into()
+    } else {
+        pairs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", ")
+    }
 }
 
 fn format_network(network: &Value) -> Vec<String> {
@@ -347,11 +393,20 @@ fn format_network(network: &Value) -> Vec<String> {
     let mut out = vec![String::new(), "-- network list of a loop session (egress-host + run-time layer; an interactive session is not limited)".to_string()];
     for row in network["allow"].as_array().into_iter().flatten() {
         let inactive = text(&row["inactive"]);
-        out.push(format!("  {:<8} {}{}", text(&row["origin"]), text(&row["entry"]), if inactive.is_empty() { String::new() } else { format!("  [inactive: {inactive} is defined in .env.test]") }));
+        out.push(format!(
+            "  {:<8} {}{}",
+            text(&row["origin"]),
+            text(&row["entry"]),
+            if inactive.is_empty() { String::new() } else { format!("  [inactive: {inactive} is defined in .env.test]") }
+        ));
     }
     out.push("  deny (config.json egress_never: any port, path and method; beats every allow):".into());
     let deny: Vec<String> = network["deny"].as_array().into_iter().flatten().map(|p| format!("    {}", text(p))).collect();
-    if deny.is_empty() { out.push("    (none)".into()) } else { out.extend(deny) }
+    if deny.is_empty() {
+        out.push("    (none)".into())
+    } else {
+        out.extend(deny)
+    }
     if crate::notify_truthy(network.get("broken")) {
         out.push(format!("  PROBLEM: {} is unusable: every non-local request fails closed", text(&network["broken"])));
     }
@@ -373,7 +428,11 @@ fn format_self_test(result: &Value) -> Vec<String> {
     for item in result["skipped"].as_array().into_iter().flatten() {
         out.push(format!("  [skip] {:<14} {}", text(&item["id"]), text(&item["reason"])));
     }
-    out.push(if result["ok"] == true { "  run-time layer works".into() } else { "  PROBLEM: the run-time layer self test failed: a loop would not be confined as the network list says".into() });
+    out.push(if result["ok"] == true {
+        "  run-time layer works".into()
+    } else {
+        "  PROBLEM: the run-time layer self test failed: a loop would not be confined as the network list says".into()
+    });
     out
 }
 
@@ -453,9 +512,24 @@ pub fn format_report(report: &Value) -> String {
     } else {
         let joined = |value: &Value, none: &str| {
             let items: Vec<String> = value.as_array().into_iter().flatten().map(text).collect();
-            if items.is_empty() { none.to_string() } else { items.join(", ") }
+            if items.is_empty() {
+                none.to_string()
+            } else {
+                items.join(", ")
+            }
         };
-        let servers: Vec<String> = probe["mcp_servers"].as_array().into_iter().flatten().map(|item| format!("{}({})", short_name(item), if item.is_object() { item.get("status").map(text).filter(|s| !s.is_empty()).unwrap_or_else(|| "?".into()) } else { "?".into() })).collect();
+        let servers: Vec<String> = probe["mcp_servers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|item| {
+                format!(
+                    "{}({})",
+                    short_name(item),
+                    if item.is_object() { item.get("status").map(text).filter(|s| !s.is_empty()).unwrap_or_else(|| "?".into()) } else { "?".into() }
+                )
+            })
+            .collect();
         let plugins: Vec<String> = probe["plugins"].as_array().into_iter().flatten().map(short_name).collect();
         out.push(format!("  model:       {}", text(&probe["model"])));
         out.push(format!("  tools:       {}", probe["tool_count"]));
@@ -502,7 +576,15 @@ mod tests {
         });
         let analysis = analyze_init(&init, &static_part);
         let flags: Vec<&str> = analysis["flags"].as_array().unwrap().iter().map(|f| f.as_str().unwrap()).collect();
-        assert_eq!(flags, ["mcp server outside the generated config: other", "agent outside the bundle: stray", "skill outside the allowlist: plugin:extra", "plugin that is not builtin: evil"]);
+        assert_eq!(
+            flags,
+            [
+                "mcp server outside the generated config: other",
+                "agent outside the bundle: stray",
+                "skill outside the allowlist: plugin:extra",
+                "plugin that is not builtin: evil"
+            ]
+        );
         assert_eq!((analysis["tool_count"].clone(), analysis["mcp_tools"].clone()), (json!(3), json!(["mcp__grafana__query", "mcp__other__x"])));
     }
 
@@ -517,7 +599,10 @@ mod tests {
         )
         .unwrap();
         let summary = summarize_guard_log(&dir.path().display().to_string(), 200);
-        assert_eq!((summary["lines"].clone(), summary["by_decision"].clone(), summary["last_denials"][0]["rule"].clone()), (json!(2), json!({"allowed": 1, "blocked": 1}), json!("git-write")));
+        assert_eq!(
+            (summary["lines"].clone(), summary["by_decision"].clone(), summary["last_denials"][0]["rule"].clone()),
+            (json!(2), json!({"allowed": 1, "blocked": 1}), json!("git-write"))
+        );
         assert_eq!(format_counts(&summary["by_rule"]), "git-write=1, x=1");
     }
 }
