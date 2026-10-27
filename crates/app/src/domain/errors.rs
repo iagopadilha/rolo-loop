@@ -62,6 +62,8 @@ pub enum Kind {
     InvalidSetting,
     /// The setting cannot be turned on in this installation.
     SettingUnavailable,
+    /// An unexpected failure (a file that cannot be moved, a thread that cannot start): the controllers answer 500.
+    Internal,
     /// config.json exists but is not a JSON object.
     ConfigFileUnreadable,
 }

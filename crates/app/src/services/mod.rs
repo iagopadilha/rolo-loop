@@ -34,6 +34,7 @@ pub mod decisions;
 pub mod roadmap_view;
 pub mod spec_file;
 pub mod setup_commit;
+pub mod specs_reset;
 pub mod turns;
 pub mod workspace;
 pub mod wrap_up;
@@ -55,6 +56,7 @@ pub mod network;
 pub mod loop_status;
 pub mod pipeline;
 pub mod quarantine;
+pub mod planning_reopen;
 pub mod planning_repos;
 pub mod project_capabilities;
 pub mod project_progress;
@@ -140,6 +142,7 @@ pub struct App {
     pub duration_cache: Mutex<std::collections::HashMap<std::path::PathBuf, (f64, Option<f64>)>>,
     pub chat_send_lock: Mutex<()>,
     pub action_locks: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
+    pub specs_reset_lock: Mutex<()>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -206,6 +209,7 @@ impl App {
             duration_cache: Mutex::new(Default::default()),
             chat_send_lock: Mutex::new(()),
             action_locks: Mutex::new(Default::default()),
+            specs_reset_lock: Mutex::new(()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),
