@@ -35,3 +35,12 @@
 
 /* section in the turn tabs */
 .td{margin-top:16px;display:flex;flex-direction:column;gap:8px;min-width:0;}
+
+/* Validations dialog (pages/panel/validations.js) */
+.val-table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0 14px;}
+.val-table th,.val-table td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--line3,#262434);}
+.val-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3,#6F6B86);font-weight:600;}
+.val-proof{font-size:11px;color:var(--text3,#6F6B86);word-break:break-all;}
+.val-status{font-size:11px;}
+.val-status.is-bad{color:#ff8a8a;}
+.val-manual{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:12px;}
