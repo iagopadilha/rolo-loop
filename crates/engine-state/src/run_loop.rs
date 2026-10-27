@@ -48,7 +48,10 @@ use crate::preflight_checks::*;
 use crate::turn_gates::*;
 use crate::worktree_state::{acquire_lock, count_new_commits, fingerprint, heads_of, release_lock, rewind, roadmap_score, settle_dirty_worktrees, LeftoverOpts};
 use crate::worktrees::{ensure_worktrees, Ctx, WtOpts};
-use crate::{claude_binaries, cli_output, decisions, delivery, egress_proxy, graph_view, loop_summary, monitor_proc, notify, project_repos, usage_windows};
+use crate::{
+    claude_binaries, cli_output, cost_budget, decisions, delivery, egress_proxy, graph_view, loop_summary, monitor_proc, notify, project_repos, result_vocabulary,
+    usage_windows,
+};
 use cfg::env::{app_env_value, load_all};
 use cfg::Env;
 use pycompat::json::py_json_dumps;
@@ -333,6 +336,41 @@ impl Runner {
             Err(error) => {
                 println!("[loop] WARNING: egress proxy not started (OSError: {error}); the agent's HTTP clients fail closed until it is fixed");
                 None
+            }
+        }
+    }
+
+    /// Stores the cost forecast and the cap ladder in the run meta after every turn (data for the panel: raising the limit is one step to
+    /// `cost_cap_ladder.suggested`), the E2E progress ("3 of 8 done"), and sends ONE notice per cap when the forecast passes the cap, BEFORE
+    /// the money is spent.
+    fn record_cost_forecast(&self, work: &str, meta: &mut Value, turn: i64, cost: f64, opts: &LoopOpts) {
+        let specs = Path::new(work).join(".specs").join("project").display().to_string();
+        let (_, total, done) = roadmap_score(work);
+        let pending = if opts.e2e { e2e_pending(&specs).len() as u64 } else { 0 };
+        let open = if done < total { (total - done) as u64 } else { 0 };
+        let cap = effective_cost_cap(meta, opts.max_cost);
+        let estimate = cost_budget::forecast(cost, turn.max(0) as u64, done.max(0) as u64, open, pending, cap);
+        cost_budget::store(meta, estimate.as_ref(), cap);
+        if opts.e2e {
+            let (checked, verified) = e2e_progress(&specs);
+            set(meta, "e2e_progress", json!({"checked": checked, "total": verified, "pending": pending}));
+        }
+        if let Some(f) = estimate.filter(|f| f.exceeds_cap) {
+            if meta.get("cost_forecast_warned_cap").and_then(Value::as_f64) != Some(cap) {
+                set(meta, "cost_forecast_warned_cap", json!(cap));
+                let suggested = cost_budget::suggested_cap(cap, Some(&f)).map(|s| format!("US$ {s:.2}")).unwrap_or_else(|| "a higher limit".into());
+                self.notify_wait(
+                    "the forecast passes the cost cap",
+                    &format!(
+                        "Spent US$ {:.2}; about {} more turn(s) (US$ {:.2}) are expected, so the run needs about US$ {:.2} and the cap is US$ {cap:.2}. Raise the limit to {suggested} in the panel BEFORE it pauses.{}",
+                        f.spent,
+                        f.remaining_turns,
+                        f.estimated_remaining,
+                        f.estimated_total,
+                        self.monitor_url.clone().map(|l| format!(" Panel: {l}")).unwrap_or_default()
+                    ),
+                    None,
+                );
             }
         }
     }
@@ -735,7 +773,17 @@ impl Runner {
             println!("[loop] turn {turn} | {:02}:{:02}:{:02}", clock.hour(), clock.minute(), clock.second());
             return_to_main_command(opts);
             let claude_name = current_claude(opts);
-            let command = claude_command(&self.ctx, opts, &prompt);
+            let command = {
+                // final E2E phase: the serial run over the verified features gets a budget sized by their number, so one turn is not cut mid-way
+                let pending = if opts.e2e { e2e_pending(&specs).len() } else { 0 };
+                let (_, total_now, done_now) = roadmap_score(work);
+                let mut turn_opts = opts.clone();
+                turn_opts.budget = cost_budget::turn_budget(opts.budget, total_now != 0 && done_now == total_now, pending, cost, effective_cost_cap(meta, opts.max_cost));
+                if turn_opts.budget != opts.budget {
+                    println!("[loop] E2E phase: {pending} feature(s) to check, turn budget US$ {:.2} (base {:.2})", turn_opts.budget, opts.budget);
+                }
+                claude_command(&self.ctx, &turn_opts, &prompt)
+            };
             let (code, out, err, timed_out) = run_turn(&self.ctx, &command, work, opts.timeout, &mut self.env_reported);
             if winproc::interrupted() {
                 return self.finish(work, meta, "error", "interrupted by the user (Ctrl+C)", opts);
@@ -785,6 +833,7 @@ impl Runner {
             cost += f64_of(data.get("total_cost_usd"));
             set(meta, "turns", json!(turn));
             set(meta, "cost_usd", json!(round4(cost)));
+            self.record_cost_forecast(work, meta, turn, cost, opts);
             let _ = save_meta(&meta_path(work), meta);
 
             let cap = effective_cost_cap(meta, opts.max_cost);
@@ -992,6 +1041,10 @@ impl Runner {
                     opts,
                 );
             }
+            // the verifier's words (pass, fail, unverified) are mapped to the ROADMAP words before the state check instead of stopping the run
+            for note in result_vocabulary::repair_roadmap_e2e(&specs) {
+                println!("[loop] ROADMAP e2e= normalised ({note})");
+            }
             // typed state: legal edges, tries, verified only with a commit, paths; saves this turn's snapshot for --rewind
             let prev = loop_state::load_snapshot(work, (turn - 1).max(0) as u64);
             let head_now = git(work, &["rev-parse", "HEAD"]).1;
@@ -1015,7 +1068,8 @@ impl Runner {
                     meta,
                     "error",
                     &format!(
-                        "invalid state after turn {turn} (use --rewind {} to go back): {}",
+                        "invalid state after turn {turn} (turn {turn} already cost US$ {:.2}; --rewind {} goes back and repeats it, so use it only if the state cannot be fixed by hand): {}",
+                        f64_of(data.get("total_cost_usd")),
                         turn - 1,
                         violations.iter().take(4).cloned().collect::<Vec<_>>().join("; ")
                     ),

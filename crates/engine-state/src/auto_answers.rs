@@ -70,19 +70,24 @@ fn clip(text: &str, n: usize) -> String {
     text.chars().take(n).collect()
 }
 
+/// Stopped states that accept an instruction from the command line (the panel already writes the same `[pending]` block for them).
+pub const INSTRUCTABLE_STATUSES: [&str; 4] = ["awaiting_user", "paused", "error", "done"];
+
 /// Records the user's answer in ANSWERS.md. The orchestrator's next turn reads it first and applies it.
 /// `Err(message)` is what the script prints before exiting with 1.
 pub fn write_answer(work: &str, text: &str) -> Result<String, String> {
     let state = load_json(&state_file(work, "LOOP.json"));
-    if state.get("status").and_then(Value::as_str) != Some("awaiting_user") {
-        let current = text_of(state.get("status"));
+    let status = text_of(state.get("status"));
+    if !INSTRUCTABLE_STATUSES.contains(&status.as_str()) {
         return Err(format!(
-            "--answer only applies when the loop stopped at awaiting_user (current status: {})",
-            if current.is_empty() { "no LOOP.json".to_string() } else { current }
+            "--answer only applies when the loop stopped (awaiting_user, paused, error or done; current status: {})",
+            if status.is_empty() { "no LOOP.json".to_string() } else { status }
         ));
     }
     let path = state_file(work, "ANSWERS.md");
-    let block = format!("\n## Answer {} [pending]\nQuestion: {}\nUser answer: {}\n", now_iso(), clip(text_of(state.get("reason")).trim(), 1500), text.trim());
+    let question = clip(text_of(state.get("reason")).trim(), 1500);
+    let question = if status == "awaiting_user" { question } else { format!("(instruction after the loop stopped at {status}) {question}") };
+    let block = format!("\n## Answer {} [pending]\nQuestion: {}\nUser answer: {}\n", now_iso(), question.trim(), text.trim());
     let _ = std::fs::create_dir_all(path.parent().expect("has parent"));
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.write_all(block.as_bytes());
@@ -251,7 +256,12 @@ mod tests {
     #[test]
     fn write_answer_needs_awaiting_user() {
         let (_d, work) = setup(json!({"status": "running"}));
-        assert_eq!(write_answer(&work, "x").unwrap_err(), "--answer only applies when the loop stopped at awaiting_user (current status: running)");
+        assert_eq!(write_answer(&work, "x").unwrap_err(), "--answer only applies when the loop stopped (awaiting_user, paused, error or done; current status: running)");
+        let (_d3, work3) = setup(json!({"status": "done", "reason": "all verified"}));
+        assert!(write_answer(&work3, "also do X").is_ok());
+        assert!(std::fs::read_to_string(state_file(&work3, "ANSWERS.md"))
+            .unwrap()
+            .contains("Question: (instruction after the loop stopped at done) all verified\nUser answer: also do X\n"));
         let (_d2, work2) = setup(json!({"status": "awaiting_user", "reason": " Which? "}));
         assert!(write_answer(&work2, " go ").unwrap().starts_with("[loop] answer recorded in "));
         let text = std::fs::read_to_string(state_file(&work2, "ANSWERS.md")).unwrap();

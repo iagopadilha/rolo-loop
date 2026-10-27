@@ -43,6 +43,13 @@ const STATUS_ERROR: &str = "error";
 const BLOCKED_STATUS: &str = "blocked";
 
 static BACKGROUND_TASKS: LazyLock<Re> = LazyLock::new(|| Re::new(r"Background tasks still running"));
+/// Terminal colour codes (`ESC[31m`, and the same without the ESC byte that a log copy may lose: `[90m`).
+static ANSI_CODES: LazyLock<Re> = LazyLock::new(|| Re::new(r"\x1b\[[0-9;]*[A-Za-z]|\[[0-9]{1,3}(?:;[0-9]{1,3})*m"));
+
+/// The text without terminal colour codes, so the detail of an item reads as plain text.
+fn strip_ansi(text: &str) -> String {
+    ANSI_CODES.replace_lit(text, "")
+}
 static STOP_TURN: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?:after|on|in) turn (\d+)"));
 
 struct Cause {
@@ -354,7 +361,7 @@ impl ErrorCenterService<'_> {
         for number in &numbers[numbers.len().saturating_sub(TURNS_SCANNED_LIMIT)..] {
             let turn = files.read_turn(work_dir, *number);
             let when = to_iso(files.get_mtime(&files.get_turn_path(work_dir, *number)));
-            let stderr = text_or_empty(turn.get("stderr")).trim().to_string();
+            let stderr = strip_ansi(&text_or_empty(turn.get("stderr"))).trim().to_string();
             let exit_code = turn.get("exit_code");
             let mut item = if notify_truthy(turn.get("timeout")) {
                 let cause = &KNOWN_CAUSES[TIMEOUT_CAUSE];
@@ -524,7 +531,7 @@ mod tests {
         };
         write_turn(1, json!({"timeout": true, "stderr": "slow"}));
         write_turn(2, json!({"exit_code": 1, "result": "boom"}));
-        write_turn(3, json!({"stderr": "Background tasks still running"}));
+        write_turn(3, json!({"stderr": "\u{1b}[90mBackground\u{1b}[0m tasks still running [31mred[0m"}));
         write_turn(4, json!({"exit_code": 0}));
         let guard = crate::repositories::loop_command_file::get_loop_internal_dir(&w).join("guard.log");
         std::fs::create_dir_all(guard.parent().unwrap()).unwrap();
@@ -536,6 +543,8 @@ mod tests {
         let body = app.error_center().build_errors(&context);
         let ids: Vec<&str> = body["items"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["turn-2-failed", "turn-1-timeout", "feature-a", "turn-3-stderr", "guard-loop-git-write"]);
+        let colored = body["items"].as_array().unwrap().iter().find(|i| i["id"] == "turn-3-stderr").unwrap();
+        assert_eq!(colored["detail"], "Background tasks still running red");
         assert_eq!((body["counts"].clone(), body["problems"].clone()), (json!({"error": 3, "warning": 0, "info": 2}), json!(3)));
         assert_eq!(body["items"][0]["title"], "Turn 2 failed (exit code 1)");
         assert_eq!(body["items"][4]["turn_counts"], json!({"2": 1}));
