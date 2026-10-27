@@ -3,7 +3,7 @@
    summarizes: talking to an agent (its history and the chat) happens in the agent dialog, deciding a pause in the pause dialog. */
 import { html } from '../../util/preact.js';
 import { Markdown, inlineNodes } from '../../components/markdown.js';
-import { txt, list } from '../../util/format.js';
+import { txt, list, fmtRelative } from '../../util/format.js';
 import { ctx, ui, pal, STATUS, ROLE_DESC, status, loop, agentById } from './context.js';
 import { renderAll } from '../project_panel.js';
 import { steps, turnsList, liveN, curN, selectTurn, selectNode, stateAt, activeNode, turnAt, STEP_COLOR } from './pipeline_model.js';
@@ -116,6 +116,21 @@ function SelectedCard() {
   </section>`;
 }
 
+/** Processes the engine started and has running right now (state.processes): what, which turn, pid, since when, which account. They run
+    hidden, so this card is the only place they show: nothing opens on the user's screen. */
+function ProcessesCard() {
+  const items = list(ctx.state && ctx.state.processes);
+  return html`<section class="z-card" aria-label="Running processes">
+    <div class="z-label">${'PROCESSES · ' + items.length}</div>
+    ${items.length ? items.map((item) => html`<div class="z-proc" key=${item.id}>
+      <div class="z-proc-head"><span class="mono">${txt(item.claude || item.kind)}</span><span class="z-proc-turn mono">${item.turn != null ? 'T' + item.turn : ''}</span></div>
+      <div class="z-proc-sub mono">${['pid ' + txt(item.pid), 'started ' + fmtRelative(item.started_at), item.claude_account ? 'account ' + txt(item.claude_account) : ''].filter(Boolean).join(' · ')}</div>
+      ${list(item.lanes).length ? html`<div class="z-proc-sub">${list(item.lanes).map((lane) => txt(lane.feature) + (lane.step ? ' · ' + txt(lane.step) : '')).join(' ; ')}</div>` : null}</div>`)
+      : html`<div class="z-none">Nothing is running.</div>`}
+    <div class="z-proc-note">They run hidden: no window opens on your screen.</div>
+  </section>`;
+}
+
 /** The whole inspector. `on` = the loop panel shows (state arrived and the project is not in planning mode). */
 export function Inspector({ on }) {
   const latest = liveN();
@@ -125,7 +140,7 @@ export function Inspector({ on }) {
           <div class="z-label">${'NOW · T' + (latest == null ? '—' : latest)}</div>
           <${OrchestratorCard} /><${RunningList} />
         </section>
-        <${SelectedCard} />`}
+        <${ProcessesCard} /><${SelectedCard} />`}
     </div>
   </aside>`;
 }

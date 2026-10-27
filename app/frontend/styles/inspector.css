@@ -8,3 +8,9 @@
 .focus-path{font:400 11px var(--mono);padding:2px 6px;border-radius:0;background:var(--panel);border:1px solid var(--line2);color:var(--text2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .focus-task{display:flex;gap:6px;align-items:baseline;color:var(--text2);word-break:break-word;}
 .focus-card .link-btn{align-self:flex-start;}
+
+.z-proc{padding:6px 0;border-top:1px solid var(--line3,#262434);}
+.z-proc:first-of-type{border-top:0;}
+.z-proc-head{display:flex;justify-content:space-between;font-size:12px;}
+.z-proc-sub{font-size:11px;color:var(--text2,#A7A3BD);word-break:break-word;}
+.z-proc-note{font-size:11px;color:var(--text3,#6F6B86);margin-top:6px;}
