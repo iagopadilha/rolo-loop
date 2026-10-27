@@ -7,7 +7,7 @@
 //! Feature line grammar (ROADMAP.md):
 //! `- [slug] status=<pending|speccing|specced|approved|building|verified|blocked> title="<what the user gets>" scope=<Small|Medium|Large|Complex>
 //! kind=<back|front|both|generic> paths=<p1,p2> [repo-order=<repo,repo>] [deps=<slug|dir:folder,...>] [isolation=same-tree|worktree]
-//! [tries=<n>] [origin=adopted] [e2e=ok|failed|not-covered] [regression=yes|baseline|ok|failed] [note=...]`
+//! [tries=<n>] [origin=adopted] [e2e=ok|failed|not-covered|pending] [regression=yes|baseline|ok|failed] [note=...]`
 
 use pycompat::json::py_json_dumps;
 use pycompat::{nt_abspath, splitlines, Re};
@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 pub const STATUSES: [&str; 7] = ["pending", "speccing", "specced", "approved", "building", "verified", "blocked"];
 pub const SCOPES: [&str; 4] = ["Small", "Medium", "Large", "Complex"];
 pub const KINDS: [&str; 4] = ["back", "front", "both", "generic"];
-pub const E2E: [&str; 3] = ["ok", "failed", "not-covered"];
+pub const E2E: [&str; 4] = crate::result_vocabulary::E2E_WORDS;
 pub const ISOLATIONS: [&str; 2] = ["same-tree", "worktree"];
 pub const REGRESSION: [&str; 4] = ["yes", "baseline", "ok", "failed"];
 pub const REFACTOR_PREFIX: &str = "refactor-";
@@ -259,7 +259,7 @@ pub fn check_fields(features: &Features, repo_names: Option<&[String]>) -> Vec<S
             }
         }
         if let Some(e2e) = f.get("e2e").filter(|s| !s.is_empty()) {
-            if !E2E.contains(&e2e) {
+            if crate::result_vocabulary::canonical_e2e(e2e).is_none() {
                 errors.push(format!("[{slug}] invalid e2e {}", py_repr(e2e)));
             }
         }

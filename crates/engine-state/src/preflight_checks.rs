@@ -215,11 +215,12 @@ pub fn test_environment_stop_reason(root: &str, problems: &[String]) -> String {
 }
 
 /// All verified/blocked = nothing to do, EXCEPT when the user is answering a question (--option/--answer): the answer may reopen a
-/// quarantined feature (e.g. fix the spec and redo the gate).
-pub fn nothing_left_to_do(done: i64, total: i64, opts: &LoopOpts, state: Option<&Value>, tiebreak_possible: bool) -> bool {
+/// quarantined feature (e.g. fix the spec and redo the gate), and EXCEPT with --e2e while verified features still lack their final E2E result
+/// (`e2e_pending`): that is work left, so "Try again" after a stop in the final phase is not refused.
+pub fn nothing_left_to_do(done: i64, total: i64, opts: &LoopOpts, state: Option<&Value>, tiebreak_possible: bool, e2e_pending: usize) -> bool {
     let will_auto_answer =
         state.is_some_and(|s| s.get("status").and_then(Value::as_str) == Some("awaiting_user")) && opts.auto_answer && state.and_then(pick_auto_answer).is_some();
-    total != 0 && done == total && !(opts.option != 0 || !opts.answer.is_empty()) && !will_auto_answer && !tiebreak_possible
+    total != 0 && done == total && !(opts.option != 0 || !opts.answer.is_empty()) && !will_auto_answer && !tiebreak_possible && !(opts.e2e && e2e_pending > 0)
 }
 
 /// The roadmap must have been approved by the user (ROADMAP-APPROVED.json). When answering a question (--answer/--option) the signature is
@@ -408,13 +409,20 @@ pub fn roadmap_problems(root: &str, repos: &[RepoRef], opts: &LoopOpts, setup_op
     let specs = Path::new(root).join(".specs").join("project").display().to_string();
     let state = load_json(&state_file(root, "LOOP.json"));
     let tiebreak = !gate_blocked_features(&specs).is_empty() && opts.auto_answer && opts.gate_tiebreaks > 0;
+    let pending_e2e = if opts.e2e { crate::turn_gates::e2e_pending(&specs).len() } else { 0 };
     if total == 0 {
         problems.push("ROADMAP.md has no feature line (`- [slug] status=...`)".into());
-    } else if nothing_left_to_do(done, total, opts, Some(&state), tiebreak) {
+    } else if nothing_left_to_do(done, total, opts, Some(&state), tiebreak, pending_e2e) {
         problems.push(format!("all {total} features are already verified/blocked: nothing to do"));
     } else {
-        let note = if done == total { " (answering the loop's question: the answer may reopen a quarantined feature)" } else { "" };
-        println!("[check] ROADMAP: {total} features, {done} closed, {} to do{note}", total - done);
+        let note = if done == total && pending_e2e > 0 {
+            format!(" (final E2E phase: {pending_e2e} verified feature(s) still without e2e=ok|failed|not-covered)")
+        } else if done == total {
+            " (answering the loop's question: the answer may reopen a quarantined feature)".to_string()
+        } else {
+            String::new()
+        };
+        println!("[check] ROADMAP: {total} features, {done} closed, {} to do{note}", if done == total && pending_e2e > 0 { pending_e2e as i64 } else { total - done });
     }
     (problems, vec![])
 }
@@ -830,6 +838,25 @@ mod tests {
         opts.claude = "cmd".into();
         let (problems, _) = preflight(&ctx, &r, &opts);
         assert!(problems.iter().any(|p| p.starts_with("missing .specs/project/ROADMAP.md")), "{problems:?}");
+    }
+
+    #[test]
+    fn pending_e2e_is_work_left_for_the_preflight() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().display().to_string();
+        std::fs::create_dir_all(dir.path().join(".specs/project")).unwrap();
+        let roadmap = dir.path().join(".specs/project/ROADMAP.md");
+        std::fs::write(
+            &roadmap,
+            "## Stage 1\n- [a] status=verified paths=src/a e2e=ok\n- [b] status=verified paths=src/b e2e=unverified\n- [c] status=verified paths=src/c\n",
+        )
+        .unwrap();
+        let mut opts = LoopOpts::new(&root);
+        assert_eq!(roadmap_problems(&root, &[], &opts, false).0, vec!["all 3 features are already verified/blocked: nothing to do"]);
+        opts.e2e = true;
+        assert!(roadmap_problems(&root, &[], &opts, false).0.is_empty()); // b and c still need their E2E result: "Try again" is allowed
+        std::fs::write(&roadmap, "## Stage 1\n- [a] status=verified paths=src/a e2e=pass\n- [b] status=verified paths=src/b e2e=not-covered\n").unwrap();
+        assert_eq!(roadmap_problems(&root, &[], &opts, false).0.len(), 1); // nothing pending any more
     }
 
     #[test]

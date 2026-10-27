@@ -148,3 +148,16 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/api/app/settings/mcp-servers` | yes | yes |
 
 The response shapes are the ones the panel front end in `app/frontend/` reads; they are pinned by `tools/api_diff.py`, which compares every route with the reference implementation.
+
+## Additive run fields (cost forecast and E2E progress)
+
+The engine writes these keys into the run's `meta.json` after every turn. They are additive: nothing existing changes, a client that ignores them keeps working. Where a route returns the run meta, they come with it; the panel UI for them is not built yet.
+
+| Key | Shape | Meaning |
+|---|---|---|
+| `cost_forecast` | `{spent, per_turn, remaining_turns, estimated_remaining, estimated_total, cap, exceeds_cap}` (US$, rounded to cents) | Estimate of what the run still costs, from the average turn and the open features plus the verified features still to check in the final E2E phase. Absent before the first turn. |
+| `cost_cap_ladder` | `{saved, rungs: [number], suggested: number or null}` | `saved` is the cap in force (the value the app stored in `max_cost_usd`, or the `--max-cost` default). `rungs` are the limits above it (x1.25, x1.5, x2, x3, rounded up to 5). `suggested` is the first rung that covers `cost_forecast.estimated_total` with a 20 % margin. Raising the limit in one step = write `suggested` to `max_cost_usd`. |
+| `e2e_progress` | `{checked, total, pending}` | Only with `--e2e`: verified features with a final E2E result, verified features, and how many still lack one. "E2E 3 of 8 done, 5 left". |
+| `cost_forecast_warned_cap` | number | The cap for which the "forecast passes the cap" notice was already sent (one per cap). |
+
+`e2e=` in the ROADMAP now has four canonical words: `ok`, `failed`, `not-covered`, `pending`. The verifier's `PASS`/`FAIL`/`UNVERIFIED` (and `pass`, `fail`, `unverified`) are accepted and rewritten to `ok`/`failed`/`pending` by the engine.
