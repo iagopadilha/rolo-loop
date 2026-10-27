@@ -49,8 +49,8 @@ use crate::turn_gates::*;
 use crate::worktree_state::{acquire_lock, count_new_commits, fingerprint, heads_of, release_lock, rewind, roadmap_score, settle_dirty_worktrees, LeftoverOpts};
 use crate::worktrees::{ensure_worktrees, Ctx, WtOpts};
 use crate::{
-    claude_binaries, cli_output, cost_budget, decisions, delivery, egress_proxy, graph_view, loop_summary, monitor_proc, notify, process_registry, project_repos,
-    result_vocabulary, usage_windows,
+    claude_binaries, cli_output, cost_budget, decisions, delivery, e2e_evidence, egress_proxy, graph_view, loop_summary, monitor_proc, notify, process_registry,
+    project_repos, result_vocabulary, usage_windows,
 };
 use cfg::env::{app_env_value, load_all};
 use cfg::Env;
@@ -1184,6 +1184,11 @@ impl Runner {
             let status = text(state.get("status"));
             let reason = if truthy(state.get("reason")) { text(state.get("reason")) } else { text(state.get("next")) };
             if status == "done" && opts.e2e {
+                // a blocked call or a missing credential is its own stop, looked at BEFORE any label (never silently "covered")
+                if let Some(stop) = e2e_evidence::awaiting_stop(work, &specs) {
+                    e2e_evidence::write_stop(work, &stop);
+                    return self.finish(work, meta, "awaiting_user", &stop.reason, opts);
+                }
                 let pending = e2e_unmarked(&specs);
                 if !pending.is_empty() {
                     return self.finish(
@@ -1193,6 +1198,10 @@ impl Runner {
                         &format!("E2E phase ended without recording the result in the ROADMAP (e2e=ok|failed|not-covered): {}", pending.join("; ")),
                         opts,
                     );
+                }
+                let unbacked = e2e_evidence::evidence_problems(work, &specs);
+                if !unbacked.is_empty() {
+                    return self.finish(work, meta, "error", &e2e_evidence::evidence_stop_message(&unbacked), opts);
                 }
             }
             if status == "awaiting_user" && try_auto_answer(work, turn, &auto_opts(opts), meta, &mut auto_state) {

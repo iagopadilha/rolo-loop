@@ -181,3 +181,15 @@ Notices (message, e-mail, `NOTICE.txt`) name the features and the stage, use one
 ## Payload notes
 
 - `POST /p/{project_id}/api/planning/import`: the body may carry `on_existing` (`"merge"` or `"replace"`). When the feature folder `.specs/features/<slug>` already exists without an import record and `on_existing` is missing, the answer is `409` with `code: "feature_folder_exists"` and `choices: ["merge", "replace"]`. `merge` keeps the files already in the folder and adds the missing ones; `replace` swaps the folder for the imported copy. Any other value is a `400`.
+
+## Validation evidence (`GET state`)
+
+Additive fields from feature `validation-evidence-and-incentives`. Nothing carries a credential value; credentials appear by name only.
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `validations` | `[{feature, layer, what, evidence, status}]` | What each validation checks, per verified feature and layer (`api`, `ui`, or `run`). `evidence` is the list of artifact paths. `status` is `ok`, `failed`, `pending`, `unproven` (ok without evidence), `not-covered` (accepted), `rejected` (not-covered without proof of no surface), `blocked` (a call was refused) or `skipped-by-user`. |
+| `manual_checks` | `[{feature, what, reason, source}]` | What stays with the user and why. `source` is `by_design`, `not_covered`, `skipped` or `checkpoint`; `feature` is `null` for by-design items. |
+| `loop.credential_request` | `{name, names, feature, who, if_declined, options}` or `null` | Present while the loop waits on a credential decision. `options` always includes `continue without this layer`. |
+
+ROADMAP feature fields read by the gate: `evidence=a,b`, `no-surface=why_words`, `blocked-call=call`, `needs-credential=NAME`, `credential-owner=who`. The same facts may be written as `key: value` lines in `.specs/features/<slug>/E2E.md` (`evidence:`, `no-surface:`, `blocked-call:`, `credential:`, `credential-owner:`, `if-declined:`). With `--e2e`, `e2e=ok` without existing evidence and `e2e=not-covered` without a reason and proof of no surface end the run with `error` and a message naming what is missing; a blocked call or a missing credential ends it with `awaiting_user`. `.specs/project/loop/json/EVIDENCE.json` may override `surface_markers` and `no_surface_kinds`.

@@ -15,6 +15,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Added
 
+- E2E gate measures evidence, not labels (G6, G9, C4, VA1, VA4, V1-V4, Z1): `e2e=ok` needs an existing result artifact, `e2e=not-covered` needs a stated reason plus proof the feature has no surface, a refused call or a missing credential stops with `awaiting_user` (credential NAME, who gives it, what if declined, option "continue without this layer"). `GET state` gains `validations`, `manual_checks` and `loop.credential_request` (docs/API.md).
 - First version of the Rust rebuild.
 
 ### Fixed

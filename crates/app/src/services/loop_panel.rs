@@ -7,7 +7,7 @@ use crate::domain::errors::{AppError, Kind};
 use crate::domain::project::ProjectContext;
 use crate::repositories::loop_read_formatting::{now_iso, number_value, to_number, to_text_list};
 use crate::repositories::specs_file::compute_bytes_version;
-use engine_state::{graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
+use engine_state::{e2e_evidence, graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
 use pycompat::{last_segment, nt_normpath, partition, Re};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
@@ -279,6 +279,8 @@ impl LoopPanelService<'_> {
             "meta": meta_block,
             "limits": self.build_limits(&work_dir, &meta, running, &numbers), "stages": stages, "features": features, "counts": counts,
             "graph": graph, "agents": agents, "validate": validate,
+            "validations": e2e_evidence::validations(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
+            "manual_checks": e2e_evidence::manual_checks(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
             "decisions_summary": self.app.decisions().open_counts(context),
             "recent_actions": self.list_recent_actions(&work_dir),
             "roadmap_approval": files.read_roadmap_approval(&work_dir, Some(context.repo_path())),
@@ -323,6 +325,7 @@ impl LoopPanelService<'_> {
             "reason": if running { Value::Null } else { or_null(summary.get("reason")) },
             "next": if running { Value::Null } else { or_null(loop_json.get("next")) },
             "options": if running { vec![] } else { texts("options") }, "to_check": texts("to_check"),
+            "credential_request": if running { Value::Null } else { or_null(loop_json.get("credential_request")) },
             "at": loop_json.get("at").cloned().unwrap_or(Value::Null),
             "pause_requested": self.app.loop_files.is_pause_requested(work_dir),
         })
