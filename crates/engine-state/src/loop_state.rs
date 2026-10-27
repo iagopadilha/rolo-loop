@@ -50,9 +50,9 @@ fn back(status: &str) -> &'static [&'static str] {
 }
 
 static REPO_PATH_PREFIX: LazyLock<Re> = LazyLock::new(|| Re::new(r"^([a-z0-9._-]+):(?![/\\])(.+)\z"));
-static FEATURE_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^- \[([^\]]+)\]\s*(.*)\z"));
-static TITLE_FIELD: LazyLock<Re> = LazyLock::new(|| Re::new(r#"\btitle="([^"]*)""#));
-static STAGE_LINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^#{1,6}\s*Stage\s+(\S+)"));
+pub static FEATURE_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^- \[([^\]]+)\]\s*(.*)\z"));
+pub static TITLE_FIELD: LazyLock<Re> = LazyLock::new(|| Re::new(r#"\btitle="([^"]*)""#));
+pub static STAGE_LINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^#{1,6}\s*Stage\s+(\S+)"));
 static FOLDER_INVALID: LazyLock<Re> = LazyLock::new(|| Re::new(r#"[<>:"/\\|?*\x00-\x1f]"#));
 static KEY_VALUE: LazyLock<Re> = LazyLock::new(|| Re::new(r"([\w-]+)=(\S+)"));
 
