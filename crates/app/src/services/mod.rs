@@ -26,6 +26,7 @@ pub mod claude_accounts;
 pub mod claude_call_log;
 pub mod claude_jobs;
 pub mod code_inventory;
+pub mod action;
 pub mod agent_history;
 pub mod app_settings_service;
 pub mod context_block;
@@ -41,6 +42,8 @@ pub mod folder_picker;
 pub mod guard_events;
 pub mod loop_control;
 pub mod loop_panel;
+pub mod loop_worktree;
+pub mod loop_worktree_removal;
 pub mod loop_parsers;
 pub mod map_job;
 pub mod mcp_servers;
@@ -132,6 +135,7 @@ pub struct App {
     pub pipeline_cache: Mutex<std::collections::HashMap<String, (String, Value)>>,
     pub duration_cache: Mutex<std::collections::HashMap<std::path::PathBuf, (f64, Option<f64>)>>,
     pub chat_send_lock: Mutex<()>,
+    pub action_locks: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -197,6 +201,7 @@ impl App {
             pipeline_cache: Mutex::new(Default::default()),
             duration_cache: Mutex::new(Default::default()),
             chat_send_lock: Mutex::new(()),
+            action_locks: Mutex::new(Default::default()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),
