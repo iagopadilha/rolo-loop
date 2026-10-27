@@ -148,3 +148,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/api/app/settings/mcp-servers` | yes | yes |
 
 The response shapes are the ones the panel front end in `app/frontend/` reads; they are pinned by `tools/api_diff.py`, which compares every route with the reference implementation.
+
+## Payload notes
+
+- `POST /p/{project_id}/api/planning/import`: the body may carry `on_existing` (`"merge"` or `"replace"`). When the feature folder `.specs/features/<slug>` already exists without an import record and `on_existing` is missing, the answer is `409` with `code: "feature_folder_exists"` and `choices: ["merge", "replace"]`. `merge` keeps the files already in the folder and adds the missing ones; `replace` swaps the folder for the imported copy. Any other value is a `400`.

@@ -635,8 +635,9 @@ impl Runner {
             let turn = i64_of(meta.get("turns"));
             opts.last_claude_used = if truthy(meta.get("claude")) { Some((text(meta.get("claude")), text(meta.get("claude_account")))) } else { None }; // a resumed run compares with the last turn
             let cost = f64_of(meta.get("cost_usd"));
-            if loop_state::load_snapshot(&work, turn.max(0) as u64).is_none() {
-                // baseline: state before this run's first turn (return point for --rewind)
+            let baseline_number = turn.max(0) as u64;
+            if loop_state::load_snapshot(&work, baseline_number).is_none() || (turn == 0 && loop_state::baseline_is_stale(&work, baseline_number)) {
+                // baseline: state before this run's first turn (return point for --rewind), built from the roadmap approved for THIS run
                 let heads = heads_map(&work, &meta);
                 loop_state::snapshot(&work, turn.max(0) as u64, &git(&work, &["rev-parse", "HEAD"]).1, heads.as_ref());
             }
@@ -693,14 +694,7 @@ impl Runner {
             let leftover = LeftoverOpts { leftovers: opts.leftovers.clone(), primary_name: opts.primary_name.clone() };
             if let Some((dirty_name, rows)) = settle_dirty_worktrees(work, meta, turn, &leftover).into_iter().next() {
                 let where_ = if dirty_name.is_empty() { String::new() } else { format!("in repo {dirty_name} ") };
-                let listed = rows.iter().take(5).map(|r| r.to_string()).collect::<Vec<_>>().join("; ");
-                return self.finish(
-                    work,
-                    meta,
-                    "error",
-                    &format!("dirty tree outside .specs/ {where_}before turn {turn} (no automatic reset; these files are outside the paths of the features in progress): {listed}. In the panel use \"Commit leftovers and try again\" or \"Discard leftovers and try again\"."),
-                    opts,
-                );
+                return self.finish(work, meta, "error", &crate::worktree_state::dirty_stop_message(&where_, turn, &rows), opts);
             }
             opts.leftovers = String::new(); // the recovery choice applies to the first turn of this run only
             set(meta, "decisions_mark", json!(decisions::line_count(work)));
@@ -997,6 +991,13 @@ impl Runner {
             let head_now = git(work, &["rev-parse", "HEAD"]).1;
             let new_commits = count_new_commits(prev.as_ref(), work, meta, &head_now);
             let prev_text = prev.as_ref().map(|p| read(&Path::new(p.get("dir").and_then(Value::as_str).unwrap_or("")).join("ROADMAP.md"))).unwrap_or_default();
+            // a checkpoint commit that already holds a feature's work stands in for that feature's own commit
+            let credited = if prev.is_some() {
+                crate::worktree_state::checkpoint_credit(meta, &prev_text, &read(&Path::new(&specs).join("ROADMAP.md")), new_commits, &opts.primary_name)
+            } else {
+                vec![]
+            };
+            let new_commits = new_commits + credited.len() as i64;
             let violations = loop_state::validate(
                 &prev_text,
                 &read(&Path::new(&specs).join("ROADMAP.md")),
@@ -1009,6 +1010,9 @@ impl Runner {
             let heads = heads_map(work, meta);
             loop_state::snapshot(work, turn as u64, &head_now, heads.as_ref());
             graph_view::write(work); // .specs/project/loop/GRAPH.md always current
+            if violations.is_empty() && !credited.is_empty() {
+                crate::worktree_state::mark_checkpoints_credited(meta, &credited);
+            }
             if !violations.is_empty() {
                 return self.finish(
                     work,

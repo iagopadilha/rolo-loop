@@ -218,9 +218,14 @@ pub fn row_path_text(row: &str) -> String {
 
 /// `(inside, outside)`: the dirty rows that fall under the `paths=` of an in-flight feature, and the rest.
 pub fn feature_scope_rows(rows: &[StatusRow], repo_name: &str, features: &Features, primary_name: &str) -> (Vec<StatusRow>, Vec<StatusRow>) {
+    feature_scope_rows_with(rows, repo_name, features, primary_name, &[])
+}
+
+/// Same as [`feature_scope_rows`], and the paths of the features in `also` (slugs just verified, whose work is still loose) count as inside.
+pub fn feature_scope_rows_with(rows: &[StatusRow], repo_name: &str, features: &Features, primary_name: &str, also: &[String]) -> (Vec<StatusRow>, Vec<StatusRow>) {
     let mut scopes: Vec<String> = Vec::new();
-    for (_, feature) in features.iter() {
-        if !IN_FLIGHT_STATUSES.contains(&feature.status()) {
+    for (slug, feature) in features.iter() {
+        if !IN_FLIGHT_STATUSES.contains(&feature.status()) && !also.contains(slug) {
             continue;
         }
         for (repo, path) in feature_repo_paths(feature, primary_name) {
@@ -232,7 +237,7 @@ pub fn feature_scope_rows(rows: &[StatusRow], repo_name: &str, features: &Featur
     let (mut inside, mut outside) = (Vec::new(), Vec::new());
     for row in rows {
         let path = row.path.trim_end_matches('/').to_string();
-        let covered = scopes.iter().any(|s| !s.is_empty() && (path == *s || path.starts_with(&format!("{s}/")) || s.starts_with(&format!("{path}/"))));
+        let covered = scopes.iter().any(|s| path_in_scope(&path, s));
         if covered {
             inside.push(row.clone())
         } else {
@@ -240,6 +245,10 @@ pub fn feature_scope_rows(rows: &[StatusRow], repo_name: &str, features: &Featur
         }
     }
     (inside, outside)
+}
+
+fn path_in_scope(path: &str, scope: &str) -> bool {
+    !scope.is_empty() && (path == scope || path.starts_with(&format!("{scope}/")) || scope.starts_with(&format!("{path}/")))
 }
 
 fn tail(text: &str, n: usize) -> String {
@@ -318,6 +327,16 @@ pub struct LeftoverOpts {
 /// turn that sit under the paths of an in-flight feature are committed as a checkpoint; anything else stays and stops the loop.
 pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &LeftoverOpts) -> Vec<(String, Vec<StatusRow>)> {
     let features = parse_roadmap(&read(&roadmap_path(work))).0;
+    let verified_now: Vec<String> = features.iter().filter(|(_, f)| f.status() == "verified").map(|(s, _)| s.clone()).collect();
+    // A feature seen as verified for the first time: the work it left loose is committed once as a checkpoint instead of stopping the loop.
+    // A meta without the list (loop started before this rule) treats the verified features as settled, so old paths never swallow user files.
+    let fresh_verified: Vec<String> = match meta.get("verified_settled") {
+        Some(_) => {
+            let settled = string_set(meta.get("verified_settled"));
+            verified_now.iter().filter(|s| !settled.contains(s)).cloned().collect()
+        }
+        None => vec![],
+    };
     let mut still_dirty = Vec::new();
     for (name, rows) in dirty_worktrees(work, meta) {
         let path = loop_worktrees(work, meta).into_iter().find(|(n, _)| *n == name).map(|(_, p)| p).unwrap_or_else(|| work.to_string());
@@ -327,7 +346,8 @@ pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &Le
             println!("[loop] --leftovers discard: {} leftover file(s) discarded{in_repo}", rows.len());
             continue;
         }
-        let (inside, mut outside) = if opts.leftovers == "commit" { (rows.clone(), vec![]) } else { feature_scope_rows(&rows, &name, &features, &opts.primary_name) };
+        let (inside, mut outside) =
+            if opts.leftovers == "commit" { (rows.clone(), vec![]) } else { feature_scope_rows_with(&rows, &name, &features, &opts.primary_name, &fresh_verified) };
         if !inside.is_empty() {
             let (saved, problem) = commit_leftovers(&path, &inside, &format!("chore(loop): checkpoint of work left uncommitted by turn {}", turn - 1));
             if saved {
@@ -340,7 +360,8 @@ pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &Le
                 if let Some(map) = meta.as_object_mut() {
                     let list = map.entry("checkpoints").or_insert_with(|| json!([]));
                     if let Some(a) = list.as_array_mut() {
-                        a.push(json!({"turn": turn - 1, "files": inside.len(), "repo": name}));
+                        let paths: Vec<&str> = inside.iter().map(|r| r.path.as_str()).collect();
+                        a.push(json!({"turn": turn - 1, "files": inside.len(), "repo": name, "paths": paths, "credited": false}));
                     }
                 }
             } else {
@@ -352,7 +373,62 @@ pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &Le
             still_dirty.push((name, outside));
         }
     }
+    if let Some(map) = meta.as_object_mut() {
+        map.insert("verified_settled".into(), json!(verified_now));
+    }
     still_dirty
+}
+
+/// H6. A checkpoint commit may already hold the work of a feature that is verified only on a later turn: the next turns then find "0 new
+/// commits". Returns the indexes (in `meta.checkpoints`) of the uncredited checkpoints that cover the paths of the features that became
+/// verified without a commit of their own: each stands in for one commit. A checkpoint that holds none of the feature's paths credits nothing.
+pub fn checkpoint_credit(meta: &Value, prev_text: &str, new_text: &str, new_commits: i64, primary_name: &str) -> Vec<usize> {
+    let old = if prev_text.is_empty() { Features::default() } else { parse_roadmap(prev_text).0 };
+    let new = parse_roadmap(new_text).0;
+    let newly: Vec<_> = new.iter().filter(|(slug, f)| f.status() == "verified" && old.get(slug).map(|o| o.status()) != Some("verified")).collect();
+    let shortfall = (newly.len() as i64 - new_commits).max(0) as usize;
+    let Some(checkpoints) = meta.get("checkpoints").and_then(Value::as_array) else { return vec![] };
+    let mut used: Vec<usize> = Vec::new();
+    for (_, feature) in newly.iter().take(shortfall) {
+        let scopes: Vec<(String, String)> = feature_repo_paths(feature, primary_name).into_iter().map(|(r, p)| (r, p.trim_matches('/').replace('\\', "/"))).collect();
+        let found = checkpoints.iter().enumerate().find(|(index, entry)| {
+            if used.contains(index) || entry.get("credited").and_then(Value::as_bool) == Some(true) {
+                return false;
+            }
+            let repo = entry.get("repo").and_then(Value::as_str).unwrap_or("");
+            string_set(entry.get("paths")).iter().any(|file| {
+                let file = file.trim_end_matches('/');
+                scopes.iter().any(|(r, scope)| (repo.is_empty() || r.is_empty() || r == repo) && path_in_scope(file, scope))
+            })
+        });
+        if let Some((index, _)) = found {
+            used.push(index);
+        }
+    }
+    used
+}
+
+/// Marks the checkpoints returned by [`checkpoint_credit`] as spent, so one checkpoint is never the commit of two features.
+pub fn mark_checkpoints_credited(meta: &mut Value, indexes: &[usize]) {
+    if let Some(list) = meta.get_mut("checkpoints").and_then(Value::as_array_mut) {
+        for index in indexes {
+            if let Some(entry) = list.get_mut(*index).and_then(Value::as_object_mut) {
+                entry.insert("credited".into(), json!(true));
+            }
+        }
+    }
+}
+
+/// Text of the loop stop for a dirty tree: the exact files (up to 12), that nothing was reset, and the one safe path.
+pub fn dirty_stop_message(where_: &str, turn: i64, rows: &[StatusRow]) -> String {
+    const SHOWN: usize = 12;
+    let mut listed = rows.iter().take(SHOWN).map(|r| r.to_string()).collect::<Vec<_>>().join("; ");
+    if rows.len() > SHOWN {
+        listed.push_str(&format!("; and {} more", rows.len() - SHOWN));
+    }
+    format!(
+        "dirty tree outside .specs/ {where_}before turn {turn} (no automatic reset; these files are outside the paths of the features in progress): {listed}. In the panel use \"Commit leftovers and try again\" (keeps the work on the loop branch) or \"Discard leftovers and try again\"."
+    )
 }
 
 /// Time travel: restores the state (ROADMAP/STATE/LOOP/ANSWERS/RULES) and the loop branch HEAD to right after turn N.
@@ -501,6 +577,71 @@ mod tests {
         let (inside, outside) = feature_scope_rows(&[row("src/api/x.rs"), row("web/y.js"), row("src/")], "", &features, "");
         assert_eq!((inside.len(), outside.len()), (2, 1));
         assert_eq!(outside[0].path, "web/y.js");
+    }
+
+    #[test]
+    fn a_just_verified_feature_counts_as_inside_the_scope() {
+        let features = parse_roadmap("## Stage 1\n- [a] status=verified paths=src/api\n- [b] status=verified paths=web\n").0;
+        let row = |p: &str| StatusRow { status: "??".into(), path: p.into(), origin: String::new() };
+        let rows = [row("src/api/x.rs"), row("web/y.js")];
+        let (inside, outside) = feature_scope_rows_with(&rows, "", &features, "", &["a".to_string()]);
+        assert_eq!((inside.len(), outside.len()), (1, 1), "only the feature named in `also` widens the scope");
+        assert_eq!(outside[0].path, "web/y.js");
+        assert_eq!(feature_scope_rows(&rows, "", &features, "").0.len(), 0, "verified features are not in flight by themselves");
+    }
+
+    #[test]
+    fn a_checkpoint_holding_the_feature_paths_is_its_commit_and_only_once() {
+        let before = "## Stage 1\n- [a] status=building paths=src/api\n- [b] status=building paths=web\n";
+        let after = "## Stage 1\n- [a] status=verified paths=src/api\n- [b] status=building paths=web\n";
+        let meta = json!({"checkpoints": [{"turn": 2, "files": 1, "repo": "", "paths": ["src/api/x.rs"], "credited": false}]});
+        assert_eq!(checkpoint_credit(&meta, before, after, 0, ""), vec![0]);
+        assert!(checkpoint_credit(&meta, before, after, 1, "").is_empty(), "a real commit leaves nothing to credit");
+        let mut spent = meta.clone();
+        mark_checkpoints_credited(&mut spent, &[0]);
+        assert!(checkpoint_credit(&spent, before, after, 0, "").is_empty(), "one checkpoint is not the commit of two verifications");
+    }
+
+    #[test]
+    fn a_checkpoint_that_does_not_hold_the_feature_paths_still_blocks() {
+        let before = "## Stage 1\n- [a] status=building paths=src/api\n";
+        let after = "## Stage 1\n- [a] status=verified paths=src/api\n";
+        let unrelated = json!({"checkpoints": [{"turn": 2, "files": 1, "repo": "", "paths": ["docs/notes.md"], "credited": false}]});
+        assert!(checkpoint_credit(&unrelated, before, after, 0, "").is_empty());
+        assert!(checkpoint_credit(&json!({}), before, after, 0, "").is_empty());
+        let errors = loop_state::validate(before, after, None, 0, false, None, "");
+        assert!(errors.iter().any(|e| e.contains("became verified but there were 0 new commit(s)")));
+    }
+
+    #[test]
+    fn leftovers_of_a_verified_feature_are_committed_once_and_foreign_files_still_stop() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().display().to_string();
+        for args in [vec!["init", "-q"], vec!["config", "user.email", "t@example.invalid"], vec!["config", "user.name", "t"], vec!["config", "commit.gpgsign", "false"]] {
+            assert_eq!(git(&work, &args).0, 0);
+        }
+        std::fs::create_dir_all(dir.path().join(".specs/project")).unwrap();
+        std::fs::create_dir_all(dir.path().join("src/api")).unwrap();
+        std::fs::write(dir.path().join(".gitignore"), ".specs/\n").unwrap();
+        std::fs::write(dir.path().join("README.md"), "x").unwrap();
+        std::fs::write(dir.path().join(".specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=verified paths=src/api\n").unwrap();
+        git(&work, &["add", "-A"]);
+        assert_eq!(git(&work, &["commit", "-q", "-m", "init"]).0, 0);
+        std::fs::write(dir.path().join("src/api/x.rs"), "fn main() {}").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "mine").unwrap();
+        let mut meta = json!({"verified_settled": []});
+        let still = settle_dirty_worktrees(&work, &mut meta, 3, &LeftoverOpts::default());
+        assert_eq!(still.len(), 1);
+        assert_eq!(still[0].1.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), vec!["notes.txt"], "the user's other file is untouched and reported");
+        assert!(dir.path().join("notes.txt").is_file(), "nothing is reset");
+        assert_eq!(meta["verified_settled"], json!(["a"]), "{meta}");
+        assert!(meta["checkpoints"][0]["paths"][0].as_str().unwrap().starts_with("src/"), "{meta}");
+        let message = dirty_stop_message("", 3, &still[0].1);
+        assert!(message.contains("notes.txt") && message.contains("Commit leftovers and try again"));
+        // second pass: `a` is settled, so a new file under its paths stops the loop like any foreign file
+        std::fs::write(dir.path().join("src/api/y.rs"), "x").unwrap();
+        let again = settle_dirty_worktrees(&work, &mut meta, 4, &LeftoverOpts::default());
+        assert!(again[0].1.iter().any(|r| r.path.contains("src/api")));
     }
 
     #[test]
