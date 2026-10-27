@@ -41,6 +41,7 @@ pub mod map_job;
 pub mod mcp_servers;
 pub mod network;
 pub mod loop_status;
+pub mod pipeline;
 pub mod planning_repos;
 pub mod project_capabilities;
 pub mod project_progress;
@@ -121,6 +122,8 @@ pub struct App {
     /// `MONITOR.json` path -> project id, and project id -> work dir where it was written.
     pub monitors: Mutex<(Vec<(String, String)>, BTreeMap<String, String>)>,
     /// Idle-shutdown monitor, set by `serve` once it exists (tests have none).
+    /// Pipeline body per work dir, keyed by the files it was derived from.
+    pub pipeline_cache: Mutex<std::collections::HashMap<String, (String, Value)>>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -183,6 +186,7 @@ impl App {
             map_queue_lock: Mutex::new(()),
             map_active_folders: Mutex::new(BTreeSet::new()),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
+            pipeline_cache: Mutex::new(Default::default()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),

@@ -23,7 +23,7 @@ fn points_by_status(status: &str) -> i64 {
 
 const TURN_RESULT_LIMIT: usize = 20000;
 const PERMISSION_DENIAL_LIMIT: usize = 300;
-const TURN_STATUS_RUNNING: &str = "running";
+pub const TURN_STATUS_RUNNING: &str = "running";
 const TURN_STATUS_ERROR: &str = "error";
 
 fn is_zero(value: &Value) -> bool {
