@@ -24,7 +24,10 @@ pub mod claude_accounts;
 pub mod claude_call_log;
 pub mod claude_jobs;
 pub mod code_inventory;
+pub mod app_settings_service;
 pub mod context_block;
+pub mod decisions;
+pub mod spec_file;
 pub mod engine_script;
 pub mod folder_picker;
 pub mod guard_events;
@@ -104,6 +107,7 @@ pub struct App {
     pub planning_lock: Mutex<()>,
     pub whiteboard_lock: Mutex<()>,
     pub network_lock: Mutex<()>,
+    pub decisions_lock: Mutex<()>,
     pub test_environment_lock: Mutex<()>,
     /// Subproject maps: the queue lock and the folders whose queue has a watcher thread alive in this process.
     pub map_queue_lock: Mutex<()>,
@@ -168,6 +172,7 @@ impl App {
             planning_lock: Mutex::new(()),
             whiteboard_lock: Mutex::new(()),
             network_lock: Mutex::new(()),
+            decisions_lock: Mutex::new(()),
             test_environment_lock: Mutex::new(()),
             map_queue_lock: Mutex::new(()),
             map_active_folders: Mutex::new(BTreeSet::new()),

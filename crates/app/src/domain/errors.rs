@@ -28,6 +28,8 @@ pub enum Kind {
     FileEditRefused,
     /// The requested file inside `.specs/` does not exist.
     SpecFileNotFound,
+    /// No decision with this id in VALIDATE.md.
+    DecisionNotFound,
     /// Unknown (or invalid) job id in the project.
     JobNotFound,
     /// The operation cannot happen while the loop is running.
