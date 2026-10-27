@@ -942,7 +942,7 @@ fn tamper_text_hits(ctx: &mut Ctx, text: &str, in_body: bool) {
         let op = m.group(2).unwrap_or("").trim().to_string();
         let value = m.group(3).unwrap_or("").trim_matches(|c| c == '"' || c == '\'').to_string();
         if APPEND_NAMES.contains(&name.as_str()) {
-            let own = Re::ci(&format!(r"^(?:\$\{{?(?:env:)?{n}\}}?|%{n}%)", n = name));
+            let own = Re::cached(&format!(r"^(?:\$\{{?(?:env:)?{n}\}}?|%{n}%)", n = name), true);
             if op == "+=" || own.match_start(&value).is_some() {
                 continue;
             }

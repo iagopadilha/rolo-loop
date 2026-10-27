@@ -307,6 +307,21 @@ pub fn push_cmd() -> String {
 }
 
 pub static GIT_GREP_BYPASS_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(&format!(r"\bgit(?:\.exe)?{GIT_OPTIONS}\s+grep\b[^\n]*?\s--(?:no-index|no-exclude-standard)\b")));
+/// Compiles the large git patterns side by side (each takes several milliseconds, and a push command needs all of them). Called only for a command
+/// that mentions git.
+pub fn warm_git(g: &G) {
+    let text = "git push --force --mirror --all main production; git grep --no-index";
+    let protected = Protected::new(g);
+    std::thread::scope(|scope| {
+        scope.spawn(|| PUSH_RE.is_match(text));
+        scope.spawn(|| PUSH_FORCE_RE.is_match(text));
+        scope.spawn(|| GIT_GREP_BYPASS_RE.is_match(text));
+        let (name_re, push_re) = (protected.name_re.clone(), protected.push_protected_re.clone());
+        scope.spawn(move || name_re.is_match(text));
+        scope.spawn(move || push_re.is_match(text));
+    });
+}
+
 pub static PUSH_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(&push_cmd()));
 pub static PUSH_FORCE_RE: LazyLock<Re> =
     LazyLock::new(|| Re::ci(&format!(r"{}[^\n]*?(?:\s--force\b|\s--force-with-lease\b|\s-[A-Za-z]*f[A-Za-z]*(?=\s|\z)|\s\+\S)", push_cmd())));
@@ -314,8 +329,8 @@ pub static PUSH_FORCE_RE: LazyLock<Re> =
 /// The regexes and names that depend on the integration branch (read from the environment per call).
 pub struct Protected {
     pub names: Vec<String>,
-    pub name_re: Re,
-    pub push_protected_re: Re,
+    pub name_re: std::sync::Arc<Re>,
+    pub push_protected_re: std::sync::Arc<Re>,
 }
 
 impl Protected {
@@ -328,8 +343,8 @@ impl Protected {
         let mut sorted = names.clone();
         sorted.sort_by_key(|n| std::cmp::Reverse(n.len()));
         let alt = sorted.iter().map(|n| escape(n)).collect::<Vec<_>>().join("|");
-        let name_re = Re::ci(&format!(r"(?<![\w.-])(?:{alt})(?![\w.-])"));
-        let push_protected_re = Re::ci(&format!(r"{}[^\n]*?(?:(?<![\w.-])(?:{alt})(?![\w.-])|\s--mirror\b|\s--all\b)", push_cmd()));
+        let name_re = Re::cached(&format!(r"(?<![\w.-])(?:{alt})(?![\w.-])"), true);
+        let push_protected_re = Re::cached(&format!(r"{}[^\n]*?(?:(?<![\w.-])(?:{alt})(?![\w.-])|\s--mirror\b|\s--all\b)", push_cmd()), true);
         Protected { names, name_re, push_protected_re }
     }
 

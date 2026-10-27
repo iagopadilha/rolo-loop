@@ -234,8 +234,8 @@ pub fn sql_statement_writes(statement: &str) -> String {
                 continue;
             }
             if word == "insert" || word == "replace" {
-                let call = Re::new(&format!(r"\b{word}\s*\("));
-                let stmt = Re::new(&format!(r"\b{word}\s+(?:into|ignore|low_priority|delayed|high_priority)\b"));
+                let call = Re::cached(&format!(r"\b{word}\s*\("), false);
+                let stmt = Re::cached(&format!(r"\b{word}\s+(?:into|ignore|low_priority|delayed|high_priority)\b"), false);
                 if call.is_match(statement) && !stmt.is_match(statement) {
                     continue;
                 }

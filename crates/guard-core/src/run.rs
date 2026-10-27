@@ -175,6 +175,9 @@ pub fn run(g: &G, profile_arg: &str, stdin_text: &str) -> Outcome {
         }
     }
     let allowed = permissions.allow.clone();
+    if ["Bash", "PowerShell"].contains(&tool_name.as_str()) && input.to_string().to_ascii_lowercase().contains("git") {
+        crate::rules::warm_git(g);
+    }
     let mut check = Check::new(g, permissions);
     let hits_result = check.check_tool(&tool_name, &input, &rules, &mut stderr);
     let mut hits: Hits = match hits_result {

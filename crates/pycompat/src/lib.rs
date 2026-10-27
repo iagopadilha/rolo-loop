@@ -4,18 +4,54 @@
 //! `fnmatch`, `urllib.parse.unquote` and `urlsplit`.
 
 pub mod json;
+pub mod prefilter;
 pub mod pyregex;
 pub use pyregex::py_regex_error;
 
 use fancy_regex::{Regex as FRegex, RegexBuilder};
 
+/// The matching engine behind a [`Re`]: the plain `regex` engine when the pattern needs nothing fancy (it compiles about three times faster, which
+/// matters for the guard, started once per tool call), else `fancy-regex` (lookaround, back-references).
+enum Engine {
+    Plain(regex::Regex),
+    Fancy(FRegex),
+}
+
+impl Engine {
+    fn compile(pattern: &str, ci: bool) -> Result<Engine, String> {
+        let source = if ci { format!("(?i){pattern}") } else { pattern.to_string() };
+        if let Ok(plain) = regex::Regex::new(&source) {
+            return Ok(Engine::Plain(plain));
+        }
+        let mut builder = RegexBuilder::new(&source);
+        builder.backtrack_limit(2_000_000);
+        builder.build().map(Engine::Fancy).map_err(|e| e.to_string())
+    }
+    fn is_match(&self, text: &str) -> bool {
+        match self {
+            Engine::Plain(re) => re.is_match(text),
+            Engine::Fancy(re) => re.is_match(text).unwrap_or(false),
+        }
+    }
+    fn captures_from_pos(&self, text: &str, from: usize) -> Option<M> {
+        match self {
+            Engine::Plain(re) => re.captures_at(text, from).map(|caps| {
+                let whole = caps.get(0).expect("group 0 always exists");
+                M { start: whole.start(), end: whole.end(), groups: (0..caps.len()).map(|i| caps.get(i).map(|g| g.as_str().to_string())).collect() }
+            }),
+            Engine::Fancy(re) => re.captures_from_pos(text, from).ok().flatten().map(|caps| to_m(&caps)),
+        }
+    }
+}
+
 /// A compiled pattern with Python-like helpers. Matching errors (backtrack limit) count as "no match".
 pub struct Re {
-    re: FRegex,
+    re: std::sync::OnceLock<Engine>,
+    prefilter: Option<prefilter::Prefilter>,
     src: String,
     ci: bool,
-    start: std::sync::OnceLock<FRegex>,
-    full: std::sync::OnceLock<FRegex>,
+    start: std::sync::OnceLock<Engine>,
+    full: std::sync::OnceLock<Engine>,
 }
 
 /// One match: byte offsets and the captured groups as owned text.
@@ -43,7 +79,16 @@ impl std::ops::Index<usize> for M {
     }
 }
 
+static CACHE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<(String, bool), std::sync::Arc<Re>>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
 impl Re {
+    /// A pattern built at run time (it depends on data), compiled once per process: the same text gives the same shared pattern. Compiling costs
+    /// milliseconds, and a hook that starts once per tool call cannot afford to do it again for every path it looks at.
+    pub fn cached(pattern: &str, ci: bool) -> std::sync::Arc<Re> {
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        cache.entry((pattern.to_string(), ci)).or_insert_with(|| std::sync::Arc::new(Re::build(pattern, ci))).clone()
+    }
     /// Case-sensitive pattern.
     pub fn new(pattern: &str) -> Re {
         Re::build(pattern, false)
@@ -52,17 +97,37 @@ impl Re {
     pub fn ci(pattern: &str) -> Re {
         Re::build(pattern, true)
     }
-    fn compile(pattern: &str, ci: bool) -> Result<FRegex, fancy_regex::Error> {
-        let source = if ci { format!("(?i){pattern}") } else { pattern.to_string() };
-        let mut builder = RegexBuilder::new(&source);
-        builder.backtrack_limit(2_000_000);
-        builder.build()
+    fn compile(pattern: &str, ci: bool) -> Result<Engine, String> {
+        Engine::compile(pattern, ci)
     }
     /// A pattern written in this codebase (static): compiled by the Rust engine's own grammar, no Python-grammar check.
     fn build(pattern: &str, ci: bool) -> Re {
-        match Re::compile(pattern, ci) {
-            Ok(re) => Re { re, src: pattern.to_string(), ci, start: std::sync::OnceLock::new(), full: std::sync::OnceLock::new() },
-            Err(error) => panic!("invalid pattern {pattern:?}: {error}"),
+        let prefilter = prefilter::Prefilter::new(pattern, ci);
+        if prefilter.is_none() {
+            // nothing to skip compiling for: compile now, so an invalid static pattern fails where it is written
+            return match Re::compile(pattern, ci) {
+                Ok(engine) => Re::from_parts(pattern, ci, None, Some(engine)),
+                Err(error) => panic!("invalid pattern {pattern:?}: {error}"),
+            };
+        }
+        Re::from_parts(pattern, ci, prefilter, None)
+    }
+    fn from_parts(pattern: &str, ci: bool, prefilter: Option<prefilter::Prefilter>, engine: Option<Engine>) -> Re {
+        let re = std::sync::OnceLock::new();
+        if let Some(engine) = engine {
+            let _ = re.set(engine);
+        }
+        Re { re, prefilter, src: pattern.to_string(), ci, start: std::sync::OnceLock::new(), full: std::sync::OnceLock::new() }
+    }
+    /// The compiled engine, built on first use.
+    fn engine(&self) -> &Engine {
+        self.re.get_or_init(|| Re::compile(&self.src, self.ci).unwrap_or_else(|error| panic!("invalid pattern {:?}: {error}", self.src)))
+    }
+    /// False only when the text certainly holds no match from `from` on.
+    fn may_match(&self, text: &str, from: usize) -> bool {
+        match &self.prefilter {
+            Some(filter) => text.get(from..).is_none_or(|rest| filter.possible(rest)),
+            None => true,
         }
     }
     /// Fallible compile: a pattern that only looks like a regex (user data) must never crash the guard.
@@ -76,19 +141,21 @@ impl Re {
             return Err(message);
         }
         Re::compile(pattern, ci)
-            .map(|re| Re { re, src: pattern.to_string(), ci, start: std::sync::OnceLock::new(), full: std::sync::OnceLock::new() })
+            .map(|engine| Re::from_parts(pattern, ci, prefilter::Prefilter::new(pattern, ci), Some(engine)))
             .map_err(|_| "invalid pattern".to_string())
     }
     pub fn is_match(&self, text: &str) -> bool {
-        self.re.is_match(text).unwrap_or(false)
+        self.may_match(text, 0) && self.engine().is_match(text)
     }
-    fn twin<'a>(&self, cell: &'a std::sync::OnceLock<FRegex>, tail: &str) -> &'a FRegex {
+    fn twin<'a>(&self, cell: &'a std::sync::OnceLock<Engine>, tail: &str) -> &'a Engine {
         cell.get_or_init(|| Re::compile(&format!(r"\A(?:{}){}", self.src, tail), self.ci).expect("anchored twin compiles"))
     }
     /// Python `re.match`: anchored at the start.
     pub fn match_start(&self, text: &str) -> Option<M> {
-        let caps = self.twin(&self.start, "").captures(text).ok().flatten()?;
-        Some(to_m(&caps))
+        if !self.may_match(text, 0) {
+            return None;
+        }
+        self.twin(&self.start, "").captures_from_pos(text, 0)
     }
     pub fn search(&self, text: &str) -> Option<M> {
         self.find_at(text, 0)
@@ -98,8 +165,10 @@ impl Re {
         self.search(text)
     }
     fn find_at(&self, text: &str, from: usize) -> Option<M> {
-        let caps = self.re.captures_from_pos(text, from).ok().flatten()?;
-        Some(to_m(&caps))
+        if !self.may_match(text, from) {
+            return None;
+        }
+        self.engine().captures_from_pos(text, from)
     }
     /// `finditer`.
     pub fn find_all(&self, text: &str) -> Vec<M> {
@@ -146,7 +215,7 @@ impl Re {
     }
     /// `re.fullmatch`.
     pub fn full_match(&self, text: &str) -> bool {
-        self.twin(&self.full, r"\z").is_match(text).unwrap_or(false)
+        self.may_match(text, 0) && self.twin(&self.full, r"\z").is_match(text)
     }
 }
 

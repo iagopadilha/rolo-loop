@@ -854,6 +854,8 @@ version = "0.3.1"
 dependencies = [
  "fancy-regex",
  "proptest",
+ "regex",
+ "regex-syntax",
  "serde_json",
 ]
 

@@ -208,7 +208,7 @@ pub fn mentions_copied_secret(g: &G, text: &str, cwd: Option<&str>, specs_dir: O
             if let Some(relative) = path.strip_prefix(&format!("{root}/")) {
                 if here == *root || here.starts_with(&format!("{root}/")) {
                     let pattern = format!(r"(?<![\w./-]){}(?![\w-])", crate::pyre::escape(relative));
-                    if Re::new(&pattern).is_match(&flat) {
+                    if Re::cached(&pattern, false).is_match(&flat) {
                         return true;
                     }
                 }

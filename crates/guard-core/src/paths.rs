@@ -194,7 +194,7 @@ pub fn strip_windows_prefixes(g: &G, text: &str) -> String {
     }
     let computer = g.env.get("COMPUTERNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "\0".to_string()).to_lowercase();
     let pattern = format!(r"^//(?:localhost|127\.0\.0\.1|\[?::1\]?|{})/([a-zA-Z])\$(?=/|\n?\z)", crate::pyre::escape(&computer));
-    Re::ci(&pattern).replace_all(&text, |m| format!("{}:", m.group(1).unwrap_or("")))
+    Re::cached(&pattern, true).replace_all(&text, |m| format!("{}:", m.group(1).unwrap_or("")))
 }
 
 /// `/c/Users/x`, `/mnt/c/x`, `/cygdrive/c/x` -> `c:/Users/x` (Windows only).
