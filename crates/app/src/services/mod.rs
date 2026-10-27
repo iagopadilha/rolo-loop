@@ -62,6 +62,7 @@ pub mod planning_repos;
 pub mod project_capabilities;
 pub mod project_progress;
 pub mod readiness;
+pub mod repo_catalog;
 pub mod repo_readiness;
 pub mod repo_registry;
 pub mod roadmap;
@@ -145,6 +146,7 @@ pub struct App {
     pub chat_send_lock: Mutex<()>,
     pub action_locks: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
     pub specs_reset_lock: Mutex<()>,
+    pub catalog_state: Mutex<repo_catalog::CatalogState>,
     pub activity: std::sync::OnceLock<Arc<crate::infrastructure::activity_monitor::ActivityMonitor>>,
     me: Weak<App>,
 }
@@ -212,6 +214,7 @@ impl App {
             chat_send_lock: Mutex::new(()),
             action_locks: Mutex::new(Default::default()),
             specs_reset_lock: Mutex::new(()),
+            catalog_state: Mutex::new(Default::default()),
             activity: std::sync::OnceLock::new(),
             config,
             me: me.clone(),
