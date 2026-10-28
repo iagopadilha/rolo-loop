@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! `harness`: command line of claude-maestro.
+//! `harness`: command line of agent-maestro.
 
 mod access_cmd;
 mod demo_cmd;
@@ -14,7 +14,7 @@ mod state_cmd;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "harness", version, about = "claude-maestro: loop engineering for Claude Code")]
+#[command(name = "harness", version, about = "agent-maestro: loop engineering for Claude Code")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

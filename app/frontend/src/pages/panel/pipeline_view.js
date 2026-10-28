@@ -1,5 +1,6 @@
 /* Pipeline view of the LOOP zone: orchestrator at the left, one lane per dispatched feature grouped by WAVE, the
    fixed 6 steps per lane. Shows the state accumulated up to the selected turn (see pipeline_model.js).
+   FIXED view (see FIXED below): the notes about pan, zoom and dragging that follow apply only when it is turned off.
    Free canvas: background drag = pan, wheel or pinch = zoom at the
    cursor; dragging a node or lane moves the whole feature, the wave header moves every feature of the wave.
    Camera and offsets live in this module (not in the component), so switching tabs keeps them.
@@ -33,6 +34,8 @@ const PENDING_STATE = 'PENDING';
 const TASK_ROW_H = 22, TASK_BLOCK_PAD = 8;
 
 /** Module store: survives tab switches and re-renders. offsets = manual displacement over the automatic layout, by feature id / 'orch'. */
+/** The loop's diagram (waves, stages, features) is FIXED: always fitted and centered, never panned, zoomed or dragged. Clicking a node still selects it. */
+const FIXED = true;
 const view = { camera: { x: 0, y: 0, z: 1 }, offsets: {}, dragging: false, auto: true, viewport: null, content: null, waveMembers: {} };
 let repaint = null, suppressNextClick = false;
 const repaintNow = () => { if (repaint) repaint(); };
@@ -40,7 +43,7 @@ const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 // ---------- camera ----------
 /** Camera moved by the user (pan, zoom, drag): the default fit-and-center view stops following the viewport. */
-function takeControl() { view.auto = false; }
+function takeControl() { if (!FIXED) view.auto = false; }
 /** The camera with the content kept in view (unchanged while the viewport or the content is unknown). */
 function clampCamera(camera) {
   const element = view.viewport;
@@ -70,6 +73,7 @@ function resetLayout() { view.offsets = {}; view.auto = true; if (!fitToViewport
 
 /** Wheel zooms at the cursor (a trackpad pinch too); Shift + wheel pans sideways. */
 function onWheel(event) {
+  if (FIXED) return; // the page scrolls as usual over the fixed diagram
   event.preventDefault();
   const element = view.viewport;
   if (!element) return;
@@ -92,7 +96,7 @@ function dragKeysOf(target) {
   return [target];
 }
 function beginDrag(event) {
-  if (event.button !== 0) return;
+  if (FIXED || event.button !== 0) return;
   const holder = event.target.closest('[data-pl-drag]');
   const keys = dragKeysOf(holder ? holder.getAttribute('data-pl-drag') : null);
   const startX = event.clientX, startY = event.clientY, camera = view.camera, startOffsets = {};
@@ -263,7 +267,7 @@ function Diagram({ graph }) {
   return html`<div class="pl-layer" style=${{ transform: `translate(${view.camera.x}px,${view.camera.y}px) scale(${view.camera.z})` }}>
     <div class="pl-content" style=${{ width: graph.width + 'px', height: graph.height + 'px' }}>
       <${Edges} graph=${graph} />
-      ${graph.waves.map((wave) => html`<div key=${wave.n} class="pl-wave" data-pl-drag=${WAVE_DRAG_PREFIX + wave.n} title="Drag to move the whole wave" style=${{ left: wave.x + 'px', top: wave.y + 'px' }}>
+      ${graph.waves.map((wave) => html`<div key=${wave.n} class="pl-wave" data-pl-drag=${WAVE_DRAG_PREFIX + wave.n} style=${{ left: wave.x + 'px', top: wave.y + 'px' }}>
         <span class="pl-wave-name">WAVE ${wave.n}</span><span style=${{ color: wave.color }}>${wave.label}</span></div>`)}
       ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-lane' + (lane.quarantined ? ' quarantined' : '')} data-pl-drag=${lane.id}
         style=${{ left: lane.x + 'px', top: lane.y + 'px', width: lane.w + 'px', height: lane.h + 'px' }} onClick=${() => openFeatureDialog({ feature: lane.id })}>
@@ -284,6 +288,7 @@ function Diagram({ graph }) {
 }
 
 function Toolbar() {
+  if (FIXED) return null;
   return html`<div class="pl-toolbar" onPointerDown=${stopPropagation}>
     <div class="pl-hints"><kbd>wheel</kbd>zoom<kbd>Shift + wheel</kbd>pan<kbd>drag</kbd>move</div>
     <button type="button" class="pl-tool" title="Zoom out" onClick=${() => zoomFromCenter(1 / ZOOM_BUTTON_FACTOR)}>−</button>

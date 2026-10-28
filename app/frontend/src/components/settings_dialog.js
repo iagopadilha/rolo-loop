@@ -160,7 +160,7 @@ export function SettingsBody() {
 export function openSettingsDialog() {
   // a full page: the brand on the left, "settings" under it, Close on the right (the head of every page)
   const title = html`<span class="page-brand"><span class="logo" aria-hidden="true"><${LogoMark} /></span>
-    <span class="page-brand-text"><span class="page-brand-name">Claude Maestro</span><span class="page-brand-sub mono">settings</span></span></span>`;
+    <span class="page-brand-text"><span class="page-brand-name">Agent Maestro</span><span class="page-brand-sub mono">settings</span></span></span>`;
   return openDialog({ title, width: 4000, cls: 'dlg-settings dlg-page', content: html`<${SettingsBody} />`, actions: [] });
 }
 

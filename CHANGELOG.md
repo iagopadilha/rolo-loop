@@ -6,6 +6,8 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Changed
 
+- The project is now called Agent Maestro (panel, notices subject `[Agent-Maestro]`, docs, repository links). The plugin id `claude-maestro` stays until the plugin is reinstalled under a new id.
+- Panel: the loop diagram (waves, stages, features) is fixed: always fitted and centered, no pan, zoom or dragging; clicking a node still selects it.
 - Panel: a "Validations" button in the bottom bar opens what the loop checks per feature (with proof paths) and what only the user can check, from `state.validations` and `state.manual_checks`.
 - Panel: AI decision cards use plain words (what was unclear, what the AI chose, how to undo it) and each button says what it does ("I agree", "Ask to change it").
 - Panel: the cost cap dialog shows the engine's estimate for the whole run and quick limit buttons from `meta.cost_cap_ladder`; the navbar cost meter tooltip carries the estimate.

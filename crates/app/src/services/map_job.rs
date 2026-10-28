@@ -24,7 +24,7 @@ pub const MAP_CODEBASE_PROMPT: &str = "/orchestrator map";
 pub const MAP_ALLOWED_FOLDERS: [&str; 2] = [".specs", run_hints::MAP_FOLDER];
 pub const MAP_GUARD_IGNORED_PATHS: [&str; 4] = [".git", "node_modules", ".specs/project/loop/internal", ".specs/project/loop/json/MONITOR.json"];
 const MAP_GUARD_IGNORED_TRASH: &str = ".specs/.trash";
-pub const MAP_NOTHING_WRITTEN: &str = "The AI finished but wrote no document in docs/codebase, so nothing was mapped. The usual cause: the /orchestrator skill is not loaded in that claude session (update the plugin: claude plugin update claude-maestro@claude-maestro) and the AI answered as a plain chat.";
+pub const MAP_NOTHING_WRITTEN: &str = "The AI finished but wrote no document in docs/codebase, so nothing was mapped. The usual cause: the /orchestrator skill is not loaded in that claude session (update the plugin: claude plugin update agent-maestro@agent-maestro) and the AI answered as a plain chat.";
 pub const MAP_GUARD_REFUSALS_SHOWN: usize = 3;
 
 /// The failure text when the guard refused actions during a job that then wrote nothing: the real cause, not the skill.

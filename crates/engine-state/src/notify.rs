@@ -168,9 +168,9 @@ fn subject_of(ctx: &Value) -> String {
         parts.push(format!("etapa {stage}"));
     }
     if parts.is_empty() || ev == "test" {
-        format!("[Claude-Maestro] {title}")
+        format!("[Agent-Maestro] {title}")
     } else {
-        format!("[Claude-Maestro] {title}: {}", parts.join(" | "))
+        format!("[Agent-Maestro] {title}: {}", parts.join(" | "))
     }
 }
 
@@ -891,7 +891,7 @@ mod tests {
     fn test_notice_has_the_standard_shape() {
         let ctx = json!({"event": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "features": [["a", "verified"], ["b", "pending"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Claude-Maestro] Teste de notificação");
+        assert_eq!(subject, "[Agent-Maestro] Teste de notificação");
         assert!(body.contains("Detalhes da sessão\n- ID do loop: example\n- Turno: 1\n- Custo atual: US$ 0.00\n- Quando: "));
         assert!(body.contains("Teste\nEste é um aviso de TESTE do loop. Nada precisa ser feito."));
         assert!(!body.contains("Status das features"));
@@ -929,7 +929,7 @@ mod tests {
     #[test]
     fn notice_names_features_stage_and_does_not_repeat_the_title() {
         let (subject, body) = build(&env(), &named_ctx());
-        assert_eq!(subject, "[Claude-Maestro] Execução interrompida com erro: b-ui | etapa 2");
+        assert_eq!(subject, "[Agent-Maestro] Execução interrompida com erro: b-ui | etapa 2");
         assert!(!body.contains("Execução interrompida"), "{body}");
         assert!(
             body.contains("- Etapa: 2")
@@ -975,7 +975,7 @@ mod tests {
         assert_eq!(milestones(after, after), (vec![], vec![]));
         let ctx = json!({"event": "stage_closed", "verified_now": ["a"], "stage_closed": ["1"], "features": [["a", "verified"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Claude-Maestro] Etapa concluída: a");
+        assert_eq!(subject, "[Agent-Maestro] Etapa concluída: a");
         assert!(body.contains("a: verificada (ainda não entregue)") && body.contains("Etapa concluída: 1"));
         assert!(!milestones_enabled(&Env::from_pairs([("LOOP_NOTIFY_MILESTONES", "off")])));
     }
