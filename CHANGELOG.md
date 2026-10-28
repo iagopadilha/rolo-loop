@@ -21,6 +21,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Panel: a generic step-by-step list (`components/stepper.js`) for guided flows; the Finish dialog now shows its steps in order (decisions, push, pull request, deliver) with one action at a time.
 - Panel: the turns sit in a slim bar at the bottom of the loop view, with an always-visible "AI decisions" button that opens the dialog; the mouse wheel zooms every diagram (Shift + wheel pans).
 - Engine: every child process (git, setup, `claude`, notices) starts without a console window, so nothing flashes on screen when an iteration starts.
+- The plugin id is now `agent-maestro` (was `claude-maestro`): plugin manifest, marketplace and agent references. The locator accepts both ids, so an installed `claude-maestro` keeps working. See "Migrating the installed plugin" in `docs/HOW_TO_USE.md`.
 
 ### Added
 

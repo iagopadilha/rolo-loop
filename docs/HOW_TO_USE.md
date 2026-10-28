@@ -10,6 +10,19 @@ agent-maestro turns a goal into a roadmap, and an approved roadmap into an unatt
 4. Run `harness install` once. It writes `~/.loop-harness/config.json` so the orchestrator skill finds the app and the skill folder.
 5. Run `harness doctor`. It lists what is missing: the skill, the guard, `claude`, the kit, the notification channels.
 
+## Migrating the installed plugin
+
+The plugin id changed from `claude-maestro` to `agent-maestro` (the repository and its URL keep the old name). An install made under the old id keeps working: `harness` still finds it. To move to the new id, run in Claude Code:
+
+```
+/plugin uninstall claude-maestro@claude-maestro
+/plugin marketplace remove claude-maestro
+/plugin marketplace add iagopadilha/agent-maestro
+/plugin install agent-maestro@agent-maestro
+```
+
+Then, in a terminal, run `harness install` and `harness doctor`. Agents are now addressed as `agent-maestro:executor-back` and so on.
+
 ## First project
 
 1. Open your repository in Claude Code and ask the orchestrator to plan: "orchestrate this: <goal>". It maps the code (Phase 1), writes `.specs/project/ROADMAP.md` and stops for your approval.
