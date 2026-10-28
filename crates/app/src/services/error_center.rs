@@ -50,6 +50,31 @@ static ANSI_CODES: LazyLock<Re> = LazyLock::new(|| Re::new(r"\x1b\[[0-9;]*[A-Za-
 fn strip_ansi(text: &str) -> String {
     ANSI_CODES.replace_lit(text, "")
 }
+/// Words that make stderr a real problem even when it also names an account.
+static FAILURE_WORDS: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\b(error|failed|failure|exception|denied|panic|traceback|fatal|refused|unauthorized|invalid)\b"));
+static PERCENT: LazyLock<Re> = LazyLock::new(|| Re::new(r"(\d{1,3}(?:\.\d+)?)\s*%"));
+
+/// A5. The status table an account wrapper prints on stderr when it opens a session (each account, its state, the 5-hour and weekly usage,
+/// the reset time, and which one it opened). It is information, not an error. Returns the one-line summary ("account used: NAME, 11% of the
+/// 5-hour window") when the text names the account it opened (`[cc] conta: NAME`) and says nothing that reads as a failure; `None` for any
+/// other stderr, which keeps its own classification.
+pub fn account_wrapper_summary(stderr: &str) -> Option<String> {
+    let text = strip_ansi(stderr);
+    let account = engine_state::claude_binaries::account_from_stderr(&text);
+    if account.is_empty() || FAILURE_WORDS.search(&text).is_some() {
+        return None;
+    }
+    // the usage of the opened account: the first percentage on the table row that names it (the 5-hour window is listed first)
+    let usage = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("[cc]") && line.contains(&account))
+        .find_map(|line| PERCENT.search(line).and_then(|m| m.group(1).map(String::from)));
+    Some(match usage {
+        Some(percent) => format!("account used: {account}, {percent}% of the 5-hour window"),
+        None => format!("account used: {account}"),
+    })
+}
+
 static STOP_TURN: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?:after|on|in) turn (\d+)"));
 
 struct Cause {
@@ -381,6 +406,12 @@ impl ErrorCenterService<'_> {
                 item.detail = detail;
                 item.happened = format!("Turn {number} ended with a failure: the `claude -p` process exited with code {code}.");
                 item
+            } else if let Some(summary) = account_wrapper_summary(&stderr) {
+                // A5: the account wrapper's table on a turn that ended well is a note about the account, not a stderr complaint
+                let mut item = ItemSpec::new(format!("turn-{number}-account"), KIND_TURN, SEVERITY_INFO, format!("Turn {number}: {summary}"));
+                item.detail = stderr;
+                item.happened = format!("Turn {number} ran normally. The account wrapper printed its status table; this is information, not an error ({summary}).");
+                item
             } else if !stderr.is_empty() {
                 let background = BACKGROUND_TASKS.search(&stderr).is_some();
                 let title = if background { format!("Turn {number} ended with its verifier still running") } else { format!("Turn {number} wrote to stderr") };
@@ -505,6 +536,34 @@ impl ErrorCenterService<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_account_wrapper_table_is_information_not_an_error() {
+        let table = "[cc] conta: claude2\n  claude1   ok     5h  80%  7d  40%  reset 14:00\n  claude2   ok     5h  11%  7d  22%  reset 18:30\n[cc] reinicia: 2026-01-02T03:04:05Z\n";
+        assert_eq!(account_wrapper_summary(table).as_deref(), Some("account used: claude2, 11% of the 5-hour window"));
+        assert_eq!(account_wrapper_summary("\u{1b}[90m[cc] conta: main\u{1b}[0m\n").as_deref(), Some("account used: main"));
+        assert_eq!(account_wrapper_summary("[cc] conta: claude2\nError: connection refused\n"), None, "a failure keeps its own classification");
+        assert_eq!(account_wrapper_summary("Background tasks still running"), None);
+        assert_eq!(account_wrapper_summary(""), None);
+    }
+
+    #[test]
+    fn a_turn_that_ended_well_with_the_table_is_listed_as_an_account_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::for_tests(dir.path());
+        let repo = dir.path().join("p");
+        std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
+        let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
+        let w = context.work_dir();
+        let path = app.loop_files.get_turn_path(&w, 1);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, json!({"exit_code": 0, "stderr": "[cc] conta: claude2\n claude2 5h 11%\n"}).to_string()).unwrap();
+        let body = app.error_center().build_errors(&context);
+        assert_eq!(body["items"][0]["id"], "turn-1-account");
+        assert_eq!(body["items"][0]["severity"], "info");
+        assert_eq!(body["items"][0]["title"], "Turn 1: account used: claude2, 11% of the 5-hour window");
+        assert_eq!(body["problems"], 0);
+    }
 
     #[test]
     fn known_and_unknown_reasons_are_explained() {

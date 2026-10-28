@@ -119,6 +119,10 @@ impl AppSettingsService<'_> {
             }
             item.insert("choices".into(), Value::Array(choices));
         }
+        if definition.key == "claude_fallback_binaries" {
+            // A3: the backup commands with the account each one signs in to (from the cached `auth status`, never waiting for it)
+            item.insert("accounts".into(), json!(super::claude_accounts::command_accounts(&self.app.accounts.get_rows(false))));
+        }
         if definition.key == CAVEMAN_KEY {
             let installed = Self::is_caveman_installed(user_settings);
             item.insert("available".into(), json!(installed));

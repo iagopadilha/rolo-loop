@@ -440,7 +440,9 @@ impl Runner {
         let now = describe_claude_used(name, account, is_main);
         println!("[loop] turn {turn} ran on {now}; before it was {before}");
         let same_command = previous.0 == name && unusable.is_none();
-        let only = if same_command { Some(local_notice_channels(&self.env())) } else { None }; // another account of the same command is noise for email/webhook
+        // A2: every account change goes to the same channels as a stop (message, e-mail, webhook), the picker's change of account included: the
+        // user is not at the panel when the account that runs the loop changes, and the notice names the account, the plan, why and the reset time.
+        let only: Option<Vec<String>> = None;
         let mut unusable_subject = String::new();
         let reason;
         if let Some(u) = &unusable {
@@ -462,15 +464,7 @@ impl Runner {
                 limit_suffix(&phrase_of(&command_base_name(&previous.0)))
             );
         }
-        let kind = if unusable.is_some() {
-            "account_unusable"
-        } else if same_command {
-            "picker_switch"
-        } else if is_main {
-            "back_to_main"
-        } else {
-            "usage_limit_switch"
-        };
+        let kind = change_kind(unusable.is_some(), same_command, is_main);
         let event = json!({
             "kind": kind, "turn": turn, "at": now_iso(), "to_main": is_main,
             "from": {"command": command_base_name(&previous.0), "account": previous.1}, "to": {"command": command_base_name(name), "account": account},

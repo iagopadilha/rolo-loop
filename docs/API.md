@@ -248,3 +248,9 @@ Additive, read-only. One object that joins what the validation produced; every l
 `GET graph` also returns `dependency_proposals`: `{proposals: [{feature, depends_on, type, evidence, state, cycle}], review: [{feature, depends_on}]}`. `state` is `pending` (can be applied) or `cycle` (would close a cycle; never applied); a proposal the user refused earlier is left out. Read-only.
 
 `POST dependencies/apply` (no body) writes every pending `deps=` into the ROADMAP now, the same step the loop runs before each turn, and answers `{ok, applied: [{feature, depends_on}], problems: [text]}`. On a problem (`409`) the ROADMAP is untouched; it also answers `409` while a loop is alive.
+
+### Claude accounts: backups listed, account changes notified, wrapper table as information (A2, A3, A5)
+
+- `GET /api/app/settings`: the item `claude_fallback_binaries` also carries `accounts`: `[{command, role, found, method, email, org, plan}]`, the main command first and then the backups in the order they are tried, from the cached `auth status` (the poll never waits for it). `found` is false for a command that is not on the machine; the account fields are empty when it is not signed in. Never a token.
+- Every change of the account that runs the loop (usage-limit switch, back to the main command, the `cc` picker moving to another account, an unusable account) is sent to every notice channel, the same ones as a stop. The notice names the account, the plan, why it changed and the reset time.
+- `GET errors`: stderr of a turn that ended well, when it is the account wrapper's status table (it names the account it opened), is listed as an `info` item with id `turn-<n>-account` and the title `Turn <n>: account used: <name>, <p>% of the 5-hour window`; it never counts as a problem. Stderr with a failure word keeps its own classification.

@@ -313,6 +313,33 @@ pub fn build_usage_view(meta: &Value, configured_rows: &[Value], turn_rows: &[Va
     view
 }
 
+/// A3. `[{command, role, found, method, email, org, plan}]` for the configured commands (the main one first, then the backups in the
+/// order they are tried), from the `describe` rows. `found` is false when the command is not on this machine; the account fields are
+/// empty when it is not signed in. Never a token: only what `auth status` prints about the account.
+pub fn command_accounts(rows: &[Value]) -> Vec<Value> {
+    rows.iter()
+        .map(|row| {
+            let auth = row.get("auth").cloned().unwrap_or(json!({}));
+            let from_auth = |key: &str| text_of(auth.get(key));
+            let parsed = parse_account_label(&field_str(row, "label"));
+            let pick = |key: &str| {
+                let first = from_auth(key);
+                if first.is_empty() {
+                    parsed.get(key).and_then(Value::as_str).unwrap_or("").to_string()
+                } else {
+                    first
+                }
+            };
+            json!({
+                "command": command_name(&field_str(row, "name")),
+                "role": field_str(row, "role"),
+                "found": row.get("found").and_then(Value::as_bool).unwrap_or(false),
+                "method": pick("method"), "email": pick("email"), "org": pick("org"), "plan": pick("plan"),
+            })
+        })
+        .collect()
+}
+
 fn now_epoch() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
@@ -438,6 +465,21 @@ impl ClaudeAccountService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backup_commands_are_listed_with_the_account_each_signs_in_to() {
+        let rows = vec![
+            json!({"name": "claude", "role": "main", "found": true, "label": "login, dev@example.com (Acme, team)", "auth": {"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team"}}),
+            json!({"name": "C:\\bin\\cc.cmd", "role": "fallback", "found": true, "label": "token, cc account claude2", "auth": {}}),
+            json!({"name": "gone", "role": "fallback", "found": false, "label": "", "auth": {}}),
+        ];
+        let list = command_accounts(&rows);
+        assert_eq!(list.len(), 3);
+        assert_eq!((list[0]["command"].clone(), list[0]["role"].clone(), list[0]["email"].clone(), list[0]["plan"].clone()), (json!("claude"), json!("main"), json!("dev@example.com"), json!("team")));
+        assert_eq!((list[1]["command"].clone(), list[1]["method"].clone(), list[1]["found"].clone()), (json!("cc"), json!("token"), json!(true)));
+        assert_eq!((list[2]["found"].clone(), list[2]["email"].clone()), (json!(false), json!("")));
+        assert!(command_accounts(&[]).is_empty());
+    }
 
     #[test]
     fn labels_methods_and_windows() {
