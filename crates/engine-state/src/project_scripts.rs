@@ -17,9 +17,8 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 const STORE: &str = "SCRIPTS.json";
-const SAFE_NAMES: [&str; 14] = [
-    "build", "lint", "test", "typecheck", "type-check", "tsc", "check", "format:check", "lint:fix", "test:unit", "test:ci", "compile", "verify", "types",
-];
+const SAFE_NAMES: [&str; 14] =
+    ["build", "lint", "test", "typecheck", "type-check", "tsc", "check", "format:check", "lint:fix", "test:unit", "test:ci", "compile", "verify", "types"];
 /// Words in a script body that make it more than a check.
 const RISKY_WORDS: [&str; 10] = ["publish", "deploy", "release", "curl ", "wget ", "npm install", "npm i ", "rm -rf", "git push", "docker push"];
 const SKIPPED_FOLDERS: [&str; 6] = ["node_modules", "bin", "obj", "dist", "target", "vendor"];
@@ -53,8 +52,12 @@ pub fn scan(root: &str) -> Vec<Value> {
     let mut out = Vec::new();
     let mut folders: Vec<(String, std::path::PathBuf)> = vec![(String::new(), base.to_path_buf())];
     if let Ok(entries) = std::fs::read_dir(base) {
-        let mut names: Vec<String> =
-            entries.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| !n.starts_with('.') && !SKIPPED_FOLDERS.contains(&n.as_str())).collect();
+        let mut names: Vec<String> = entries
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| !n.starts_with('.') && !SKIPPED_FOLDERS.contains(&n.as_str()))
+            .collect();
         names.sort();
         folders.extend(names.into_iter().map(|n| (n.clone(), base.join(n))));
     }
@@ -95,7 +98,9 @@ pub fn hint(command: &str) -> Option<(&'static str, &'static str)> {
 /// What the user answered before: `(allow, deny)` command lists.
 pub fn remembered(work: &str) -> (Vec<String>, Vec<String>) {
     let data = load_json(&loop_path(work, STORE));
-    let list = |key: &str| -> Vec<String> { data.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default() };
+    let list = |key: &str| -> Vec<String> {
+        data.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+    };
     (list("allow"), list("deny"))
 }
 
@@ -153,7 +158,11 @@ mod tests {
     #[test]
     fn plain_checks_are_safe_and_the_rest_asks() {
         let dir = tempfile::tempdir().unwrap();
-        put(dir.path(), "package.json", r#"{"scripts": {"build": "tsc -p .", "test": "vitest run", "deploy": "ship it", "lint": "eslint . && curl http://x", "seed": "node seed.js"}}"#);
+        put(
+            dir.path(),
+            "package.json",
+            r#"{"scripts": {"build": "tsc -p .", "test": "vitest run", "deploy": "ship it", "lint": "eslint . && curl http://x", "seed": "node seed.js"}}"#,
+        );
         put(dir.path(), "api/App.sln", "");
         put(dir.path(), "node_modules/dep/package.json", r#"{"scripts": {"test": "x"}}"#);
         let rows = scan(&dir.path().display().to_string());

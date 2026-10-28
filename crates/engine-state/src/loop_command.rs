@@ -222,10 +222,52 @@ pub fn rebuild_loop_command(saved: &Value, project_repo: &str, allowed_folders: 
     Ok(json!({"argv": rebuilt, "cwd": folder, "dropped": dropped}))
 }
 
+/// H5. The arguments that `harness resume <repo>` gives to `harness loop` (everything after `loop`): the saved command checked and rebuilt exactly
+/// as the panel's Resume does ([`rebuild_loop_command`]), then the instruction when there is one, then the configured `claude` command and its
+/// backups (the saved file never carries them). The same settings as the panel, from the same file, with the same checks, so a watcher
+/// outside the page can resume a stopped loop without any token.
+pub fn resume_args(
+    saved: &Value,
+    project_repo: &str,
+    allowed_folders: &[String],
+    program: &str,
+    instruction: &str,
+    claude: &str,
+    fallbacks: &[String],
+) -> Result<Vec<String>, LoopCommandInvalid> {
+    let rebuilt = rebuild_loop_command(saved, project_repo, allowed_folders, program)?;
+    let mut args: Vec<String> = rebuilt["argv"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
+    args.drain(..2.min(args.len())); // program and `loop`
+    if !instruction.trim().is_empty() {
+        args.extend(["--instruction".to_string(), instruction.trim().to_string()]);
+    }
+    if !claude.is_empty() {
+        args.extend(["--claude".to_string(), claude.to_string()]);
+    }
+    for fallback in fallbacks {
+        args.extend(["--claude-fallback".to_string(), fallback.clone()]);
+    }
+    Ok(args)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::loop_opts::{parse, Parsed};
+
+    #[test]
+    fn resume_uses_the_panels_checks_and_adds_the_instruction_and_the_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().display().to_string();
+        let saved = json!({"argv": ["harness", "loop", repo, "--wave", "2", "--answer", "old", "--claude", "evil.exe"], "cwd": null});
+        let args = resume_args(&saved, &repo, &[repo.clone()], "harness.exe", " go on ", "claude", &["cc".to_string()]).unwrap();
+        assert_eq!(args, vec![repo.as_str(), "--wave", "2", "--instruction", "go on", "--claude", "claude", "--claude-fallback", "cc"]);
+        assert!(matches!(parse(&args), Parsed::Run(_)), "the loop parser accepts what resume builds");
+        let bare = resume_args(&saved, &repo, &[], "harness.exe", "", "", &[]).unwrap();
+        assert_eq!(bare, vec![repo.as_str(), "--wave", "2"], "the old answer and the saved claude never come back");
+        let foreign = json!({"argv": ["powershell.exe", "loop", repo]});
+        assert!(resume_args(&foreign, &repo, &[], "harness.exe", "", "", &[]).is_err());
+    }
 
     fn saved(argv: &[&str], cwd: Value) -> Value {
         json!({"argv": argv, "cwd": cwd})
