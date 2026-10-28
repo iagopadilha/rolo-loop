@@ -105,6 +105,7 @@ GET /p/{project_id}/api/wrap-up token=0 activity=0 limit=65536
 POST /p/{project_id}/api/wrap-up/finish token=1 activity=1 limit=65536
 POST /p/{project_id}/api/wrap-up/deliver token=1 activity=1 limit=65536
 POST /p/{project_id}/api/wrap-up/stop-processes token=1 activity=1 limit=65536
+POST /p/{project_id}/api/access/grant token=1 activity=1 limit=65536
 POST /p/{project_id}/api/close-loop/delete-leftover/{name} token=1 activity=1 limit=65536
 GET /api/app/overview token=0 activity=0 limit=65536
 POST /p/{project_id}/api/workspace/repos/{name}/commit-setup token=1 activity=1 limit=65536

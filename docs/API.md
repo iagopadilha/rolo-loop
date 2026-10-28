@@ -10,7 +10,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 - Errors are JSON: `{"ok": false, "error": "<message>", "code": "<code>"}`, with the status that fits the kind of error. A route that does not exist answers `{"ok": false, "error": "route not found"}` with `404`.
 - The "activity" column says whether the route counts as use of the app for the idle shutdown (`--idle-hours`).
 
-## Routes (132)
+## Routes (133)
 
 | Method | Path | Needs token | Counts as activity |
 |---|---|---|---|
@@ -121,6 +121,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/wrap-up/finish` | yes | yes |
 | `POST` | `/p/{project_id}/api/wrap-up/deliver` | yes | yes |
 | `POST` | `/p/{project_id}/api/wrap-up/stop-processes` | yes | yes |
+| `POST` | `/p/{project_id}/api/access/grant` | yes | yes |
 | `POST` | `/p/{project_id}/api/close-loop/delete-leftover/{name}` | yes | yes |
 | `GET` | `/api/app/overview` | no | no |
 | `POST` | `/p/{project_id}/api/workspace/repos/{name}/commit-setup` | yes | yes |
@@ -155,7 +156,7 @@ The response shapes are the ones the panel front end in `app/frontend/` reads; t
 
 ## Additive run fields (cost forecast and E2E progress)
 
-The engine writes these keys into the run's `meta.json` after every turn. They are additive: nothing existing changes, a client that ignores them keeps working. Where a route returns the run meta, they come with it; the panel UI for them is not built yet.
+The engine writes these keys into the run's `meta.json` after every turn. They are additive: nothing existing changes, a client that ignores them keeps working. Where a route returns the run meta, they come with it; the panel shows them (turn bar chips and the cost limit form).
 
 | Key | Shape | Meaning |
 |---|---|---|
@@ -179,7 +180,7 @@ The state payload also carries the permissions journal (feature `e2e-dev-baselin
 
 | Field | Shape | Meaning |
 |---|---|---|
-| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit` or `baseline`; `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Nothing in the panel writes it: grants come from `harness grant` / `harness baseline` and the engine function `grant_access`. |
+| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit` or `baseline`; `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Grants come from `harness grant` / `harness baseline`, the engine function `grant_access` and `POST /p/{project_id}/api/access/grant` (body `{kind: "host"|"cost_limit", value, reason}`, token required; answers `{ok, changed, message, entry}`; a refusal is `ok: false` with the sentence that says why, and it is journaled with `who: "panel"`). |
 
 Planning gates (`/api/pipeline` and the readiness routes) also change:
 

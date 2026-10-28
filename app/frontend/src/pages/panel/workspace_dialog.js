@@ -19,6 +19,7 @@ import { renderAll, schedulePoll } from '../project_panel.js';
 import { reloadProgress } from './progress_trail.js';
 import { ROLE_TEXT, roleKey, chooseFolder } from '../repo_scope.js';
 import { openRepoSetupDialog } from './repo_setup_dialog.js';
+import { fetchRepoReadiness } from '../repo_manager.js';
 
 const REFRESH_MS = 5000;
 const LIST_LIMIT = 12;
@@ -65,7 +66,17 @@ function RoleSwitch({ repo, disabled, onPick }) {
   })}</div>`;
 }
 
-function RepoCard({ repo, integration, busyKey, locked, onSetup, onCommit, onRole, onRemove }) {
+/** S5: the Conformance of one repository with two buttons (STANDARD | LEGACY). `value` is what its CLAUDE.md holds now ('' = none). */
+function ConformanceRow({ repo, value, disabled, onPick }) {
+  const current = String(value || '').toUpperCase();
+  return html`<div class="ws-conf-row" data-repo-conf=${repo.name}><span class="ws-conf-l">Conformance</span>
+    <div class="seg" role="group" aria-label=${'Conformance of ' + repo.name}>${['STANDARD', 'LEGACY'].map((key) => html`<button key=${key} type="button" class="seg-btn" data-conf=${key}
+      aria-pressed=${String(current === key)} disabled=${disabled} title=${disabled ? LOCK_REASON : key === 'STANDARD' ? 'The code follows the skill pattern; the loop refactors toward it.' : 'Old code: the loop makes the minimum edit and mimics what exists.'}
+      onClick=${() => { if (current !== key) onPick(repo, key); }}>${key}</button>`)}</div>
+    ${current ? null : html`<span class="hint">not set</span>`}</div>`;
+}
+
+function RepoCard({ repo, conformance, integration, busyKey, locked, onSetup, onCommit, onRole, onRemove, onConformance }) {
   const role = roleKey(repo), editing = role === 'edit';
   const [stateText, tone] = SETUP_STATE[(repo.setup && repo.setup.state) || ''] || ['', 'muted'];
   const setupState = repo.setup && repo.setup.state;
@@ -84,6 +95,7 @@ function RepoCard({ repo, integration, busyKey, locked, onSetup, onCommit, onRol
       ${repo.primary ? null : html`<span class="spacer"></span><button type="button" class="btn btn-sm btn-ghost" data-act="remove" disabled=${locked || !!busyKey}
         title=${locked ? LOCK_REASON : 'Removes it from this project; no file is deleted.'} aria-label=${'Remove ' + repo.name} onClick=${() => onRemove(repo)}>${busyKey === 'rm:' + repo.name ? 'Removing…' : 'Remove'}</button>`}</div>
     ${repo.reason ? html`<div class="rp-purpose wsd-reason">${repo.reason}</div>` : null}
+    ${editing && conformance !== undefined ? html`<${ConformanceRow} repo=${repo} value=${conformance} disabled=${locked || !!busyKey} onPick=${onConformance} />` : null}
     <dl class="ws-kv">
       <dt>Folder</dt><dd class="mono" title=${repo.path || repo.folder}>${txt(repo.path || repo.folder)}</dd>
       <dt>Current branch</dt><dd class="mono">${txt(repo.current_branch)}${repo.upstream ? html` <span class="dim">· upstream ${repo.upstream}</span>` : null}</dd>
@@ -104,12 +116,17 @@ function RepoCard({ repo, integration, busyKey, locked, onSetup, onCommit, onRol
 
 function WorkspaceDialog() {
   const [data, setData] = useState(null), [err, setErr] = useState(''), [busyKey, setBusyKey] = useState('');
+  const [confs, setConfs] = useState({}); // repo name -> Conformance written now (S5)
   const alive = useRef(true), loading = useRef(false), busyRef = useRef('');
   useEffect(() => () => { alive.current = false; }, []);
   const load = async () => {
     if (loading.current) return;
     loading.current = true;
-    try { const d = await ctx.api.get('workspace', 15000); if (alive.current) { setData(d); setErr(''); } }
+    try {
+      const d = await ctx.api.get('workspace', 15000);
+      const rd = await fetchRepoReadiness(ctx.projectId);
+      if (alive.current) { setData(d); setErr(''); if (rd) setConfs(Object.fromEntries(list(rd.repos).map((r) => [r.name, r.conformance || '']))); }
+    }
     catch (e) { if (alive.current) setErr('Could not read the workspace: ' + e.message); }
     finally { loading.current = false; }
   };
@@ -151,6 +168,10 @@ function WorkspaceDialog() {
     finally { busy(''); await load(); afterChange(); }
   };
   const setRole = (repo, role) => changeRepo('role:' + repo.name, () => requestJson('PATCH', repoRoute(repo), { role }), `${repo.name} is now ${ROLE_TEXT[role].label}.`);
+  // S5: the primary uses its own route (POST conformance); the others PUT projects/<id>/repos/<name>/conformance. The server's refusal (e.g. a monorepo) is shown as is.
+  const setConformance = (repo, value) => changeRepo('conf:' + repo.name, () => (repo.primary
+    ? ctx.api.post('conformance', { value }, 30000)
+    : appApi.put('projects/' + encodeURIComponent(ctx.projectId) + '/repos/' + encodeURIComponent(repo.name) + '/conformance', { value })), `${repo.name} is now ${value}.`);
   const removeRepository = async (repo) => {
     const ok = await confirmDialog({
       title: `Remove ${repo.name} from this project?`, yesText: 'Remove',
@@ -189,8 +210,8 @@ function WorkspaceDialog() {
       <dt>Integration branch</dt><dd class="mono">${integration ? `PR to ${integration}` : 'not detected: the PR targets each repository\'s base branch'}</dd>
       <dt>Plan folder</dt><dd class="mono" title=${data.plan_folder || ''}>${data.plan_folder ? midPath(data.plan_folder, 72) : '—'}</dd>
     </dl>
-    ${repos.length ? html`<ul class="ws-repos wsd-list-repos" aria-label="Repositories of the project">${repos.map((repo) => html`<${RepoCard} key=${repo.name} repo=${repo} integration=${integration}
-      busyKey=${busyKey} locked=${locked} onSetup=${openSetup} onCommit=${commitSetup} onRole=${setRole} onRemove=${removeRepository} />`)}</ul>`
+    ${repos.length ? html`<ul class="ws-repos wsd-list-repos" aria-label="Repositories of the project">${repos.map((repo) => html`<${RepoCard} key=${repo.name} repo=${repo} integration=${integration} conformance=${confs[repo.name]}
+      busyKey=${busyKey} locked=${locked} onSetup=${openSetup} onCommit=${commitSetup} onRole=${setRole} onRemove=${removeRepository} onConformance=${setConformance} />`)}</ul>`
       : html`<div class="hint">No repository is defined yet: the planning chat adds them, or use Add repository.</div>`}
     <div class="card-row"><button type="button" class="btn btn-sm" id="wsd-add" disabled=${locked || !!busyKey} onClick=${addRepository}>${busyKey === 'add' ? 'Adding…' : 'Add repository…'}</button>
       <span class="hint">Opens the folder picker. The folder must be a git repository on a branch. It is added as <b>edits</b>; switch it to <b>reference</b> in its card.</span></div>
