@@ -28,14 +28,15 @@ function DecisionItem({ item, busy, onReview, onChange, renderFeature }) {
       ${item.change_requested ? html`<span class="dl-state is-change mono">change asked</span>` : null}
     </div>
     <dl class="dl-fields">
-      <dt>Doubt</dt><dd>${item.doubt}</dd>
-      <dt>Choice</dt><dd>${item.chose}</dd>
-      <dt>How to revert</dt><dd>${item.revert}</dd>
+      <dt>What was unclear</dt><dd>${item.doubt}</dd>
+      <dt>What the AI chose</dt><dd>${item.chose}</dd>
+      <dt>How to undo it</dt><dd>${item.revert}</dd>
     </dl>
     <div class="dl-actions">
-      <button type="button" class="btn btn-sm" disabled=${busy || item.reviewed} onClick=${() => onReview(item)}>${item.reviewed ? 'Reviewed' : 'Mark as reviewed'}</button>
-      <button type="button" class="btn btn-sm" disabled=${busy || item.change_requested} onClick=${() => onChange(item)}>${item.change_requested ? 'Change asked' : 'Ask for a change'}</button>
+      <button type="button" class="btn btn-sm" disabled=${busy || item.reviewed} title="You agree with this choice: it stops counting as waiting for review." onClick=${() => onReview(item)}>${item.reviewed ? 'Reviewed' : 'I agree'}</button>
+      <button type="button" class="btn btn-sm" disabled=${busy || item.change_requested} title="You disagree: this is added to the follow-up draft, nothing runs until you send it." onClick=${() => onChange(item)}>${item.change_requested ? 'Change asked' : 'Ask to change it'}</button>
     </div>
+    ${item.reviewed || item.change_requested ? null : html`<p class="dl-hint">${'"I agree" closes this item. "Ask to change it" adds it to the follow-up draft; nothing runs until you send it.'}</p>`}
   </li>`;
 }
 

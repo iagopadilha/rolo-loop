@@ -153,7 +153,7 @@ impl<'a> Check<'a> {
                 let outside: Vec<&String> = folders.iter().filter(|f| !inside_any(f, roots)).collect();
                 if let Some(first) = outside.first() {
                     let shown: String = first.chars().take(80).collect();
-                    hits.push(hit("repo-only", format!("git {sub} outside the project's worktrees ({shown}): the repo of its -C/cwd must be one of them")));
+                    hits.push(hit("repo-only", format!("git {sub} {} ({shown}): the repo of its -C/cwd must be one of them", crate::call_forms::OUTSIDE_WORKTREES)));
                 }
             }
             if sub != "push" && has_rule(rules, "git-write") {
@@ -285,7 +285,7 @@ impl<'a> Check<'a> {
             if let Some(m) = CD_RE.match_start(&segment) {
                 running_cwd = Some(resolve_dir(g, m.group(1).unwrap_or(""), running_cwd.as_deref()));
             }
-            if INSTALL.is_match(&segment) && has_rule(rules, "install") {
+            if INSTALL.is_match(&segment) && !ROUTINE_INSTALL.is_match(&segment) && has_rule(rules, "install") {
                 hits.push(hit("install", "installing a dependency: only if the spec asks for it"));
             }
             if has_rule(rules, "secrets")

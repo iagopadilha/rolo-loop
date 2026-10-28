@@ -18,7 +18,7 @@ const STORY_LENGTH_BEFORE_NOW_MILLISECONDS: i64 = 60 * 60 * 1000;
 pub const ENGINE_STUB_SUBCOMMAND: &str = "demo-engine";
 const CLAUDE_TEXT: &str = "# acme-checkout
 
-Card checkout for the Acme store (demo project of claude-maestro).
+Card checkout for the Acme store (demo project of agent-maestro).
 
 Conformance: STANDARD
 

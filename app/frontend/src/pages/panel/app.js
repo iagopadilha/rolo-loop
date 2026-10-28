@@ -36,7 +36,7 @@ function Brand({ has, withRepoLine }) {
   return html`<div class="brand">
     <a class="logo logo-link" href="/" title="back to the projects" aria-label="back to the projects"><${LogoMark} /></a>
     <div>
-      <div class="brand-name"><a href="/" class="brand-link">Claude Maestro</a></div>
+      <div class="brand-name"><a href="/" class="brand-link">Agent Maestro</a></div>
       <div class="brand-sub mono" id="brand-sub" title=${has ? hd.repo : null}>${has ? html`<${BrandSub} />` : '—'}</div>
       ${has && withRepoLine ? html`<${RepoLine} />` : null}
     </div>

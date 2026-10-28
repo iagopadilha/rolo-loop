@@ -274,9 +274,10 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
             problems.push(format!("{tag}{} is not a git repository", item.path));
             continue;
         }
-        if CONFORMANCE.search(&read(&Path::new(&item.path).join("CLAUDE.md"))).is_none() {
-            problems.push(format!("{tag}its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {} --write STANDARD|LEGACY)", item.path));
+        for problem in repo_conformance_problems(&item.path) {
+            problems.push(format!("{tag}{problem}"));
         }
+        warns.extend(stale_git_lock_warnings(&item.path).into_iter().map(|w| format!("{tag}{w}")));
         if !Path::new(&item.loop_worktree_path()).is_dir() && git(&item.path, &["branch", "--show-current"]).1.is_empty() {
             problems.push(format!("{tag}no current branch (detached HEAD)"));
         }
@@ -285,6 +286,45 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
         }
     }
     (problems, warns)
+}
+
+/// S1. The Conformance line of a repo. A confirmed monorepo keeps it per subproject (its owner), so the repo root `CLAUDE.md` is not asked for
+/// it: every subproject that is not skipped needs its own line. A repo that is not a confirmed monorepo needs the root line.
+pub fn repo_conformance_problems(path: &str) -> Vec<String> {
+    if !subprojects::monorepo_confirmed(path, None) {
+        if CONFORMANCE.search(&read(&Path::new(path).join("CLAUDE.md"))).is_some() {
+            return vec![];
+        }
+        return vec![format!("its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {path} --write STANDARD|LEGACY)")];
+    }
+    let (entry, _) = subprojects::load(path, None);
+    subprojects::entry_projects(entry.as_ref())
+        .iter()
+        .filter(|p| p.get("skip") != Some(&Value::Bool(true)))
+        .filter_map(|p| p.get("path").and_then(Value::as_str))
+        .filter(|sub| subprojects::read_conformance(path, sub) == "-")
+        .map(|sub| format!("subproject {sub} has no `Conformance: STANDARD|LEGACY` line in its own CLAUDE.md (confirmed monorepo: the line lives per subproject)"))
+        .collect()
+}
+
+/// A repository lock this old was left by a process that died.
+pub const STALE_LOCK_SECONDS: u64 = 60;
+
+/// S2. Warns about a stale `index.lock` of the repo (or of its linked worktree): every commit fails with it and the cause is not obvious.
+pub fn stale_git_lock_warnings(path: &str) -> Vec<String> {
+    let (code, lock, _) = git(path, &["rev-parse", "--git-path", "index.lock"]);
+    if code != 0 || lock.is_empty() {
+        return vec![];
+    }
+    let lock_path = if Path::new(&lock).is_absolute() { PathBuf::from(&lock) } else { Path::new(path).join(&lock) };
+    let age = std::fs::metadata(&lock_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|d| d.as_secs());
+    match age {
+        Some(seconds) if seconds >= STALE_LOCK_SECONDS => vec![format!(
+            "{} is {seconds}s old: a process that died left it and every commit will fail. If no git process is running, delete that file",
+            lock_path.display()
+        )],
+        _ => vec![],
+    }
 }
 
 fn readiness_checks_folder_has_map(folder: &str) -> bool {
@@ -304,7 +344,7 @@ pub fn check_fix(kind: &str) -> &'static str {
         "missing-roadmap" => "Generate and approve the roadmap in Planning",
         "uncommitted" => "Commit these files (the worktree is born from the last commit)",
         "dotnet-restore" => "Add `dotnet restore` as the Setup line in the ROADMAP header (planning)",
-        "node-modules" => "Add `npm ci` as the Setup line",
+        "node-modules" => "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line",
         "permission-mode" => "If the first turn fails, use permission mode acceptEdits",
         _ => "",
     }
@@ -372,6 +412,18 @@ pub fn claude_command_problems(opts: &LoopOpts) -> Pair {
 pub fn repo_branch_problems(repo: &str) -> Pair {
     let problems = if git(repo, &["branch", "--show-current"]).1.is_empty() { vec!["repo has no current branch (detached HEAD)".to_string()] } else { vec![] };
     (problems, vec![])
+}
+
+/// Line endings: with `core.autocrlf=true` and no `.gitattributes` rule, a file checked out as CRLF reads as changed. The engine does not
+/// count line-ending-only changes, but the diff and the final PR still would; the app can add the LF rule to `.gitattributes`.
+pub fn line_ending_warnings(repo: &str) -> Vec<String> {
+    let attributes = read(&Path::new(repo).join(".gitattributes"));
+    let has_rule = pycompat::splitlines(&attributes).iter().any(|l| l.trim().starts_with("* ") && (l.contains("text") || l.contains("eol=")));
+    let autocrlf = git(repo, &["config", "--get", "core.autocrlf"]).1;
+    if has_rule || autocrlf == "input" || autocrlf == "false" {
+        return vec![];
+    }
+    vec!["line endings: this repo has no `* text=auto eol=lf` rule in .gitattributes and git converts to CRLF (core.autocrlf is not `input`), so files can read as changed only because of CRLF. Add the rule (the app offers it as a setup file) or run `git config core.autocrlf input`.".into()]
 }
 
 /// A repo whose worktree is not created yet and has no local integration branch starts from its current branch: say which.
@@ -553,17 +605,21 @@ pub fn push_problems(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
     (problems, warns)
 }
 
-/// Node / .NET repos: what a fresh worktree is born without.
+/// Node / .NET repos: what a fresh worktree is born without. Routine installs (a lockfile beside its manifest: `npm ci`, `dotnet restore`...)
+/// are run by the engine per subproject, so only what the engine will NOT install is said here.
 pub fn build_setup_warnings(repo: &str, work: &str, opts: &LoopOpts) -> Vec<String> {
     let mut warns = Vec::new();
-    let has_package = Path::new(repo).join("package.json").is_file();
-    if has_package && opts.setup.is_empty() && !Path::new(work).is_dir() {
-        warns.push("Node project: the worktree is born without node_modules. Use --setup \"npm ci\" (otherwise verify returns UNVERIFIED).".into());
+    let plan = crate::detect_setup::install_plan(repo);
+    let has_package = Path::new(repo).join("package.json").is_file() || plan.iter().any(|s| s.artifact == "node_modules");
+    if opts.setup.is_empty() && !Path::new(work).is_dir() {
+        for step in plan.iter().filter(|s| !s.routine) {
+            let place = if step.dir.is_empty() { "the root".to_string() } else { step.dir.clone() };
+            warns.push(format!(
+                "Node project ({place}): package.json without a lockfile, so the engine installs nothing there and the worktree is born without node_modules (verify returns UNVERIFIED). Commit a lockfile (`npm install` once) or use --setup \"npm install\"."
+            ));
+        }
     }
     let dotnet = find_dotnet(repo, 3);
-    if !dotnet.is_empty() && !Path::new(work).is_dir() {
-        warns.push(format!(".NET detected ({dotnet}): the worktree is born without bin/obj; `dotnet build` does an implicit restore (needs network or the NuGet cache). The executor does not run `dotnet restore` nor `dotnet add package` (guard); to restore beforehand, use --setup with `dotnet restore`."));
-    }
     if (!dotnet.is_empty() || has_package) && !Path::new(repo).join(".gitignore").is_file() {
         warns.push("repo has no .gitignore: bin/obj/node_modules generated by the build dirty the worktree and the loop stops on `dirty tree`.".into());
     }
@@ -755,8 +811,14 @@ pub fn preflight(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
         push_new(warns, step_warns);
     };
     apply(&mut problems, &mut warns, repo_branch_problems(repo));
+    apply(&mut problems, &mut warns, (vec![], line_ending_warnings(repo)));
     apply(&mut problems, &mut warns, extra_repos_preflight(&repos, opts, Some(&features)));
     apply(&mut problems, &mut warns, (root_conformance_problems(&root), vec![]));
+    let mut lock_warns = stale_git_lock_warnings(repo);
+    if root != repo {
+        lock_warns.extend(stale_git_lock_warnings(&root));
+    }
+    apply(&mut problems, &mut warns, (vec![], lock_warns));
     apply(&mut problems, &mut warns, (if has_roadmap { vec![] } else { readiness_checks::installer_problems(&root, &repos) }, vec![]));
     let setup_open = !problems.is_empty(); // a real earlier step is still open: "generate the roadmap" is not said yet
     apply(&mut problems, &mut warns, roadmap_problems(&root, &repos, opts, setup_open));
@@ -811,6 +873,77 @@ mod tests {
     }
 
     #[test]
+    fn a_confirmed_monorepo_asks_the_conformance_line_per_subproject_not_at_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        std::fs::write(Path::new(&r).join("CLAUDE.md"), "no line here\n").unwrap();
+        assert_eq!(repo_conformance_problems(&r).len(), 1, "a plain repo still needs the root line");
+        let name = default_name_of(&r);
+        std::fs::create_dir_all(Path::new(&r).join(".specs/project")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/web")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/api")).unwrap();
+        std::fs::write(
+            Path::new(&r).join(".specs/project/SUBPROJECTS.json"),
+            format!("{{\"repos\": {{\"{name}\": {{\"monorepo\": true, \"confirmed\": true, \"projects\": [{{\"path\": \"apps/web\", \"skill\": \"x\"}}, {{\"path\": \"apps/api\", \"skill\": \"x\"}}, {{\"path\": \"tools\", \"skip\": true}}]}}}}}}"),
+        )
+        .unwrap();
+        std::fs::write(Path::new(&r).join("apps/web/CLAUDE.md"), "Conformance: STANDARD\n").unwrap();
+        let problems = repo_conformance_problems(&r);
+        assert_eq!(problems.len(), 1, "the root file is not asked, a subproject without its line still is: {problems:?}");
+        assert!(problems[0].contains("apps/api") && !problems[0].contains("tools"));
+        std::fs::write(Path::new(&r).join("apps/api/CLAUDE.md"), "Conformance: LEGACY\n").unwrap();
+        assert!(repo_conformance_problems(&r).is_empty());
+    }
+
+    fn default_name_of(path: &str) -> String {
+        subprojects::default_repo_name(path)
+    }
+
+    #[test]
+    fn only_an_old_index_lock_is_warned_about() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        assert!(stale_git_lock_warnings(&r).is_empty());
+        let lock = Path::new(&r).join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        assert!(stale_git_lock_warnings(&r).is_empty(), "a fresh lock may belong to a running git");
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+        std::fs::OpenOptions::new().write(true).open(&lock).unwrap().set_modified(old).unwrap();
+        let warnings = stale_git_lock_warnings(&r);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("index.lock") && warnings[0].contains("no git process is running"));
+    }
+
+    #[test]
+    fn line_ending_advice_goes_away_with_a_rule_or_autocrlf_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        git(&r, &["config", "core.autocrlf", "true"]);
+        assert_eq!(line_ending_warnings(&r).len(), 1);
+        std::fs::write(Path::new(&r).join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
+        assert!(line_ending_warnings(&r).is_empty());
+        std::fs::remove_file(Path::new(&r).join(".gitattributes")).unwrap();
+        git(&r, &["config", "core.autocrlf", "input"]);
+        assert!(line_ending_warnings(&r).is_empty());
+    }
+
+    #[test]
+    fn engine_installs_make_the_node_warning_about_lockfiles_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo_dir, work) = (dir.path().join("proj"), dir.path().join("proj-worktree-loop").display().to_string());
+        std::fs::create_dir_all(repo_dir.join("web")).unwrap();
+        std::fs::create_dir_all(repo_dir.join("docs")).unwrap();
+        std::fs::write(repo_dir.join(".gitignore"), "node_modules\n").unwrap();
+        std::fs::write(repo_dir.join("web/package.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("web/package-lock.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("docs/package.json"), "{}").unwrap();
+        let warns = build_setup_warnings(&repo_dir.display().to_string(), &work, &LoopOpts::new(""));
+        assert_eq!(warns.len(), 1, "{warns:?}");
+        assert!(warns[0].starts_with("Node project (docs)") && warns[0].contains("without a lockfile"), "{}", warns[0]);
+        assert_eq!(check_item_kind(&warns[0]), "node-modules");
+    }
+
+    #[test]
     fn kinds_and_fixes() {
         assert_eq!(check_item_kind("Missing .specs/project/ROADMAP.md: generate"), "missing-roadmap");
         assert_eq!(check_item_kind("uncommitted changes in api: 1 setup file"), "uncommitted");
@@ -818,7 +951,7 @@ mod tests {
         assert_eq!(check_item_kind("Node project: the worktree"), "node-modules");
         assert_eq!(check_item_kind("`auto` mode depends on the plan"), "permission-mode");
         assert_eq!(check_item_kind("anything else"), "other");
-        assert_eq!(check_fix("node-modules"), "Add `npm ci` as the Setup line");
+        assert_eq!(check_fix("node-modules"), "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line");
         let items = check_items(&["a problem".to_string()], &["Node project: x".to_string()], &[], "C:\\nope");
         assert_eq!((items[0]["level"].clone(), items[1]["kind"].clone(), items[1]["level"].clone()), (json!("problem"), json!("node-modules"), json!("warning")));
     }

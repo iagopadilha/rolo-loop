@@ -351,7 +351,7 @@ async function shutDown() {
     await appApi.post('shutdown', {}, 15000);
     if (hubPolling) hubPolling.stop();
     hb.closed = true; draw();
-    document.title = 'app shut down · Claude Maestro';
+    document.title = 'app shut down · Agent Maestro';
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
@@ -386,7 +386,7 @@ export function Hub() {
       <div class="brand">
         <div class="logo" aria-hidden="true"><${LogoMark} /></div>
         <div>
-          <div class="brand-name">Claude Maestro</div>
+          <div class="brand-name">Agent Maestro</div>
           <div class="brand-sub mono">projects</div>
         </div>
       </div>
@@ -400,7 +400,7 @@ export function Hub() {
         <div class="hub-hero-copy">
           <span class="hub-eyebrow mono">LOOP ENGINEERING · ON YOUR MACHINE</span>
           <h1 id="hub-title" class="hub-h1">Projects<br /><span class="hub-h1-sub">open one and follow the loop</span></h1>
-          <p class="muted hub-lead"><strong>Claude Maestro</strong> runs and follows the loop of the <span class="mono">/orchestrator</span> skill on your machine. Open the folder of a project (new, existing or with a loop stopped midway) or create one from scratch. The project panel then shows where it stands and what the next step is.</p>
+          <p class="muted hub-lead"><strong>Agent Maestro</strong> runs and follows the loop of the <span class="mono">/orchestrator</span> skill on your machine. Open the folder of a project (new, existing or with a loop stopped midway) or create one from scratch. The project panel then shows where it stands and what the next step is.</p>
           <div class="hub-buttons">
             <button type="button" class="btn btn-primary hub-big hub-split" id="hub-open" onClick=${openFolder}><span>Open folder</span><span class="hub-split-arrow" aria-hidden="true">→</span></button>
             <button type="button" class="btn hub-big hub-dashed" id="hub-create" onClick=${createDialog}>Create project from scratch</button>
@@ -438,7 +438,7 @@ export function Hub() {
 export function startHub(root) {
   hubRoot = root;
   root.replaceChildren();
-  document.title = 'projects · Claude Maestro';
+  document.title = 'projects · Agent Maestro';
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (hb.confirmShutdown) cancelShutdown();

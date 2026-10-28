@@ -65,8 +65,12 @@ pub fn audit_before_turn(work: &str) -> Vec<String> {
 pub fn e2e_unmarked(specs: &str) -> Vec<String> {
     let features = parse_roadmap(&roadmap(specs)).0;
     let mut problems = Vec::new();
+    let skipped = crate::e2e_evidence::skipped_features(specs); // the user chose to continue without that layer
     for (slug, f) in features.iter() {
         let result = f.get("e2e").and_then(E2eResult::parse);
+        if skipped.contains(slug) && result != Some(E2eResult::Failed) {
+            continue;
+        }
         if f.status() == "verified" && result.is_none_or(E2eResult::is_pending) {
             problems.push(if f.has("e2e") { format!("{slug} with e2e=pending (unverified)") } else { format!("{slug} without e2e=") });
         } else if result == Some(E2eResult::Failed) && f.status() != "blocked" {
@@ -324,6 +328,32 @@ mod tests {
         assert_eq!(e2e_unmarked(&specs), vec!["b with e2e=pending (unverified)", "d without e2e="]);
         assert_eq!(e2e_pending(&specs), vec!["b", "d"]);
         assert_eq!(e2e_progress(&specs), (2, 4));
+    }
+
+    #[test]
+    fn skipped_layer_is_exempt_from_the_unmarked_check_but_failed_still_stops() {
+        let (_d, _w, specs) = project(
+            "## Stage 1
+- [a] status=verified
+- [b] status=verified
+- [c] status=verified e2e=failed
+",
+        );
+        assert_eq!(e2e_unmarked(&specs).len(), 3);
+        let mark = crate::e2e_evidence::SKIP_LAYER_OPTION;
+        let answers = ["a", "b", "c"]
+            .map(|s| {
+                format!(
+                    "
+## Answer t [pending]
+Question: q [layer-stop:{s}]
+User answer: {mark}
+"
+                )
+            })
+            .concat();
+        std::fs::write(std::path::Path::new(&specs).join("ANSWERS.md"), answers).unwrap();
+        assert_eq!(e2e_unmarked(&specs), vec!["c with e2e=failed"]);
     }
 
     #[test]

@@ -66,6 +66,7 @@ pub mod repo_registry;
 pub mod roadmap;
 pub mod roadmap_view;
 pub mod setup_commit;
+pub mod skills_catalog;
 pub mod spec_file;
 pub mod specs_reset;
 pub mod specs_structure;

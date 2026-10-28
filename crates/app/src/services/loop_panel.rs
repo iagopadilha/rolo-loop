@@ -7,7 +7,7 @@ use crate::domain::errors::{AppError, Kind};
 use crate::domain::project::ProjectContext;
 use crate::repositories::loop_read_formatting::{now_iso, number_value, to_number, to_text_list};
 use crate::repositories::specs_file::compute_bytes_version;
-use engine_state::{graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
+use engine_state::{e2e_evidence, graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
 use pycompat::{last_segment, nt_normpath, partition, Re};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
@@ -17,6 +17,7 @@ use std::sync::LazyLock;
 pub const QUARANTINE_OPTIONS: [&str; 2] = ["try again", "skip and continue"];
 const KNOWN_ACTIONS: [&str; 4] = ["deliver", "summary", "push", "clean_worktrees"];
 const RECENT_ACTIONS_LIMIT: usize = 10;
+const PERMISSIONS_LOG_LIMIT: usize = 50;
 const LOOP_WORKTREE_SUFFIX: &str = "-worktree-loop";
 const SECONDS_PER_MINUTE: f64 = 60.0;
 const COST_UNIT: &str = "USD";
@@ -273,12 +274,15 @@ impl LoopPanelService<'_> {
         let now_block = build_now(&processes, &stages, &features, running_turn);
         json!({
             "processes": processes, "now": now_block,
+            "permissions_log": engine_state::access_grant::journal_view(&work_dir, PERMISSIONS_LOG_LIMIT),
             "now": now_iso(), "project": get_project_name(&meta, context), "repo": context.repo_path(), "work": work_dir, "branch": g("branch"),
             "project_ref": {"id": context.project.id, "name": context.project.name, "repo_path": context.project.repo_path},
             "loop": self.build_loop_block(&work_dir, &summary, turn.clone()),
             "meta": meta_block,
             "limits": self.build_limits(&work_dir, &meta, running, &numbers), "stages": stages, "features": features, "counts": counts,
             "graph": graph, "agents": agents, "validate": validate,
+            "validations": e2e_evidence::validations(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
+            "manual_checks": e2e_evidence::manual_checks(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
             "decisions_summary": self.app.decisions().open_counts(context),
             "recent_actions": self.list_recent_actions(&work_dir),
             "roadmap_approval": files.read_roadmap_approval(&work_dir, Some(context.repo_path())),
@@ -323,6 +327,7 @@ impl LoopPanelService<'_> {
             "reason": if running { Value::Null } else { or_null(summary.get("reason")) },
             "next": if running { Value::Null } else { or_null(loop_json.get("next")) },
             "options": if running { vec![] } else { texts("options") }, "to_check": texts("to_check"),
+            "credential_request": if running { Value::Null } else { or_null(loop_json.get("credential_request")) },
             "at": loop_json.get("at").cloned().unwrap_or(Value::Null),
             "pause_requested": self.app.loop_files.is_pause_requested(work_dir),
         })

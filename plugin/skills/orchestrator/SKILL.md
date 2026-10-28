@@ -19,7 +19,7 @@ The specification engine is still `tlc-spec-driven` (a skill of the claude-craft
 
 This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.exe` (plugin root) and the plugin's `agents/*.md`. The **runtime** is the Loop Harness app, in the `app/` folder of the same repository: the loop engine, a local HTTP server and a multi-project web panel. It runs on your machine with your own Claude subscription through the `claude` CLI (no API token). The old `skills/orchestrator/loop/` scripts no longer exist: do not look for them.
 
-**Find the `harness` executable, once per session.** Every command below starts with `harness`: run `harness --version` (one line, PowerShell or bash). It prints a version: go on. It fails (not on PATH): tell the user to put the claude-maestro `harness` executable on PATH (or give you its full path, which you then use in place of `harness`) and to run once `harness install` (it writes `~/.loop-harness/config.json` with the app folder and this skill's folder), and **stop**. Do not look for it anywhere else.
+**Find the `harness` executable, once per session.** Every command below starts with `harness`: run `harness --version` (one line, PowerShell or bash). It prints a version: go on. It fails (not on PATH): tell the user to put the agent-maestro `harness` executable on PATH (or give you its full path, which you then use in place of `harness`) and to run once `harness install` (it writes `~/.loop-harness/config.json` with the app folder and this skill's folder), and **stop**. Do not look for it anywhere else.
 
 **Every loop command is `harness <subcommand>`**, on one line, path in quotes. Subcommands: `serve --project <root>` (panel), `loop <root> [flags]`, `check <root> [flags]` (= `loop --check`), `state`, `notify`, `summary`, `deliver`, `rules`, `audit`, `graph`, `classify`, `scale`, `subprojects`, `system-map`, `tasks` (same arguments as the engine scripts), `doctor` (diagnosis: skill, guard, `claude`, notification channels) and `install`. Every `harness <subcommand>` named in the text is a command of the one `harness` executable (the engine is part of it): always call it as `harness <subcommand>`. `.specs` templates in `app/templates/`. App docs: `docs/HOW_TO_USE.md`, `API.md`, `ARCHITECTURE.md`, `SKILL_BRIDGE.md`.
 
@@ -29,7 +29,7 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 
 **Requires the claude-craft-kit plugin.** The dev skills (`backend-dev`, `frontend-dev`), the spec engine (`tlc-spec-driven`), `flow-validator` and the shared scripts (`craft verify`, `craft testenv`, `craft regression_diff`, ...) live there, not in this plugin; `harness doctor` reports it missing. **Toolkit path, once per turn:** run `harness paths --json` (`maestro_plugin`, `orchestrator_skill`, `toolkit`) and put the `toolkit` value in a line `TOOLKIT: <path>` of every subagent prompt (see `references/dispatch.md`).
 
-**What stays in the plugin:** this skill, `references/`, `bin/guard.exe` and the agents. The app finds the guard through `orchestrator_skill_dir` in `config.json` (or `LOOP_SKILL_DIR`, or `$CLAUDE_PLUGIN_ROOT/skills/orchestrator`). Zero-cost suite: `cargo test --workspace` in the claude-maestro repository (engine, app and guard).
+**What stays in the plugin:** this skill, `references/`, `bin/guard.exe` and the agents. The app finds the guard through `orchestrator_skill_dir` in `config.json` (or `LOOP_SKILL_DIR`, or `$CLAUDE_PLUGIN_ROOT/skills/orchestrator`). Zero-cost suite: `cargo test --workspace` in the agent-maestro repository (engine, app and guard).
 
 ## Testing rule (from the user — overrides the rest of this file and the references)
 
@@ -40,6 +40,27 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 - **The executor writes no tests**, creates no throwaway test script and runs no suite "just in case". Typecheck and lint of the files it touched itself remain its job (cheap).
 - **A target project with no tests stays without tests.** Never add tests or test tooling (framework, config, CI step) to a project that has none; the TDD wave is not used. A project that already has tests keeps today's rule above (D5).
 - Outside the loop (small tweak, one-off fix, visual-only change): do not dispatch a verification agent. The cost (tens to hundreds of thousands of tokens per turn) does not pay off.
+- **When you dispatch `verifier-flow` (E2E), pass it this block as it is** (it is generated from the guard, so it is always current). A refusal that matches one of its lines is a call form to rewrite once, not a permission to ask the user for:
+
+<!-- BEGIN call-forms (generated from the guard's rule data by `cargo test -p guard-core call_forms`; do not edit by hand) -->
+### How the E2E must call things (forms the guard accepts)
+
+Most guard refusals in an E2E run are about HOW a call is written, not about a missing permission. Write each call in the form below the first time.
+
+- **Not this** (call form, `egress-host`): a `curl` whose URL is built in a sub-shell, read from a file or held in a variable with another name.
+  **This:** write the URL in the command (`curl http://localhost:5000/health`) or use a variable named `*_URL / *_HOST / *_BASE` that is defined in `.specs/project/.env.test` (`curl $API_URL/health`).
+- **Not this** (call form, `egress-host`): a wrapper function or script that forwards its arguments (`call() { curl "$@"; }`, `$*`), because the URL is no longer in the command.
+  **This:** call `curl` directly in every command, with the URL or the variable written in that command.
+- **Not this** (refused on purpose, `egress-tamper`): `python -S`, `python -E`, `python -I`: they skip the preload the loop's network layer depends on.
+  **This:** run the script as `python script.py` (or `python -c '...'`) without those flags.
+- **Not this** (call form, `egress-tamper`): `playwright-cli run-code --filename x.js` when the file does not exist yet (written in the same call), because the guard must read it first.
+  **This:** write the script file in one call and run it in a LATER call (`playwright-cli run-code --filename=<worktree>/e2e/step.js`), or pass the code inline.
+- **Not this** (call form, `repo-only`): a write, or a git command, from a folder that is not one of the loop's worktrees (for example the parent folder of the worktrees).
+  **This:** run from inside the worktree and keep the evidence and scripts in it.
+- **Not this** (call form, Claude Code): a token or password written in the command (`curl -H "Authorization: Bearer eyJ..."`).
+  **This:** let the test runner set it: `"<TOOLKIT>/bin/craft.exe" testenv exec --project <root> '<command>'` puts it in an environment variable, and the command sends `-H "Authorization: Bearer $JWT"`; never write the value.
+- **Network list:** only `localhost` and the hosts of `.specs/project/NETWORK.json` are reachable; a host that is not listed is `UNVERIFIED` with the host named in `NOTES`, never a reason to try another client.
+<!-- END call-forms -->
 
 ## Roles
 

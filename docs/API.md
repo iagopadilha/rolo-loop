@@ -149,6 +149,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/api/app/settings` | yes | yes |
 | `GET` | `/api/app/settings/mcp-servers` | no | no |
 | `POST` | `/api/app/settings/mcp-servers` | yes | yes |
+| `GET` | `/api/app/settings/skills` | no | no |
 
 The response shapes are the ones the panel front end in `app/frontend/` reads; they are pinned by `tools/api_diff.py`, which compares every route with the reference implementation.
 
@@ -173,6 +174,12 @@ These fields are added to the state payload (feature `live-status-and-notices`).
 | `processes` | `[{id, kind, turn, pid, started_at, label, feature, step, lanes: [{feature, step}], claude, claude_account}]` | What the engine started and is running now (`kind` is `claude_turn`, or `left_over` for a program a turn started and left running; each row also has `name` (program file name) and `cwd`). Empty when the loop is not alive. `label` is a one-line title such as `Loop turn 7 · feature a, b · step execute`. |
 | `now` | `{running, turn, label, started_at, pid, claude, claude_account, lanes: [{feature, name, step, stage, stage_title}]}` | The "running now" strip built from `processes` and the roadmap view. `{running: false, lanes: []}` when idle. |
 | `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `picker_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
+
+The state payload also carries the permissions journal (feature `e2e-dev-baseline`), read-only:
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit` or `baseline`; `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Nothing in the panel writes it: grants come from `harness grant` / `harness baseline` and the engine function `grant_access`. |
 
 Planning gates (`/api/pipeline` and the readiness routes) also change:
 
@@ -202,3 +209,19 @@ Each repo item of the check (`repos[]`) now also carries `delivery_source` (`rem
 `POST workspace/repos/{name}/commit-push` now commits the work without the loop's own `.specs/` state, pushes only the loop branch by explicit refspec, and answers with `check` (that repo's item from the Finish check, asked to the remote and GitHub) and `next` (what is still missing, in plain words), so the click never ends in a dead end.
 
 `POST wrap-up/finish` stops what the loop started first (`receipt.stopped_processes`), delivers only what the check found pending, and when it removes worktrees it moves the ignored `node_modules`, `bin` and `obj` to a background deletion (`receipt.background_delete`); a folder that cannot go is reported as `files_in_use` or `folder_left`, not as "not safe to remove". The PR body has only: what this PR delivers (the verified features by title), the quarantined and the unverified features, what to validate, the related PRs and one closing line.
+
+## Payload notes
+
+- `POST /p/{project_id}/api/planning/import`: the body may carry `on_existing` (`"merge"` or `"replace"`). When the feature folder `.specs/features/<slug>` already exists without an import record and `on_existing` is missing, the answer is `409` with `code: "feature_folder_exists"` and `choices: ["merge", "replace"]`. `merge` keeps the files already in the folder and adds the missing ones; `replace` swaps the folder for the imported copy. Any other value is a `400`.
+
+## Validation evidence (`GET state`)
+
+Additive fields from feature `validation-evidence-and-incentives`. Nothing carries a credential value; credentials appear by name only.
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `validations` | `[{feature, layer, what, evidence, status}]` | What each validation checks, per verified feature and layer (`api`, `ui`, or `run`). `evidence` is the list of artifact paths. `status` is `ok`, `failed`, `pending`, `unproven` (ok without evidence), `not-covered` (accepted), `rejected` (not-covered without proof of no surface), `blocked` (a call was refused) or `skipped-by-user`. |
+| `manual_checks` | `[{feature, what, reason, source}]` | What stays with the user and why. `source` is `by_design`, `not_covered`, `skipped` or `checkpoint`; `feature` is `null` for by-design items. |
+| `loop.credential_request` | `{name, names, feature, who, if_declined, options}` or `null` | Present while the loop waits on a credential decision. `options` always includes `continue without this layer`. |
+
+ROADMAP feature fields read by the gate: `evidence=a,b`, `no-surface=why_words`, `blocked-call=call`, `needs-credential=NAME`, `credential-owner=who`. The same facts may be written as `key: value` lines in `.specs/features/<slug>/E2E.md` (`evidence:`, `no-surface:`, `blocked-call:`, `credential:`, `credential-owner:`, `if-declined:`). With `--e2e`, `e2e=ok` without existing evidence and `e2e=not-covered` without a reason and proof of no surface end the run with `error` and a message naming what is missing; a blocked call or a missing credential ends it with `awaiting_user`. `.specs/project/loop/json/EVIDENCE.json` may override `surface_markers` and `no_surface_kinds`.

@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "cfg"
-description = "Configuration, environment layers and plugin/toolkit locator for claude-maestro"
+description = "Configuration, environment layers and plugin/toolkit locator for agent-maestro"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

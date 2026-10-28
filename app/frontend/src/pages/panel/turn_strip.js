@@ -8,6 +8,7 @@ import { toggleGlobalZone, globalZoneHidden, globalToggleArrow } from './layout.
 import { describeClaude } from './claude_badge.js';
 import { ctx } from './context.js';
 import { decisionsCounts, openDecisionsDialog } from './decisions.js';
+import { hasValidations, manualCount, openValidationsDialog } from './validations.js';
 
 const FALLBACK_DOT = '#4A4664';
 
@@ -45,6 +46,7 @@ export function TurnStrip() {
       : html`<span class="empty-note">${pipe.loading ? 'Reading the turns…' : 'no turn recorded yet'}</span>`}</div>
     <button type="button" class=${'z-btn-mono z-strip-decisions' + (open.critical ? ' is-critical' : '')} title="What the AI decided on its own: review, or ask for a change"
       onClick=${() => openDecisionsDialog({ state: ctx.state })}>AI decisions${openTotal ? html` <span class="z-strip-count">${openTotal}</span>` : null}</button>
+    ${hasValidations(ctx.state) ? html`<button type="button" class="z-btn-mono" title="What the loop checks per feature, and what only you can check" onClick=${openValidationsDialog}>Validations${manualCount(ctx.state) ? html` <span class="z-strip-count">${manualCount(ctx.state)}</span>` : null}</button>` : null}
     <button type="button" class="z-btn-mono" disabled=${pipe.sel == null} title="back to the latest turn (live)" onClick=${() => selectTurn(null)}>● latest</button>
   </section>`;
 }

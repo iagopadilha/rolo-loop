@@ -12,7 +12,7 @@ import { copyText } from '../../components/copy.js';
 import { NavbarStatus, NavbarMeter, navbarStatusKey, METER_ATTENTION_PCT } from '../../components/navbar_status.js';
 import { ctx, ui, STATUS, status, loop, pauseRequested, projectName } from './context.js';
 import { renderAll, requestRender, schedulePoll, stopPanel } from '../project_panel.js';
-import { costCapPause, costNumbers, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
+import { costCapPause, costForecast, costNumbers, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
 import { openReopenPlanning } from './reopen_planning.js';
 import { openFinishDialog } from './wrap_up.js';
 import { openWorkspaceDialog } from './workspace_dialog.js';
@@ -115,7 +115,9 @@ function CostMeter() {
   const cap = noRun ? (isNum(planCap) ? planCap : stateCap) : stateCap;
   if (!isNum(spent) && !isNum(cap)) return null;
   const pct = isNum(spent) && isNum(cap) && cap > 0 ? (spent / cap) * 100 : 0;
-  const title = isNum(cap) ? `Spent US$ ${isNum(spent) ? spent.toFixed(2) : DASH} of the US$ ${cap.toFixed(2)} limit of this run.` : 'Spent in this run.';
+  const { forecast } = costForecast();
+  const estimate = forecast && isNum(forecast.estimated_total) ? ` The engine estimates about US$ ${forecast.estimated_total.toFixed(2)} for the whole run${forecast.exceeds_cap ? ', which is above the limit' : ''}.` : '';
+  const title = (isNum(cap) ? `Spent US$ ${isNum(spent) ? spent.toFixed(2) : DASH} of the US$ ${cap.toFixed(2)} limit of this run.` : 'Spent in this run.') + estimate;
   return html`<${NavbarMeter} label="cost" value=${spent} max=${cap} unit="$" attention=${pct >= METER_ATTENTION_PCT} danger=${pct >= 100} title=${title} />`;
 }
 /** Progress meter: verified features of the roadmap. */
@@ -231,11 +233,11 @@ export function cancelShutdown() {
   const b = $('btn-shutdown'); if (b) b.focus();
 }
 
-const CLOSED_TITLE = { notfound: 'project not found · Claude Maestro', shutdown: 'app shut down · Claude Maestro' };
+const CLOSED_TITLE = { notfound: 'project not found · Agent Maestro', shutdown: 'app shut down · Agent Maestro' };
 export function updateTitle() {
   const state = ctx.state;
-  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Claude Maestro'; return; }
-  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Claude Maestro'; return; }
+  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Agent Maestro'; return; }
+  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Agent Maestro'; return; }
   const st = statusInfo(), v = loop().turn;
   document.title = `${ctx.offline ? 'disconnected · ' : ''}${st.label}${isNum(v) ? ' · turn ' + v : ''} · ${projectName() || 'project'}`;
 }

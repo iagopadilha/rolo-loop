@@ -1,6 +1,6 @@
 # Third-party software
 
-claude-maestro is MIT licensed (see `LICENSE`). The panel's front end ships two small libraries and two fonts, vendored unchanged in
+agent-maestro is MIT licensed (see `LICENSE`). The panel's front end ships two small libraries and two fonts, vendored unchanged in
 `app/frontend/vendor/` with their licences:
 
 | Library | Version file | Licence | Licence text |

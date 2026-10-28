@@ -12,6 +12,7 @@ use std::sync::Arc;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SETTINGS_ROUTE: &str = "/api/app/settings";
 const MCP_SERVERS_ROUTE: &str = "/api/app/settings/mcp-servers";
+const SKILLS_ROUTE: &str = "/api/app/settings/skills";
 
 pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "GET", "/api/app/health", get_health);
@@ -22,6 +23,7 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "POST", SETTINGS_ROUTE, save_setting);
     route(router, app, "GET", MCP_SERVERS_ROUTE, get_mcp_servers);
     route(router, app, "POST", MCP_SERVERS_ROUTE, save_mcp_servers);
+    route(router, app, "GET", SKILLS_ROUTE, get_skills);
 }
 
 fn get_health(app: &App, _: &Request) -> Response {
@@ -102,6 +104,11 @@ fn save_setting(app: &App, request: &Request) -> Response {
 // ------------------------------------------------ MCP servers: `{servers, extra, confirm: true}` replaces both lists
 fn get_mcp_servers(app: &App, request: &Request) -> Response {
     Response::json(200, app.mcp_servers().get_servers(&request.get_query("project")))
+}
+
+/// Skills found on this machine (name, one-line description, source), the saved choice and the SK1 warning. Read only.
+fn get_skills(app: &App, request: &Request) -> Response {
+    Response::json(200, app.skills_catalog().get(&request.get_query("project")))
 }
 
 fn save_mcp_servers(app: &App, request: &Request) -> Response {

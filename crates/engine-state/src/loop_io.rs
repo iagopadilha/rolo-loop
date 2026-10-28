@@ -20,6 +20,30 @@ pub fn hidden(command: &mut Command) -> &mut Command {
 
 /// Windows process creation flag: no console window for the child.
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// True when the tracked file `path` differs from HEAD only in its line endings (CRLF vs LF), e.g. after `core.autocrlf` flipped on a
+/// checkout. A real edit, a mode change, an untracked or a deleted file is `false`.
+pub fn line_ending_only_change(cwd: &str, path: &str) -> bool {
+    let (code, out, _) = git(cwd, &["diff", "HEAD", "--ignore-cr-at-eol", "--numstat", "--", path]);
+    if code != 0 {
+        return false;
+    }
+    let (plain_code, plain, _) = git(cwd, &["diff", "HEAD", "--numstat", "--", path]);
+    if plain_code != 0 || plain.is_empty() {
+        return false; // nothing differs at all (or git failed): not a line-ending change
+    }
+    // every remaining line must be a zero-line change; a mode change shows "0 0" in both, so compare with the summary
+    let real = out.lines().any(|l| {
+        let mut cols = l.split('\t');
+        let (added, removed) = (cols.next().unwrap_or("0"), cols.next().unwrap_or("0"));
+        added != "0" || removed != "0"
+    });
+    !real && git(cwd, &["diff", "HEAD", "--summary", "--", path]).1.is_empty()
+}
+
+/// The status rows without the files whose only change is the line endings (see [`line_ending_only_change`]).
+pub fn drop_line_ending_only(cwd: &str, rows: Vec<StatusRow>) -> Vec<StatusRow> {
+    rows.into_iter().filter(|r| !(r.status.trim() == "M" && line_ending_only_change(cwd, &r.path))).collect()
+}
 
 /// `(exit code, stdout stripped, stderr stripped)`; a spawn failure is `(1, "", message)`.
 pub fn run(program: &str, args: &[&str], cwd: Option<&str>) -> (i32, String, String) {
@@ -181,6 +205,36 @@ pub fn worktree_of(repo: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn git_ok(dir: &Path, args: &[&str]) {
+        let (code, _, err) = git(&dir.display().to_string(), args);
+        assert_eq!(code, 0, "git {args:?}: {err}");
+    }
+
+    #[test]
+    fn a_crlf_only_change_is_not_a_change_but_a_real_edit_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path().display().to_string();
+        git_ok(dir.path(), &["init", "-q"]);
+        git_ok(dir.path(), &["config", "user.name", "t"]);
+        git_ok(dir.path(), &["config", "user.email", "t@example.com"]);
+        git_ok(dir.path(), &["config", "core.autocrlf", "false"]);
+        std::fs::write(dir.path().join("a.txt"), "one\ntwo\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "one\ntwo\n").unwrap();
+        std::fs::write(dir.path().join("c.txt"), "one\ntwo\n").unwrap();
+        git_ok(dir.path(), &["add", "."]);
+        git_ok(dir.path(), &["commit", "-q", "-m", "init"]);
+        std::fs::write(dir.path().join("a.txt"), "one\r\ntwo\r\n").unwrap(); // line endings only
+        std::fs::write(dir.path().join("b.txt"), "one\r\nTWO\r\n").unwrap(); // CRLF and a real edit
+        assert!(line_ending_only_change(&d, "a.txt"));
+        assert!(!line_ending_only_change(&d, "b.txt"));
+        assert!(!line_ending_only_change(&d, "c.txt"), "an unchanged file is not a line-ending change");
+        assert!(!line_ending_only_change(&d, "missing.txt"));
+        let (_, rows, _) = status_rows(&d, &[]);
+        assert_eq!(rows.len(), 2);
+        let kept = drop_line_ending_only(&d, rows);
+        assert_eq!(kept.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), vec!["b.txt"]);
+    }
 
     #[test]
     fn porcelain_records_with_renames() {
