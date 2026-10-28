@@ -132,6 +132,20 @@ export function openFinishDialog({ state, project, onDone } = {}) {
     ];
   };
 
+  /** Runs the one action of a step the back end sent (`{id, label, method, route}`), then reads the check again: the steps always come from it. */
+  const runStepAction = async (action) => {
+    s.busy = true; s.error = ''; s.note = ''; draw();
+    try {
+      const route = String(action.route || '').replace(/^\/+/, '');
+      const res = String(action.method || 'POST').toUpperCase() === 'GET' ? await ctx.api.get(route, 120000) : await ctx.api.post(route, {}, 120000);
+      s.note = res && res.next ? txt(res.next) : `${action.label}: done`;
+      s.data = await ctx.api.get('wrap-up', 30000);
+    } catch (failure) { s.error = failure.message; } finally { s.busy = false; draw(); }
+  };
+  /** The steps of the back end (GET wrap-up `steps`), in the shape the Stepper renders; the click runs the step's own action. */
+  const backendSteps = () => list(s.data.steps).map((step) => ({ id: step.id, title: step.title, what: step.what, status: step.status, result: step.result,
+    action: step.action && step.action.route ? { label: step.action.label || 'Run', disabled: s.busy, onClick: () => runStepAction(step.action) } : null }));
+
   const body = () => {
     if (s.receipt) return html`<${Receipt} receipt=${s.receipt} />`;
     if (s.error && !s.data) return html`<div class="nl-box nl-bad" role="alert">${s.error}</div>`;
@@ -140,7 +154,7 @@ export function openFinishDialog({ state, project, onDone } = {}) {
     const delivery = s.data.delivery || {};
     return html`<div class="wu-dlg">
       <p class="dlg-text">${delivery.remove_worktree_on_finish === false ? 'Finishing runs the delivery (push and pull request) and keeps the worktree.' : 'Finishing delivers what is missing, saves a backup, puts the plan back in the repository and removes the worktree. The branch stays.'}</p>
-      <${Stepper} steps=${finishSteps(repos)} label="Steps to finish the loop" />
+      <${Stepper} steps=${list(s.data.steps).length ? backendSteps() : finishSteps(repos)} label="Steps to finish the loop" />
       ${repos.length ? html`<ul class="wu-repos" aria-label="Check per repository">${repos.map((repo, index) => html`<${RepoCheck} key=${index} repo=${repo} blocked=${list(s.reasons).map((reason) => reason.repo)} />`)}</ul>` : html`<div class="hint">No repository reported.</div>`}
       ${unreviewed() ? html`<div class="nl-box nl-warn" role="alert"><strong>${`${unreviewed()} critical decision${unreviewed() === 1 ? '' : 's'} not reviewed.`}</strong>
         <div><button type="button" class="btn btn-sm" onClick=${() => openDecisionsDialog({ project, state })}>Review them</button></div>

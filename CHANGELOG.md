@@ -6,6 +6,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Changed
 
+- Panel: the Finish dialog shows the steps the engine sends (`GET wrap-up` `steps`) and each step's own action runs the engine call and re-reads the check.
 - Engine: the engine owns every process it starts for a loop. They run in a Windows job object (crate `winproc`, the only unsafe code), are recorded with pid, start time and folder, programs a turn leaves running (a dev server, an app started for a check) are recorded after each turn, and all of them are stopped, by pid only, when the loop ends, is stopped, errors or Finish runs (FD12, FD8). A reused pid or the engine itself is never stopped.
 - Engine: a worktree that cannot be removed names the cause (`files_in_use` with the programs by name and pid, or `folder_left`) and says nothing is unsafe; ignored `node_modules`, `bin` and `obj` go to a hidden background deletion with the long-path form so Finish does not wait (FD7, FD11). New `harness close-loop --stop-processes` and `--delete-leftover --repos <name>`.
 - Finish tells the truth: the push is what the remote holds and the pull request is what GitHub lists; a `delivery.json` of another branch is ignored, a dry run is never kept as a state, and every red line carries the real reason in plain words and the action that fixes it (FD1, FD2, FD3, FD5, U2). The check no longer calls a pushed, delivered run "not safe".
