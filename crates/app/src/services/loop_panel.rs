@@ -290,7 +290,7 @@ impl LoopPanelService<'_> {
             "planning_required": self.app.planning_requirement().is_planning_required(context),
             "answers": parse_answers(&files.read_state_file(&work_dir, "ANSWERS.md")),
             "turns": turn_rows, "quarantine": quarantine,
-            "guard_events": guard["events"], "guard_counts": guard["counts"],
+            "guard_events": guard["events"], "guard_counts": guard["counts"], "guard_waiting": guard["waiting"],
             "monitor": {"url": project_url, "idle_in_s": null, "shutdown_in_s": shutdown},
         })
     }

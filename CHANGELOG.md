@@ -6,6 +6,8 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Changed
 
+- Readiness: a well-known root file (CLAUDE.md, README, licence, CI folders, repo settings) no longer warns as "outside any subproject" (W2); the `auto` permission mode is probed from the `claude` help and nothing is said when it works (W4); the forgotten-dependencies warning points at the one-click apply (W3).
+- Panel: a stopped loop always shows one fixed "Continue" button in the pause banner, and the status dialog opens once per question even across page reloads (P6).
 - Panel: the Finish dialog shows the steps the engine sends (`GET wrap-up` `steps`) and each step's own action runs the engine call and re-reads the check.
 - Engine: the engine owns every process it starts for a loop. They run in a Windows job object (crate `winproc`, the only unsafe code), are recorded with pid, start time and folder, programs a turn leaves running (a dev server, an app started for a check) are recorded after each turn, and all of them are stopped, by pid only, when the loop ends, is stopped, errors or Finish runs (FD12, FD8). A reused pid or the engine itself is never stopped.
 - Engine: a worktree that cannot be removed names the cause (`files_in_use` with the programs by name and pid, or `folder_left`) and says nothing is unsafe; ignored `node_modules`, `bin` and `obj` go to a hidden background deletion with the long-path form so Finish does not wait (FD7, FD11). New `harness close-loop --stop-processes` and `--delete-leftover --repos <name>`.
@@ -24,6 +26,11 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Added
 
+- `harness resume <repo> [--instruction TEXT]` resumes a stopped loop from outside the panel with the panel's own checks on the saved command and no token; `--instruction` is `--answer` for every stopped state (H5, G8).
+- `GET state` `guard_waiting`: which install the guard refused and which feature waits for it, shown in the pause banner (I5). `GET loop/settings` gains `scripts` (the project's own scripts, safe or ask-once, with the reason a turn may wait; `POST scripts/answer` remembers an answer, I3) and `setup` (the detected Setup line, I6).
+- `POST dependencies/apply` and `graph.dependency_proposals`: the forgotten dependencies shown and applied in one call (W3).
+- The package registries of the stacks a project uses (node, python, dotnet with the NuGet CDN, go, rust, java, php, ruby) are readable (GET/HEAD) by default (I7).
+- Settings lists the main and backup Claude commands with the account each signs in to (A3); every change of the running account reaches every notice channel (A2); the account wrapper's status table on a good turn is an info item, not a stderr complaint (A5).
 - Validation report in `GET state` (`validation_report`): failed and pending checks grouped by cause (VA2), the validation plan as a versioned file per feature with change tracking (VA3), cost and attempts per feature with an estimate of what is left (VA5), a review of the checks (requirements with no case, weak cases; VA6), findings classed `fix-now`/`decide`/`manual` (Z2), `fix-now` only with the written intended behaviour and the wrong side named (Z4), and the test data the run left behind (Z3).
 - A turn that changes an `e2e=` result without writing any of its listed evidence stops the run (G7). A feature `checkpoint=` is now a deliberate pause, `loop.pause_kind = validation_checkpoint`, with its own notice title (V3).
 - E2E gate measures evidence, not labels (G6, G9, C4, VA1, VA4, V1-V4, Z1): `e2e=ok` needs an existing result artifact, `e2e=not-covered` needs a stated reason plus proof the feature has no surface, a refused call or a missing credential stops with `awaiting_user` (credential NAME, who gives it, what if declined, option "continue without this layer"). `GET state` gains `validations`, `manual_checks` and `loop.credential_request` (docs/API.md).

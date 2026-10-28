@@ -267,6 +267,10 @@ Additive, read-only. One object that joins what the validation produced; every l
 
 `POST scripts/answer` with `{command, allow}` remembers the answer once (kept in `.specs/project/loop/json/SCRIPTS.json`, command text only, never run from there). Only a script the project declares is accepted (`400` otherwise). It answers `{ok, command, allow, scripts}` with the fresh report.
 
+### What waits for an install (I5)
+
+`GET state` also returns `guard_waiting`: `[{command, rule, turn, features, text}]`, one per command the guard refused under the `install` rule in the latest turn that had a refusal. `features` are the ones the loop works on (LOOP.json `feature`, else the ones being specced or built) and `text` reads `waiting for: <command> (feature <slug>). Run it yourself in the loop worktree, or release it once with a permission rule.` The command is redacted and clipped. The pause banner shows it while the loop is stopped or waiting.
+
 ### Command line: resume and instruct (H5, G8)
 
 - `harness resume <repo> [--instruction TEXT]` resumes a stopped loop from outside the panel. It reads the command the loop saved (`.specs/project/loop/json/LOOP-CMD.json`), checks and rebuilds it with the same rules as the panel's Resume (this program, the `loop` subcommand, only known options with checked values, this repository, a folder of this project), adds the instruction when there is one and the `claude` commands of the user's config, then runs `harness loop`. It needs no token. A second loop on the same worktree is refused by the loop's own lock; a saved command that is not trusted starts nothing and says so (exit 2).

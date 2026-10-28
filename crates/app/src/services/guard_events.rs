@@ -41,6 +41,29 @@ pub fn build_guard_event(line: &Value) -> Value {
     Value::Object(event)
 }
 
+/// I5. What the loop is waiting for because the guard refused an install: `[{command, rule, turn, features, text}]`, from the refusals of the
+/// LATEST turn that had one. `features` are the ones that turn worked on (the caller gives them). The text tells the user which command it
+/// is and which feature waits for it, so a stopped feature is never a silent one.
+pub fn waiting_for(lines: &[Value], features: &[String]) -> Vec<Value> {
+    let blocked = |line: &&Value| BLOCK_DECISIONS.contains(&text(line, "decision").trim().to_lowercase().as_str()) && text(line, "rule") == "install";
+    let installs: Vec<&Value> = lines.iter().filter(blocked).collect();
+    let turn_of = |line: &Value| line.get("turn").and_then(Value::as_i64).unwrap_or(0);
+    let latest = installs.iter().map(|l| turn_of(l)).max().unwrap_or(0);
+    let mut out: Vec<Value> = Vec::new();
+    for line in installs.iter().filter(|l| turn_of(l) == latest) {
+        let attempt = text(line, "attempt");
+        let shown = if attempt.trim().is_empty() { text(line, "detail") } else { attempt };
+        let command = clip_redacted_text(&shown, GUARD_DETAIL_LIMIT);
+        if command.is_empty() || out.iter().any(|o| o["command"] == command) {
+            continue;
+        }
+        let who = if features.is_empty() { String::new() } else { format!(" (feature {})", features.join(", ")) };
+        out.push(json!({"command": command, "rule": "install", "turn": if latest > 0 { json!(latest) } else { Value::Null }, "features": features,
+            "text": format!("waiting for: {command}{who}. Run it yourself in the loop worktree, or release it once with a permission rule.")}));
+    }
+    out
+}
+
 pub struct GuardEventService<'a> {
     pub app: &'a App,
 }
@@ -69,13 +92,33 @@ impl GuardEventService<'_> {
             counts.insert(rule, json!(count));
         }
         let recent: Vec<&Value> = blocks.iter().rev().take(GUARD_EVENTS_LIMIT).collect();
-        json!({"events": recent, "counts": counts})
+        let specs = std::path::Path::new(work_dir).join(".specs").join("project").display().to_string();
+        let features = engine_state::feature_cost::features_of_turn(work_dir, &specs, &engine_state::feature_cost::active_features(&specs));
+        json!({"events": recent, "counts": counts, "waiting": waiting_for(&self.app.loop_files.read_guard_lines(work_dir), &features)})
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_install_the_guard_refused_says_which_command_and_which_feature_waits() {
+        let lines = vec![
+            json!({"turn": 3, "rule": "install", "decision": "blocked", "detail": "installing a dependency", "attempt": "npm install left-pad"}),
+            json!({"turn": 4, "rule": "install", "decision": "blocked", "detail": "installing a dependency", "attempt": "npm install left-pad token=abcdefghij12345"}),
+            json!({"turn": 4, "rule": "install", "decision": "blocked", "detail": "installing a dependency", "attempt": "npm install left-pad token=abcdefghij12345"}),
+            json!({"turn": 4, "rule": "other-rule", "decision": "blocked", "detail": "something else"}),
+            json!({"turn": 4, "rule": "install", "decision": "allowed", "attempt": "npm ci"}),
+        ];
+        let waiting = waiting_for(&lines, &["checkout".to_string()]);
+        assert_eq!(waiting.len(), 1, "only the latest turn, once per command: {waiting:?}");
+        assert_eq!((waiting[0]["turn"].clone(), waiting[0]["features"].clone()), (json!(4), json!(["checkout"])));
+        let text = waiting[0]["text"].as_str().unwrap();
+        assert!(text.starts_with("waiting for: npm install left-pad token=[redacted] (feature checkout)."), "{text}");
+        assert!(waiting_for(&[], &[]).is_empty());
+        assert!(waiting_for(&lines[..1], &[])[0]["text"].as_str().unwrap().starts_with("waiting for: npm install left-pad."));
+    }
 
     #[test]
     fn only_blocks_count_and_the_newest_come_first() {

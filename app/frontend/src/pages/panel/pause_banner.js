@@ -24,6 +24,9 @@ export const canContinue = () => !!ctx.state && STOPPED_STATUSES.includes(status
 /** Opens the question dialog (the same one the "waiting for you" chip opens); it used to flip a flag nobody read and scroll to an element that does not exist. */
 const showAnswer = openStatusDialog;
 
+/** I5. The install the guard refused, with the feature that waits for it ("waiting for: npm install x (feature y)"); '' when there is none. */
+const waitingLine = () => { const w = list(ctx.state && ctx.state.guard_waiting)[0]; return w && w.text ? ' · ' + clip(w.text, 220) : ''; };
+
 export function PauseBanner() {
   if (!pauseBannerVisible()) return null;
   const quarantined = list(ctx.state.quarantine), first = quarantined[0], awaiting = status() === 'awaiting_user';
@@ -31,13 +34,13 @@ export function PauseBanner() {
   if (!first && !awaiting) {
     return html`<div class="z-pause" role="status">
       <span class="z-pause-kick mono">STOPPED</span>
-      <div class="z-pause-text"><span>${clip(firstLine(loop().reason), REASON_CLIP) || 'The loop is stopped.'}</span><span class="z-pause-dim"> · fix what stopped it, then continue</span></div>
+      <div class="z-pause-text"><span>${clip(firstLine(loop().reason), REASON_CLIP) || 'The loop is stopped.'}</span><span class="z-pause-dim">${waitingLine() || ' · fix what stopped it, then continue'}</span></div>
       <button type="button" class="z-pause-btn" id="btn-continue" disabled=${!!ui.busy.answer} title="relaunches the loop with the same command, from where it stopped" onClick=${() => sendResume('resume request')}>Continue</button></div>`;
   }
   if (!first) {
     return html`<div class="z-pause" role="status">
       <span class="z-pause-kick mono">NEEDS YOU</span>
-      <div class="z-pause-text"><span>${clip(firstLine(loop().reason), REASON_CLIP)}</span><span class="z-pause-dim"> · loop paused</span></div>
+      <div class="z-pause-text"><span>${clip(firstLine(loop().reason), REASON_CLIP)}</span><span class="z-pause-dim">${waitingLine() || ' · loop paused'}</span></div>
       <button type="button" class="z-pause-btn" onClick=${showAnswer}>Answer</button></div>`;
   }
   const more = quarantined.length - 1;
