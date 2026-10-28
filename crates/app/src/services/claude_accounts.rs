@@ -475,7 +475,10 @@ mod tests {
         ];
         let list = command_accounts(&rows);
         assert_eq!(list.len(), 3);
-        assert_eq!((list[0]["command"].clone(), list[0]["role"].clone(), list[0]["email"].clone(), list[0]["plan"].clone()), (json!("claude"), json!("main"), json!("dev@example.com"), json!("team")));
+        assert_eq!(
+            (list[0]["command"].clone(), list[0]["role"].clone(), list[0]["email"].clone(), list[0]["plan"].clone()),
+            (json!("claude"), json!("main"), json!("dev@example.com"), json!("team"))
+        );
         assert_eq!((list[1]["command"].clone(), list[1]["method"].clone(), list[1]["found"].clone()), (json!("cc"), json!("token"), json!(true)));
         assert_eq!((list[2]["found"].clone(), list[2]["email"].clone()), (json!(false), json!("")));
         assert!(command_accounts(&[]).is_empty());

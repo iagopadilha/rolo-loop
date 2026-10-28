@@ -517,6 +517,7 @@ impl LoopControlService<'_> {
                 "delivery": self.read_delivery(context),
                 "workspace": {"repos": repos, "worktree_created": worktree_created, "branch": text_of(meta.get("branch")), "reattach_branch": reattach_branch, "uncommitted": uncommitted},
                 "models": {"orchestrator": self.app.config.orchestrator_model, "agents": AGENTS_MODEL},
+                "setup": engine_state::detect_setup::setup_suggestion(context.repo_path(), loop_settings.settings.get("setup").and_then(Value::as_str).unwrap_or("")),
             }),
         )
     }

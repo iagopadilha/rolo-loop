@@ -143,7 +143,8 @@ pub fn hook_path_problems(ctx: &AppCtx) -> Vec<String> {
 
 /// claude version, permission modes and git: what changes from machine to machine.
 pub fn environment_problems(opts: &LoopOpts, repo: &str) -> Pair {
-    let (mut problems, mut warns) = (Vec::new(), Vec::new());
+    let mut problems = Vec::new();
+    let warns = Vec::new();
     let binary = claude_binaries::resolve(if opts.claude.is_empty() { "claude" } else { &opts.claude });
     if !binary.is_empty() && !binary.ends_with(".py") {
         let (_, out, err) = run_timeout(&binary, &["--help"], None, 60);
@@ -951,7 +952,10 @@ mod tests {
         let help = "--permission-mode <mode> (choices: \"acceptEdits\", \"auto\", \"dontAsk\")";
         assert_eq!(auto_mode_problem("auto", help), None, "a working auto mode says nothing");
         assert_eq!(auto_mode_problem("acceptEdits", "no such mode"), None);
-        assert_eq!(auto_mode_problem("auto", "--permission-mode <mode> (choices: \"acceptEdits\")").as_deref(), Some("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits"));
+        assert_eq!(
+            auto_mode_problem("auto", "--permission-mode <mode> (choices: \"acceptEdits\")").as_deref(),
+            Some("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits")
+        );
     }
 
     #[test]

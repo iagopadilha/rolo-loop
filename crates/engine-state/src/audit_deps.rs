@@ -683,15 +683,24 @@ mod tests {
     #[test]
     fn proposals_are_read_only_and_apply_now_writes_them_once() {
         let dir = project(&[
-            (".specs/project/ROADMAP.md", "- [users-api] status=approved paths=src/users
+            (
+                ".specs/project/ROADMAP.md",
+                "- [users-api] status=approved paths=src/users
 - [orders-api] status=approved paths=src/orders
-"),
-            ("src/orders/svc.ts", "import x from '../users/model';
-"),
+",
+            ),
+            (
+                "src/orders/svc.ts",
+                "import x from '../users/model';
+",
+            ),
         ]);
         let root = dir.path().display().to_string();
         let shown = proposals(&root);
-        assert_eq!((shown["proposals"][0]["feature"].clone(), shown["proposals"][0]["depends_on"].clone(), shown["proposals"][0]["state"].clone()), (json!("orders-api"), json!("users-api"), json!("pending")));
+        assert_eq!(
+            (shown["proposals"][0]["feature"].clone(), shown["proposals"][0]["depends_on"].clone(), shown["proposals"][0]["state"].clone()),
+            (json!("orders-api"), json!("users-api"), json!("pending"))
+        );
         let before = std::fs::read_to_string(dir.path().join(".specs/project/ROADMAP.md")).unwrap();
         assert!(!before.contains("deps="), "listing writes nothing");
         let done = apply_now(&root);

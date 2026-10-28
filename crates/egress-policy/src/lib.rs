@@ -492,7 +492,75 @@ pub fn load_effective(project_root: &Path, data_dir: &Path, env_names: &[String]
         Some(v) => v.clone(),
         None => Value::Array(vec![]),
     };
-    effective_from(&Value::Array(texts), &global, &denies, as_bool(config.get("egress_builtin_read"), true), env_names, notes, &broken)
+    let builtin_read = as_bool(config.get("egress_builtin_read"), true);
+    let mut effective = effective_from(&Value::Array(texts), &global, &denies, builtin_read, env_names, notes, &broken);
+    if builtin_read {
+        // I7: a build or a package restore needs the registries of the stacks the project uses, read only (GET and HEAD)
+        for (_, hosts) in stack_registry_hosts(project_root) {
+            for host in hosts {
+                if let Ok(entry) = parse_entry(&Value::String((*host).to_string()), ORIGIN_BUILTIN) {
+                    effective.allow.push(entry);
+                }
+            }
+        }
+    }
+    effective
+}
+
+/// I7. The package registries and download hosts a stack needs to restore its dependencies, as `(stack, hosts)`: only the stacks the project
+/// uses (found by their marker files, up to two folders down; dependency, build and VCS folders are not entered). Read only: the hosts join
+/// the built-in read list, so a build can fetch packages but nothing can be sent there. Turn the built-in list off, or deny a host in
+/// `egress_never`, to remove them.
+pub fn stack_registry_hosts(project_root: &Path) -> Vec<(&'static str, &'static [&'static str])> {
+    let mut found: BTreeSet<&'static str> = BTreeSet::new();
+    scan_stack_markers(project_root, 0, &mut found);
+    STACK_REGISTRY_HOSTS.iter().filter(|(stack, _)| found.contains(stack)).map(|(stack, hosts)| (*stack, *hosts)).collect()
+}
+
+/// `(stack, marker file names or extensions)`. A marker starting with `.` is an extension.
+const STACK_MARKERS: [(&str, &[&str]); 8] = [
+    ("node", &["package.json"]),
+    ("python", &["requirements.txt", "pyproject.toml", "Pipfile", "setup.py"]),
+    ("dotnet", &[".csproj", ".sln", ".fsproj", "Directory.Packages.props"]),
+    ("go", &["go.mod"]),
+    ("rust", &["Cargo.toml"]),
+    ("java", &["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle"]),
+    ("php", &["composer.json"]),
+    ("ruby", &["Gemfile"]),
+];
+
+/// Hosts per stack (registries and the hosts their files come from).
+const STACK_REGISTRY_HOSTS: [(&str, &[&str]); 8] = [
+    ("node", &["registry.npmjs.org", "registry.yarnpkg.com"]),
+    ("python", &["pypi.org", "files.pythonhosted.org"]),
+    ("dotnet", &["api.nuget.org", "globalcdn.nuget.org", "azuresearch-usnc.nuget.org", "azuresearch-ussc.nuget.org"]),
+    ("go", &["proxy.golang.org", "sum.golang.org"]),
+    ("rust", &["index.crates.io", "static.crates.io", "crates.io"]),
+    ("java", &["repo.maven.apache.org", "repo1.maven.org", "plugins.gradle.org", "services.gradle.org"]),
+    ("php", &["repo.packagist.org", "packagist.org"]),
+    ("ruby", &["rubygems.org", "index.rubygems.org"]),
+];
+
+const MARKER_SCAN_DEPTH: usize = 2;
+const SKIPPED_FOLDERS: [&str; 8] = ["node_modules", "target", "bin", "obj", ".venv", "venv", ".specs", "dist"];
+
+fn scan_stack_markers(folder: &Path, depth: usize, found: &mut BTreeSet<&'static str>) {
+    let Ok(entries) = std::fs::read_dir(folder) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        if is_dir {
+            if depth < MARKER_SCAN_DEPTH && !name.starts_with('.') && !SKIPPED_FOLDERS.contains(&name.as_str()) {
+                scan_stack_markers(&entry.path(), depth + 1, found);
+            }
+            continue;
+        }
+        for (stack, markers) in STACK_MARKERS {
+            if markers.iter().any(|m| if m.starts_with('.') { name.to_ascii_lowercase().ends_with(m) } else { name == *m }) {
+                found.insert(stack);
+            }
+        }
+    }
 }
 
 /// Exact or `*.domain` (needs at least one extra label, never the bare domain).
@@ -751,6 +819,42 @@ mod tests {
         let eff = effective_from(&json!([]), &json!([]), &[], true, &[], vec![], "NETWORK.json");
         assert!(!allows(&eff, "GET", "https://github.com/x", false, None).0);
         assert!(allows(&eff, "GET", "http://localhost:3000/", false, None).0);
+    }
+
+    fn project_with(files: &[&str]) -> tempfile::TempDir {
+        let project = tempfile::tempdir().unwrap();
+        for file in files {
+            let path = project.path().join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "x").unwrap();
+        }
+        project
+    }
+
+    #[test]
+    fn the_registries_of_the_detected_stacks_are_readable_and_only_those() {
+        let data = tempfile::tempdir().unwrap();
+        let project = project_with(&["api/App.Api.csproj", "web/package.json", "node_modules/dep/Cargo.toml", ".hidden/go.mod"]);
+        let stacks: Vec<&str> = stack_registry_hosts(project.path()).iter().map(|(s, _)| *s).collect();
+        assert_eq!(stacks, vec!["node", "dotnet"], "markers inside dependency and hidden folders do not count");
+        let eff = load_effective(project.path(), data.path(), &[]);
+        assert!(allows(&eff, "GET", "https://globalcdn.nuget.org/packages/x.nupkg", false, None).0);
+        assert!(allows(&eff, "GET", "https://registry.yarnpkg.com/left-pad", false, None).0);
+        assert!(!allows(&eff, "GET", "https://proxy.golang.org/x/@v/list", false, None).0, "go is not a stack of this project");
+        assert!(!allows(&eff, "POST", "https://globalcdn.nuget.org/upload", false, None).0, "read only");
+    }
+
+    #[test]
+    fn stack_registries_follow_the_builtin_switch_and_the_deny_list() {
+        let data = tempfile::tempdir().unwrap();
+        let project = project_with(&["go.mod", "pom.xml"]);
+        std::fs::write(data.path().join("config.json"), r#"{"egress_builtin_read": false}"#).unwrap();
+        let off = load_effective(project.path(), data.path(), &[]);
+        assert!(!allows(&off, "GET", "https://proxy.golang.org/x", false, None).0);
+        std::fs::write(data.path().join("config.json"), r#"{"egress_never": ["repo1.maven.org"]}"#).unwrap();
+        let denied = load_effective(project.path(), data.path(), &[]);
+        assert!(allows(&denied, "GET", "https://proxy.golang.org/x", false, None).0);
+        assert!(!allows(&denied, "GET", "https://repo1.maven.org/maven2/x", false, None).0);
     }
 
     #[test]

@@ -219,6 +219,22 @@ pub fn detect_setup(folder: &str) -> Option<String> {
     }
 }
 
+/// I6. What the Setup line of the loop is, for the planning and the Start screens: `{command, source, steps}`. `source` is `roadmap` (the
+/// ROADMAP header already names a command), `detected` (the repo's own manifests give one, so the screen can fill the line with it) or
+/// `none`. `steps` is `[{dir, command, routine}]` of the detected plan, empty for `roadmap`. Reads folders only; nothing runs.
+pub fn setup_suggestion(folder: &str, roadmap_setup: &str) -> serde_json::Value {
+    let written = roadmap_setup.trim();
+    if !written.is_empty() {
+        return serde_json::json!({"command": written, "source": "roadmap", "steps": []});
+    }
+    let plan = install_plan(folder);
+    if plan.is_empty() {
+        return serde_json::json!({"command": "", "source": "none", "steps": []});
+    }
+    let steps: Vec<serde_json::Value> = plan.iter().map(|s| serde_json::json!({"dir": s.dir, "command": s.display(), "routine": s.routine})).collect();
+    serde_json::json!({"command": plan.iter().map(InstallStep::display).collect::<Vec<_>>().join(" && "), "source": "detected", "steps": steps})
+}
+
 fn matches_any(name: &str, patterns: &[&str]) -> bool {
     patterns.iter().any(|p| fnmatch_nt(name, p))
 }
@@ -260,6 +276,23 @@ mod tests {
         let p = root.join(relative);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, "{}").unwrap();
+    }
+
+    #[test]
+    fn the_setup_line_is_the_roadmap_one_else_the_detected_one_else_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().display().to_string();
+        assert_eq!(setup_suggestion(&root, "")["source"], "none");
+        touch(dir.path(), "package.json");
+        touch(dir.path(), "package-lock.json");
+        let found = setup_suggestion(&root, "  ");
+        assert_eq!((found["source"].clone(), found["command"].clone()), (serde_json::json!("detected"), serde_json::json!("npm ci")));
+        assert_eq!(found["steps"][0], serde_json::json!({"dir": "", "command": "npm ci", "routine": true}));
+        let written = setup_suggestion(&root, "make deps");
+        assert_eq!(
+            (written["source"].clone(), written["command"].clone(), written["steps"].clone()),
+            (serde_json::json!("roadmap"), serde_json::json!("make deps"), serde_json::json!([]))
+        );
     }
 
     #[test]
