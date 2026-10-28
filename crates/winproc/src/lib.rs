@@ -314,11 +314,12 @@ mod tests {
     fn closing_a_job_ends_its_processes() {
         use std::os::windows::process::CommandExt;
         let job = Job::new().expect("job");
-        let child = std::process::Command::new("cmd").args(["/C", "ping -n 40 127.0.0.1 > nul"]).creation_flags(0x0800_0000).spawn().unwrap();
+        let mut child = std::process::Command::new("cmd").args(["/C", "ping -n 40 127.0.0.1 > nul"]).creation_flags(0x0800_0000).spawn().unwrap();
         let root = child.id();
         assert!(job.assign(root) && pid_alive(root));
         drop(job);
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!pid_alive(root));
+        let _ = child.wait();
     }
 }

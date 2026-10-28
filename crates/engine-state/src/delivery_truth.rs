@@ -89,7 +89,7 @@ pub fn push_state(worktree: &str, branch: &str) -> Push {
     if code != 0 {
         return Push::Unreachable(short(if err.trim().is_empty() { "the remote did not answer" } else { &err }, 160));
     }
-    let Some(remote) = out.trim().split_whitespace().next().map(String::from) else { return Push::Missing };
+    let Some(remote) = out.split_whitespace().next().map(String::from) else { return Push::Missing };
     if remote == head {
         return Push::Held;
     }
