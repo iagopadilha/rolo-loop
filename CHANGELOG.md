@@ -13,6 +13,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Panel: the navbar status of a finished loop opens the Finish dialog instead of a second summary (F3); a question opens by itself only when no other dialog is open (F4).
 
 ### Changed
+- The standard development command (`dotnet run`, `npm run dev`, ...) is released by default and asks nothing. Migrations still ask once; production is never released.
 
 - Readiness: a well-known root file (CLAUDE.md, README, licence, CI folders, repo settings) no longer warns as "outside any subproject" (W2); the `auto` permission mode is probed from the `claude` help and nothing is said when it works (W4); the forgotten-dependencies warning points at the one-click apply (W3).
 - Panel: a stopped loop always shows one fixed "Continue" button in the pause banner, and the status dialog opens once per question even across page reloads (P6).

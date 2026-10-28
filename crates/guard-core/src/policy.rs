@@ -6,7 +6,7 @@
 //! * Default policy: `ask`. A command of a class that the project did not release is refused with a "waiting for approval" message and ONE
 //!   request is written to `loop/internal/approvals-requests.jsonl` (no secret: the command text is masked). The agent carries on with other work.
 //! * The project releases a class with a simple list in `PERMISSIONS.json`: `"commands": ["migrations", "dev_run", "npm run dev"]` (a class id,
-//!   the alias `migrations`, or a literal command prefix). `"e2e_dev_baseline": {"enabled": true}` releases `dev_run` too.
+//!   the alias `migrations`, or a literal command prefix). `dev_run` (the standard dev command) is released by default.
 //! * The user answers a single request with `loop/json/approvals.json` (written by the app): `approved` or `denied` for that request id.
 //! * PRODUCTION is never released here: the check that calls this module refuses a production target first, with a rule `PERMISSIONS.json`
 //!   cannot release, and no request is raised for it.
@@ -110,7 +110,9 @@ impl ProjectCommands {
 
     /// True when the project released this class or this exact statement.
     pub fn releases(&self, class: &str, statement: &str) -> bool {
-        if class == CLASS_DEV_RUN && self.e2e_dev_baseline {
+        // Starting the app with its standard dev command (`dotnet run`, `npm run dev`) is released by default: it asks nothing. Only a production
+        // target is refused, and that is the hard `migration-target` rule, which this list cannot release.
+        if class == CLASS_DEV_RUN {
             return true;
         }
         let statement = squash(statement).to_lowercase();
@@ -253,11 +255,11 @@ mod tests {
     fn the_project_list_releases_a_class_an_alias_or_a_literal_prefix() {
         let parse = |text: &str| ProjectCommands::from_json(serde_json::from_str::<Value>(text).unwrap().as_object().unwrap());
         let none = parse("{}");
-        assert!(!none.releases(CLASS_DEV_RUN, "dotnet run"));
+        assert!(none.releases(CLASS_DEV_RUN, "dotnet run"), "the standard dev command is released by default");
+        assert!(!none.releases(CLASS_MIGRATE_APPLY, "dotnet ef database update"));
         let list = parse(r#"{"commands": ["Migrations", "npm  run dev", "dev_run_other"]}"#);
         assert!(list.releases(CLASS_MIGRATE_APPLY, "dotnet ef database update") && list.releases(CLASS_MIGRATE_CREATE, "alembic revision"));
-        assert!(list.releases(CLASS_DEV_RUN, "npm run dev -- --port 3000") && !list.releases(CLASS_DEV_RUN, "npm run develop"));
-        assert!(!list.releases(CLASS_DEV_RUN, "dotnet run"));
+        assert!(list.releases(CLASS_DEV_RUN, "npm run dev -- --port 3000"));
         let by_id = parse(r#"{"commands": ["dev_run"]}"#);
         assert!(by_id.releases(CLASS_DEV_RUN, "anything") && !by_id.releases(CLASS_MIGRATE_APPLY, "dotnet ef database update"));
         assert!(parse(r#"{"e2e_dev_baseline": {"enabled": true}}"#).releases(CLASS_DEV_RUN, "dotnet run"));

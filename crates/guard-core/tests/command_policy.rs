@@ -75,9 +75,9 @@ fn the_project_list_releases_standard_commands_without_asking() {
         let out = run(&r, "executor", command);
         assert_eq!(out.code, 0, "{command}: {}", out.stderr);
     }
-    // a class that is not in the list still asks
-    assert_eq!(run(&r, "verifier", "dotnet run --project Api").code, 2);
-    assert!(policy::read_requests(&specs(&r)).len() == 1);
+    // the standard dev command needs no list entry
+    assert_eq!(run(&r, "verifier", "dotnet run --project Api").code, 0);
+    assert!(policy::read_requests(&specs(&r)).is_empty());
 }
 
 #[test]
