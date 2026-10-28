@@ -154,7 +154,7 @@ fn subject_of(ctx: &Value) -> String {
     if ev == "custom" {
         return if s(ctx, "subject").is_empty() { "[loop] aviso".into() } else { s(ctx, "subject").to_string() };
     }
-    let title = title_of(ev).unwrap_or(ev);
+    let title = if ev == "awaiting_user" && s(ctx, "pause_kind") == "validation_checkpoint" { "Aguardando sua validação" } else { title_of(ev).unwrap_or(ev) };
     let mut named = string_list(ctx, "verified_now");
     if named.is_empty() && !["feature_verified", "stage_closed"].contains(&ev) {
         named = string_list(ctx, "running"); // a stop names the feature that was running
@@ -264,6 +264,15 @@ fn explain_reason(reason: &str) -> (String, Vec<String>) {
     }
     if text.starts_with("account usage limit persisted") {
         return ("O limite de uso de todas as contas continuou esgotado depois de várias esperas. Aguarde a renovação do limite ou configure outra conta de reserva no painel, e retome o loop.".to_string(), vec![]);
+    }
+    if text.starts_with("Waiting for your validation") {
+        return (
+            format!(
+                "Pausa planejada, não é erro nem pergunta: o loop espera a sua validação. {} Depois de confirmar no painel, o loop continua.",
+                clip(&text.replace(" This is a planned pause, not an error:", ""), 500)
+            ),
+            vec![],
+        );
     }
     if text.starts_with("interrupted by the user") {
         return ("O loop foi interrompido por você (Ctrl+C). Nada foi perdido; retome pelo painel quando quiser.".to_string(), vec![]);
@@ -406,6 +415,10 @@ fn compose_notice(ctx: &Value) -> Notice {
         }
         "awaiting_user" if reason.starts_with(CRITICAL_DECISION) => {
             notice.sections.push(("Decisão crítica (critical decision) precisa da sua resposta".into(), Some(clip(reason, 1500)), options_lines(ctx)));
+        }
+        "awaiting_user" if s(ctx, "pause_kind") == "validation_checkpoint" => {
+            let (paragraph, _) = explain_reason(reason);
+            notice.sections.push(("Aguardando sua validação".into(), Some(paragraph), options_lines(ctx)));
         }
         "awaiting_user" => {
             let text = if reason.is_empty() { "(sem texto: veja o resumo)".to_string() } else { clip(reason, 1500) };
@@ -895,6 +908,19 @@ mod tests {
         assert!(body.contains("Detalhes da sessão\n- ID do loop: example\n- Turno: 1\n- Custo atual: US$ 0.00\n- Quando: "));
         assert!(body.contains("Teste\nEste é um aviso de TESTE do loop. Nada precisa ser feito."));
         assert!(!body.contains("Status das features"));
+    }
+
+    #[test]
+    fn a_validation_checkpoint_is_a_planned_pause_not_an_error_or_a_question() {
+        let reason =
+            "Waiting for your validation: feature pay. Do this: send a test mail. This is a planned pause, not an error: everything else is done. [validate-stop:pay]";
+        let ctx = json!({"event": "awaiting_user", "pause_kind": "validation_checkpoint", "running": ["pay"], "reason": reason, "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
+        let (subject, body) = build(&env(), &ctx);
+        assert!(subject.starts_with("[Agent-Maestro] Aguardando sua validação: pay"), "{subject}");
+        assert!(body.contains("Pausa planejada, não é erro nem pergunta"), "{body}");
+        let plain =
+            json!({"event": "awaiting_user", "running": ["pay"], "reason": "which db?", "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
+        assert!(build(&env(), &plain).0.contains("Aguardando sua decisão"));
     }
 
     #[test]

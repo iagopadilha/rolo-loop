@@ -225,3 +225,19 @@ Additive fields from feature `validation-evidence-and-incentives`. Nothing carri
 | `loop.credential_request` | `{name, names, feature, who, if_declined, options}` or `null` | Present while the loop waits on a credential decision. `options` always includes `continue without this layer`. |
 
 ROADMAP feature fields read by the gate: `evidence=a,b`, `no-surface=why_words`, `blocked-call=call`, `needs-credential=NAME`, `credential-owner=who`. The same facts may be written as `key: value` lines in `.specs/features/<slug>/E2E.md` (`evidence:`, `no-surface:`, `blocked-call:`, `credential:`, `credential-owner:`, `if-declined:`). With `--e2e`, `e2e=ok` without existing evidence and `e2e=not-covered` without a reason and proof of no surface end the run with `error` and a message naming what is missing; a blocked call or a missing credential ends it with `awaiting_user`. `.specs/project/loop/json/EVIDENCE.json` may override `surface_markers` and `no_surface_kinds`.
+
+### Validation report (`GET state` `validation_report`)
+
+Additive, read-only. One object that joins what the validation produced; every list is empty when there is nothing to say. No credential value is ever in it.
+
+| Key | Shape | Meaning |
+|---|---|---|
+| `groups` | `[{kind, cause, count, features, suggestion}]` | Validations that did not pass, grouped by cause (VA2). `kind` is `blocked_call`, `credential`, `failed`, `unproven`, `rejected` or `pending`; a feature is in one group only; the biggest group comes first. |
+| `plans` | `[{feature, cases, version, changed_in_turns, changed_since_last_turn, removed}]` | The versioned validation plan of each feature (`.specs/features/<slug>/VALIDATION.md`, one case per bullet: `- id: what | covers: REQ-1 | call: ... | expect: ... | needs: ...`). A new hash is a new `version`, remembered with its turn in `loop/json/VALIDATION-PLANS.json` (VA3). |
+| `review` | `[{feature, requirements_without_case, weak_cases: [{case, problem}]}]` | The review of the checks (VA6): requirement ids in `spec.md` that no case `covers`, and cases that cannot prove anything (no `expect`, or only `200`/"opens"). |
+| `cost` | `{features: [{feature, cost_usd, attempts, status}], total_usd, left_estimate_usd, closed, open}` | Cost and attempts per feature (VA5), written after each turn to `loop/json/FEATURE-COSTS.json`. `left_estimate_usd` is `null` until a feature is closed. |
+| `findings` | `[{feature, class, declared, text, wrong, question}]` | Findings of `.specs/features/<slug>/FINDINGS.md` sorted by what to do (Z2): `fix-now` (the loop fixes it in the same run), `decide`, `manual`. A `fix-now` needs `BEHAVIOUR.md` (the intended behaviour of the screen) and a `wrong:` side, else it becomes `decide` with a `question` (Z4). |
+| `behaviour_missing` | `[slug]` | Features with a screen or API (not `kind=generic`), past the spec step, that have no written `BEHAVIOUR.md`. |
+| `cleanup` | `{open, done, items: [{what, remove, feature}]}` | Test data the run left in the test environment, from `.specs/project/loop/CLEANUP.md` (`- [open] what | remove: how | feature: slug`). The engine never runs a removal; open items also appear in `manual_checks` with `source: "cleanup"` (Z3). |
+
+`loop.pause_kind` is `null`, `"validation_checkpoint"` (the loop waits, on purpose, for a check only a person can do: a ROADMAP feature with `checkpoint=...`; reason starts `Waiting for your validation`, options `I validated it, go on` and `I will validate it later, close without it`), `"credential"` or `"blocked_by_access"` (V3, U5 data side). With `--e2e`, an `e2e=ok|failed` that changed in a turn without any of its listed evidence written in that turn ends the run with `error` (G7).
