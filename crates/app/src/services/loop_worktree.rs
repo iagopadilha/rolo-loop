@@ -307,7 +307,26 @@ impl LoopWorktreeService<'_> {
         let repos: Vec<Value> =
             returned.get("repos").and_then(Value::as_array).into_iter().flatten().filter(|i| i.is_object()).map(|i| Self::complete_repo_readiness(i, running)).collect();
         let can_close = !repos.is_empty() && repos.iter().all(|r| r["can_close"] == true);
-        Ok(json!({"ok": true, "can_close": can_close, "loop_finished": self.is_loop_finished(context), "repos": repos}))
+        let processes = returned.get("processes").cloned().unwrap_or(json!([]));
+        Ok(json!({"ok": true, "can_close": can_close, "loop_finished": self.is_loop_finished(context), "processes": processes, "repos": repos}))
+    }
+
+    /// `POST .../wrap-up/stop-processes`: ends the programs the loop registered (by pid, with their children). Refused while the loop runs.
+    pub fn stop_loop_processes(&self, context: &ProjectContext) -> Result<Value, AppError> {
+        if self.app.loop_status().is_loop_running(context) {
+            return Err(AppError::loop_running("the loop is running: stop it before stopping its programs").with_code(LOOP_RUNNING_CODE));
+        }
+        Ok(Value::Object(self.run_close_loop_routine(context, &["--stop-processes".to_string()])?))
+    }
+
+    /// `POST .../close-loop/delete-leftover/{name}`: deletes, in the background, the folder git already forgot (a worktree removal that stopped half
+    /// way). The engine refuses anything that is not clearly a forgotten loop worktree folder.
+    pub fn delete_leftover(&self, context: &ProjectContext, repo_name: &str) -> Result<Value, AppError> {
+        if self.app.loop_status().is_loop_running(context) {
+            return Err(AppError::loop_running("the loop is running: stop it before deleting its folders").with_code(LOOP_RUNNING_CODE));
+        }
+        let repo = self.app.repo_registry().resolve(context, repo_name)?;
+        Ok(Value::Object(self.run_close_loop_routine(context, &["--delete-leftover".to_string(), "--repos".to_string(), repo.name])?))
     }
 
     /// `POST .../close-loop`: one failing repo never stops the others; the per-repo outcome is in the body.

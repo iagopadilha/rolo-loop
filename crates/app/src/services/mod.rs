@@ -79,6 +79,7 @@ pub mod turns;
 pub mod whiteboard;
 pub mod workspace;
 pub mod wrap_up;
+pub mod wrap_up_steps;
 
 use claude_accounts::ClaudeAccountService;
 use claude_call_log::ClaudeCallLogService;

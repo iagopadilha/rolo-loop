@@ -14,7 +14,7 @@ crates/
   guard-core            the rules of the hook: shell lexer, paths, sql, network, scope, profiles
   guard                 the hook executable
   engine-state          the loop: state machine, ROADMAP grammar, turns, gates, delivery, notify
-  winproc               the only crate with unsafe code: console control, process start time, random bytes
+  winproc               the only crate with unsafe code: console control, process start time and name, job objects, random bytes
   app                   domain, repositories, services, HTTP API, server, demo
   cli                   the `harness` executable
 ```
@@ -32,7 +32,8 @@ State lives in files, never in a database: `.specs/project/ROADMAP.md` (the type
 - The server binds `127.0.0.1` only, checks the `Host` header, requires a token for every change and refuses cross-origin requests.
 - `claude` runs with only the project's settings and an assembled set of agents and skills; user skills, other plugins' hooks and MCP servers do not load.
 - Run-time egress: a local proxy and preloads limit what a loop session can reach to the network list; the guard checks the same list in the command text.
-- Only `delivery` pushes, and only the feature branch.
+- Only `delivery` pushes, and only the feature branch (by explicit refspec). Finish reads the push from the remote and the PR from GitHub, never from a saved record of another run.
+- The engine owns every process it starts for a loop: they run in a Windows job object, are listed in the process registry (pid, start time, folder) and are stopped when the loop ends or Finish runs, by pid only.
 
 ## How the Rust version is checked
 

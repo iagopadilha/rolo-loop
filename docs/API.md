@@ -119,6 +119,9 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/close-loop` | yes | yes |
 | `GET` | `/p/{project_id}/api/wrap-up` | no | no |
 | `POST` | `/p/{project_id}/api/wrap-up/finish` | yes | yes |
+| `POST` | `/p/{project_id}/api/wrap-up/deliver` | yes | yes |
+| `POST` | `/p/{project_id}/api/wrap-up/stop-processes` | yes | yes |
+| `POST` | `/p/{project_id}/api/close-loop/delete-leftover/{name}` | yes | yes |
 | `GET` | `/api/app/overview` | no | no |
 | `POST` | `/p/{project_id}/api/workspace/repos/{name}/commit-setup` | yes | yes |
 | `GET` | `/p/{project_id}/api/follow-up` | no | no |
@@ -167,7 +170,7 @@ These fields are added to the state payload (feature `live-status-and-notices`).
 
 | Field | Shape | Meaning |
 |---|---|---|
-| `processes` | `[{id, kind, turn, pid, started_at, label, feature, step, lanes: [{feature, step}], claude, claude_account}]` | What the engine started and is running now (`kind` is `claude_turn`). Empty when the loop is not alive. `label` is a one-line title such as `Loop turn 7 · feature a, b · step execute`. |
+| `processes` | `[{id, kind, turn, pid, started_at, label, feature, step, lanes: [{feature, step}], claude, claude_account}]` | What the engine started and is running now (`kind` is `claude_turn`, or `left_over` for a program a turn started and left running; each row also has `name` (program file name) and `cwd`). Empty when the loop is not alive. `label` is a one-line title such as `Loop turn 7 · feature a, b · step execute`. |
 | `now` | `{running, turn, label, started_at, pid, claude, claude_account, lanes: [{feature, name, step, stage, stage_title}]}` | The "running now" strip built from `processes` and the roadmap view. `{running: false, lanes: []}` when idle. |
 | `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `picker_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
 
@@ -177,3 +180,25 @@ Planning gates (`/api/pipeline` and the readiness routes) also change:
 - The `repos` and `import_coverage` gates are always present; when they do not apply they are `ok`, `optional` and `not_applicable: true`.
 
 Notices (message, e-mail, `NOTICE.txt`) name the features and the stage, use one vocabulary ("verificadas" until the branch is pushed, then "entregues"), and also fire when a turn verifies a feature or closes a stage (`LOOP_NOTIFY_MILESTONES=off` turns that off).
+
+### Finish: delivery state, steps and processes
+
+The delivery state in `GET close-loop/check` and `GET wrap-up` is decided by the remote and GitHub, never by a `delivery.json` left by an earlier run. The push is confirmed only when `origin` holds the loop branch at the worktree HEAD (`git ls-remote`). The pull request exists only when GitHub lists one for the branch (`gh`); when GitHub cannot be asked (not a GitHub remote, `gh` missing or signed out) the saved record is used, and only if it names this same branch. A record of another branch, or one that does not name its branch, is ignored (`delivery_ignored` says so), and a dry run is never written as a state. Nothing here pushes `main` or the integration branch: delivery pushes only the loop branch, by explicit refspec.
+
+Each repo item of the check (`repos[]`) now also carries `delivery_source` (`remote`, `saved record` or `none`), `delivery_ignored` (text or `null`), `holders` (`[{pid, name, kind, label}]`: programs the loop started that may hold files in the worktree), `trash_folders_left` (folders still being deleted in the background) and, in every `reasons[]` item, `action`: `{id, label, method, route}` or `null`. Every `reasons[].text` is the real cause in plain words. New reason codes: `folder_left` (git forgot the worktree but files remain; action `delete_leftover`) and `files_in_use` (a close that could not remove the folder; the text says "Nothing is unsafe", lists the holders by name and pid and adds that the work is pushed and backed up). Credentials in a remote URL are stripped from every text.
+
+`GET close-loop/check` and `GET wrap-up` (`check`) also carry `processes`: `[{pid, name, kind, label}]`, the programs the loop started that are still running.
+
+`GET wrap-up` adds:
+
+| Key | Shape | Meaning |
+|---|---|---|
+| `steps` | `[{id, title, what, status, result, action}]` | The Finish as ordered steps, the shape `components/stepper.js` renders. `id` is one of `stop_processes`, `commit`, `push`, `pr`, `database`, `backup`, `remove`. `status` is `done`, `active` (the first open step), `todo`, `error` (something real blocks it; `result` is the real reason, `action` the one thing that fixes it) or `skipped`. `action` is `{id, label, method, route}` (route relative to the project API) or `null`. A step may also carry `actions` (one per repo), `warnings` (step `database`: the production database script warnings) and `processes` (step `stop_processes`). |
+| `finish_options` | `[{mode, label, risky, what_happens}]` | What each Finish button does in plain words; `risky` marks `remove_anyway`. |
+| `check.repos[].unpushed_by_feature` | `[{feature, commits}]` | The unpushed commit subjects grouped by the feature in the subject's scope (`feat(<feature>): ...`), `other` when there is none. |
+
+`POST wrap-up/deliver` (no body) is ONE call that pushes the loop branch and opens the PR of every repo of the run (the primary first, the PRs linked to each other). It answers `{ok, delivered: {<repo>: {branch, push, pr_status, pr}}, warnings, check}` (`check` is the same object as `GET wrap-up` `check`). `POST wrap-up/stop-processes` ends the programs the loop started (by pid, with their children; never by program name) and answers `{ok, stopped: [{pid, name, kind, label}], check}`. `POST close-loop/delete-leftover/{name}` deletes, in the background, a worktree folder that git already forgot (refused for anything that is not clearly a loop worktree folder). All three answer 409 `loop_running` while the loop runs.
+
+`POST workspace/repos/{name}/commit-push` now commits the work without the loop's own `.specs/` state, pushes only the loop branch by explicit refspec, and answers with `check` (that repo's item from the Finish check, asked to the remote and GitHub) and `next` (what is still missing, in plain words), so the click never ends in a dead end.
+
+`POST wrap-up/finish` stops what the loop started first (`receipt.stopped_processes`), delivers only what the check found pending, and when it removes worktrees it moves the ignored `node_modules`, `bin` and `obj` to a background deletion (`receipt.background_delete`); a folder that cannot go is reported as `files_in_use` or `folder_left`, not as "not safe to remove". The PR body has only: what this PR delivers (the verified features by title), the quarantined and the unverified features, what to validate, the related PRs and one closing line.

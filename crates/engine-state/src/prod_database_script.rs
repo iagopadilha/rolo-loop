@@ -131,14 +131,14 @@ pub fn entries_from_meta(primary_work: &str, meta: &Value) -> Vec<Entry> {
             .map(|(index, name)| {
                 let entry = &repos[*name];
                 let worktree = s(entry, "worktree");
-                Entry {
-                    name: (*name).clone(),
-                    root: nt_abspath(if index == 0 { primary_work } else { &worktree }),
-                    branch: s(entry, "branch"),
-                    base: s(entry, "base"),
-                    primary: index == 0,
-                    repo_path: s(entry, "path"),
-                }
+                let root = nt_abspath(if index == 0 { primary_work } else { &worktree });
+                // a repo whose record lacks its branch or base is not given empty names: its worktree knows the branch, the run knows the base
+                let branch = Some(s(entry, "branch")).filter(|b| !b.is_empty()).unwrap_or_else(|| crate::loop_io::git(&root, &["branch", "--show-current"]).1);
+                let base = [s(entry, "base"), s(&crate::loop_io::load_json(&crate::loop_state::loop_path(&root, "delivery.json")), "base"), s(meta, "base")]
+                    .into_iter()
+                    .find(|b| !b.is_empty())
+                    .unwrap_or_default();
+                Entry { name: (*name).clone(), root, branch, base, primary: index == 0, repo_path: s(entry, "path") }
             })
             .collect();
     }
@@ -209,7 +209,14 @@ pub fn migration_script(root: &str, folder: &str, first: &str, last: &str, runne
     if code != 0 || out.trim().is_empty() {
         let text = if err.is_empty() { out.clone() } else { err };
         let described = describe_failure(&text);
-        return Err(format!("dotnet ef migrations script failed: {}", if described.is_empty() { "no output".to_string() } else { described }));
+        let by_hand = if text.contains("design time") || text.contains("Unable to create") {
+            format!(
+                " The migrations tool could not build the database context at design time (a setting such as a connection string or an environment name is missing for it). Generate the script by hand: run `dotnet ef migrations script --idempotent {first} {last}` in `{project_dir}` with that setting present."
+            )
+        } else {
+            String::new()
+        };
+        return Err(format!("dotnet ef migrations script failed: {}{by_hand}", if described.is_empty() { "no output".to_string() } else { described }));
     }
     Ok(strip_build_progress(&out))
 }
@@ -398,6 +405,41 @@ mod tests {
         assert_eq!(ids.into_iter().collect::<Vec<_>>(), vec![("Api".to_string(), "20260101120000_AddOrders".to_string())]);
         assert_eq!(safe_name("  my proj/x "), "my-proj-x");
         assert_eq!(safe_name("///"), "project");
+    }
+
+    #[test]
+    fn a_secondary_repo_without_recorded_names_gets_its_real_branch_and_the_run_base() {
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        std::fs::create_dir_all(&web).unwrap();
+        for args in [
+            &["init", "-q", "-b", "loop/z"][..],
+            &["config", "user.name", "t"],
+            &["config", "user.email", "t@example.com"],
+            &["commit", "-q", "--allow-empty", "-m", "one"],
+        ] {
+            assert!(std::process::Command::new("git").arg("-C").arg(&web).args(args).output().unwrap().status.success());
+        }
+        let primary = dir.path().join("app");
+        std::fs::create_dir_all(&primary).unwrap();
+        let meta = json!({"base": "developer", "repos": {
+            "app": {"primary": true, "branch": "loop/a", "base": "developer", "worktree": primary.display().to_string()},
+            "web": {"worktree": web.display().to_string()}}});
+        let entries = entries_from_meta(&primary.display().to_string(), &meta);
+        let second = entries.iter().find(|e| e.name == "web").unwrap();
+        assert_eq!((second.branch.as_str(), second.base.as_str()), ("loop/z", "developer"), "no empty names reach the warning");
+        let first = entries.iter().find(|e| e.name == "app").unwrap();
+        assert_eq!((first.branch.as_str(), first.base.as_str()), ("loop/a", "developer"));
+    }
+
+    #[test]
+    fn a_design_time_failure_says_what_to_do_by_hand() {
+        let runner: Runner = &|_, _| (1, String::new(), "Unable to create a 'DbContext' of type ''. design time".to_string());
+        let error = migration_script("C:\\work", "Api", "0", "20260101_A", Some(runner)).unwrap_err();
+        assert!(error.contains("could not build the database context at design time"), "{error}");
+        assert!(error.contains("dotnet ef migrations script --idempotent 0 20260101_A"), "{error}");
+        let plain: Runner = &|_, _| (1, String::new(), "boom".to_string());
+        assert!(!migration_script("C:\\work", "", "0", "1", Some(plain)).unwrap_err().contains("by hand"));
     }
 
     #[test]

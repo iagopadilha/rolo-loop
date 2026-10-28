@@ -18,8 +18,8 @@
 
 use crate::loop_io::{git, load_json, now_iso, read, run_timeout, save_json, which};
 use crate::loop_state::{loop_path, parse_roadmap, state_file, Features};
+use crate::notify_truthy;
 use crate::prod_database_script as prod;
-use crate::{graph_view, notify_truthy};
 use cfg::env::load_all;
 use cfg::Env;
 use pycompat::json::py_json_dumps_indent;
@@ -108,37 +108,49 @@ fn related_prs_block(related: &[(String, String)], own_name: &str) -> Vec<String
     out
 }
 
+/// The body of the PR: only what GitHub does not already show. What this PR delivers (the verified features by their title), the quarantined and
+/// the unverified features when there are any, what to validate, the related PRs and one closing line. No commit list (GitHub lists the commits),
+/// no progress map, no history.
 pub fn pr_body(root: &str, branch: &str, base: &str, roadmap_root: &str, related: &[(String, String)], own_name: &str) -> String {
     let roadmap_root = if roadmap_root.is_empty() { root } else { roadmap_root };
-    let mut out = vec![format!("Orchestrator delivery: branch `{branch}` to `{base}`."), String::new()];
     let feats = features_of(roadmap_root);
-    let with_status = |wanted: &str| -> Vec<String> { feats.iter().filter(|(_, f)| f.status() == wanted).map(|(s, _)| s.clone()).collect() };
-    let verified = with_status("verified");
-    let blocked = with_status("blocked");
-    out.push(format!("**Verified features ({}):** {}", verified.len(), if verified.is_empty() { "none".into() } else { verified.join(", ") }));
+    let shown = |slug: &str, f: &crate::loop_state::Fields| -> String {
+        let title = f.text("title");
+        if title.is_empty() {
+            format!("`{slug}`")
+        } else {
+            format!("{title} (`{slug}`)")
+        }
+    };
+    let list_of = |wanted: &dyn Fn(&crate::loop_state::Fields) -> bool| -> Vec<String> {
+        feats.iter().filter(|(_, f)| wanted(f)).map(|(s, f)| format!("- {}", shown(s, f))).collect()
+    };
+    let verified = list_of(&|f| f.status() == "verified");
+    let mut out = vec!["## What this PR delivers".to_string(), String::new()];
+    if verified.is_empty() {
+        out.push("No verified feature.".into());
+    } else {
+        out.extend(verified);
+    }
+    let blocked = list_of(&|f| f.status() == "blocked");
     if !blocked.is_empty() {
-        out.extend([String::new(), format!("**Quarantined (NOT delivered, your call):** {}", blocked.join(", "))]);
+        out.extend([String::new(), "## Quarantined (not delivered, your call)".into(), String::new()]);
+        out.extend(blocked);
     }
-    let unverified: Vec<String> = feats.iter().filter(|(_, f)| f.text("note").contains("unverified")).map(|(s, _)| s.clone()).collect();
+    let unverified = list_of(&|f| f.text("note").contains("unverified"));
     if !unverified.is_empty() {
-        out.extend([String::new(), format!("**Without automatic verification:** {}", unverified.join(", "))]);
+        out.extend([String::new(), "## Without automatic verification".into(), String::new()]);
+        out.extend(unverified);
     }
-    out.extend([String::new(), "## Progress".into(), String::new(), "```mermaid".into(), graph_view::mermaid(&feats), "```".into()]);
     let items = validate_items(roadmap_root);
     if !items.is_empty() {
         out.extend([String::new(), "## For you to validate".into(), String::new()]);
         out.extend(items.iter().take(30).map(|i| format!("- {i}")));
     }
-    let (_, log, _) = git(root, &["log", "--oneline", "--no-decorate", &format!("origin/{base}..HEAD")]);
-    if !log.is_empty() {
-        let lines: Vec<&str> = log.lines().take(30).collect();
-        out.extend([String::new(), "## Commits".into(), String::new(), "```".into(), lines.join("\n"), "```".into()]);
-    }
     out.extend(related_prs_block(related, own_name));
-    out.extend([String::new(), "Generated from .specs/ (ROADMAP, VALIDATE). Nothing was merged: the merge decision is yours.".into()]);
+    out.extend([String::new(), format!("Branch `{branch}` into `{base}`. Nothing was merged: the merge decision is yours.")]);
     out.join("\n")
 }
-
 fn identity_problem(env: &Env, root: &str) -> String {
     let user = git(root, &["config", "user.name"]).1;
     let mail = git(root, &["config", "user.email"]).1;
@@ -229,7 +241,7 @@ pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {
             if code == 0 {
                 format!("done: origin/{branch}")
             } else {
-                format!("FAILED: {}", clip(if err.is_empty() { &out } else { &err }, 300))
+                format!("FAILED: {}", clip(&crate::delivery_truth::strip_userinfo(if err.is_empty() { &out } else { &err }), 300))
             }
         };
         set(&mut result, "push", json!(push));
@@ -247,7 +259,10 @@ pub fn finalize(env: &mut Env, root: &str, o: &Options) -> Map<String, Value> {
     set(&mut saved, "base", json!(base));
     set(&mut saved, "at", json!(now_iso()));
     let target = loop_path(root, "delivery.json");
-    let _ = save_json(&target, &Value::Object(saved));
+    if !o.dry_run {
+        // a dry run is never kept as a state: the next check would take "dry-run: git push" for a delivery
+        let _ = save_json(&target, &Value::Object(saved));
+    }
     result
 }
 
@@ -277,7 +292,11 @@ fn create_pr(env: &Env, result: &mut Map<String, Value>, root: &str, branch: &st
         set(result, "pr", json!(url));
         set(result, "pr_status", json!("PR created"));
     } else {
-        set(result, "pr_status", json!(format!("compare link; gh failed: {}", clip(if err.is_empty() { &out } else { &err }, 200))));
+        set(
+            result,
+            "pr_status",
+            json!(format!("compare link; gh failed: {}", clip(&crate::delivery_truth::strip_userinfo(if err.is_empty() { &out } else { &err }), 200))),
+        );
     }
 }
 
@@ -394,7 +413,9 @@ pub fn finalize_project(
         by_repo.insert(name.clone(), Value::Object(result.clone()));
     }
     set(&mut aggregate, "repos", Value::Object(by_repo));
-    let _ = save_json(&loop_path(primary_work, "delivery.json"), &Value::Object(aggregate.clone()));
+    if !dry_run {
+        let _ = save_json(&loop_path(primary_work, "delivery.json"), &Value::Object(aggregate.clone()));
+    }
     if results.iter().all(|(_, r)| starts(r, "push", &["done"])) {
         attach_prod_database(env, primary_work, meta, &mut aggregate, dry_run, output_dir, runner);
     }
@@ -476,6 +497,104 @@ mod tests {
         let detached = finalize(&mut e, &root, &Options::default());
         assert_eq!(detached["push"], "not done: detached HEAD (no branch)");
         assert!(loop_path(&root, "delivery.json").is_file());
+    }
+
+    fn git_in(dir: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git").arg("-C").arg(dir).args(args).output().unwrap();
+        assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+
+    /// A repo checked out on `branch` with one commit and a local bare repo as `origin`; returns `(repo, bare)`.
+    fn repo_on(dir: &Path, name: &str, branch: &str) -> (String, String) {
+        let bare = dir.join(format!("{name}-origin.git"));
+        std::fs::create_dir_all(&bare).unwrap();
+        git_in(&bare, &["init", "-q", "--bare"]);
+        let repo = dir.join(name);
+        std::fs::create_dir_all(&repo).unwrap();
+        git_in(&repo, &["init", "-q", "-b", branch]);
+        git_in(&repo, &["config", "user.name", "t"]);
+        git_in(&repo, &["config", "user.email", "t@example.com"]);
+        std::fs::write(repo.join("a.txt"), name).unwrap();
+        git_in(&repo, &["add", "."]);
+        git_in(&repo, &["commit", "-q", "-m", "one"]);
+        git_in(&repo, &["remote", "add", "origin", &bare.display().to_string()]);
+        (repo.display().to_string(), bare.display().to_string())
+    }
+
+    fn branches_of(bare: &str) -> String {
+        let out = std::process::Command::new("git").arg("-C").arg(bare).args(["branch", "--list"]).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    #[test]
+    fn one_call_delivers_every_repo_of_the_run_and_only_their_loop_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, app_bare) = repo_on(dir.path(), "app", "loop/a");
+        let (web, web_bare) = repo_on(dir.path(), "web", "loop/b");
+        let (api, api_bare) = repo_on(dir.path(), "api", "loop/c");
+        std::fs::create_dir_all(Path::new(&app).join(".specs/project")).unwrap();
+        std::fs::write(Path::new(&app).join(".specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=verified title=\"Add A\"\n").unwrap();
+        let meta = json!({"repos": {
+            "app": {"primary": true, "branch": "loop/a", "worktree": app, "base": "developer"},
+            "web": {"branch": "loop/b", "worktree": web, "base": "developer"},
+            "api": {"branch": "loop/c", "worktree": api, "base": "developer"}}});
+        let mut env = Env::from_pairs([("LOOP_DATA_DIR", "C:\\no-such-dir"), ("LOOP_PR_MODE", "link")]);
+        let result = finalize_project(&mut env, &app, &meta, false, false, "", None, "");
+        let repos = result["repos"].as_object().unwrap();
+        assert_eq!(repos.len(), 3, "{result:?}");
+        for (name, item) in repos {
+            assert!(item["push"].as_str().unwrap().starts_with("done: origin/loop/"), "{name}: {item}");
+        }
+        assert!(branches_of(&app_bare).contains("loop/a") && branches_of(&web_bare).contains("loop/b") && branches_of(&api_bare).contains("loop/c"));
+        for bare in [&app_bare, &web_bare, &api_bare] {
+            assert!(!branches_of(bare).contains("developer") && !branches_of(bare).contains("main"), "only the loop branch is pushed: {}", branches_of(bare));
+        }
+        // every repo's record is tagged with its own branch (a record of another branch is ignored by the check)
+        assert_eq!(load_json(&loop_path(&web, "delivery.json"))["branch"], "loop/b");
+        assert_eq!(load_json(&loop_path(&app, "delivery.json"))["branch"], "loop/a");
+    }
+
+    #[test]
+    fn a_dry_run_is_never_kept_as_a_state_and_open_features_still_block_the_push() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, bare) = repo_on(dir.path(), "app", "loop/a");
+        std::fs::create_dir_all(Path::new(&app).join(".specs/project")).unwrap();
+        std::fs::write(Path::new(&app).join(".specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=building\n").unwrap();
+        let mut env = Env::from_pairs([("LOOP_DATA_DIR", "C:\\no-such-dir"), ("LOOP_PR_MODE", "link")]);
+        let open = finalize(&mut env, &app, &Options { branch: "loop/a", ..Default::default() });
+        assert!(open["push"].as_str().unwrap().starts_with("not done: there are still open features"), "{open:?}");
+        assert!(branches_of(&bare).trim().is_empty());
+        std::fs::write(Path::new(&app).join(".specs/project/ROADMAP.md"), "## Stage 1\n- [a] status=verified\n").unwrap();
+        let _ = std::fs::remove_file(loop_path(&app, "delivery.json"));
+        let dry = finalize(&mut env, &app, &Options { branch: "loop/a", dry_run: true, ..Default::default() });
+        assert!(dry["push"].as_str().unwrap().starts_with("dry-run"));
+        assert!(!loop_path(&app, "delivery.json").exists(), "a dry run leaves no record behind");
+        assert!(branches_of(&bare).trim().is_empty());
+    }
+
+    #[test]
+    fn the_pr_body_has_only_what_github_does_not_show() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, _) = repo_on(dir.path(), "app", "loop/a");
+        std::fs::create_dir_all(Path::new(&app).join(".specs/project")).unwrap();
+        std::fs::write(
+            Path::new(&app).join(".specs/project/ROADMAP.md"),
+            "## Stage 1\n- [a-api] status=verified title=\"Orders can be exported\"\n- [b-ui] status=verified\n- [c-job] status=blocked title=\"Nightly sync\"\n- [d-x] status=verified note=unverified title=\"Quick filter\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(Path::new(&app).join(".specs/project/loop")).unwrap();
+        std::fs::write(Path::new(&app).join(".specs/project/loop/VALIDATE.md"), "# V\n- check the export on a real account\n").unwrap();
+        let related = vec![("web".to_string(), "https://example.com/pr/9".to_string())];
+        let body = pr_body(&app, "loop/a", "developer", "", &related, "app");
+        assert!(body.starts_with("## What this PR delivers\n\n- Orders can be exported (`a-api`)\n- `b-ui`\n"), "{body}");
+        assert!(body.contains("## Quarantined (not delivered, your call)\n\n- Nightly sync (`c-job`)"));
+        assert!(body.contains("## Without automatic verification\n\n- Quick filter (`d-x`)"));
+        assert!(body.contains("## For you to validate\n\n- check the export on a real account"));
+        assert!(body.contains("## Related PRs\n\n- web: https://example.com/pr/9"));
+        assert!(body.ends_with("Branch `loop/a` into `developer`. Nothing was merged: the merge decision is yours."));
+        for forbidden in ["## Commits", "mermaid", "## Progress", "Orchestrator delivery", "Generated from"] {
+            assert!(!body.contains(forbidden), "{forbidden} must not be in the body: {body}");
+        }
     }
 
     #[test]

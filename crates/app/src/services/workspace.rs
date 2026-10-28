@@ -515,7 +515,7 @@ impl WorkspaceService<'_> {
         let Some(text) = text.filter(|t| t.chars().count() <= COMMIT_MESSAGE_LIMIT && !t.contains('\n')) else {
             return Err(invalid_repo(format!("the commit message must be one line of up to {COMMIT_MESSAGE_LIMIT} characters")));
         };
-        let outcome = self.app.git.commit_all_and_push(&worktree, if text.is_empty() { DEFAULT_COMMIT_MESSAGE } else { &text }, push);
+        let outcome = self.app.git.commit_loop_work_and_push(&worktree, if text.is_empty() { DEFAULT_COMMIT_MESSAGE } else { &text }, push);
         self.app.log.info(
             "workspace_commit_push",
             &[
@@ -531,9 +531,27 @@ impl WorkspaceService<'_> {
                 .with_extra("committed", outcome["committed"].clone())
                 .with_extra("branch", outcome["branch"].clone()));
         }
-        Ok(
-            json!({"ok": true, "repo": repo.name, "branch": outcome["branch"], "committed": outcome["committed"], "pushed": outcome["pushed"], "commit": outcome["commit"]}),
-        )
+        // what the Finish check now says about this repo (asked to the remote and GitHub), so the click never ends in a dead end: what is still missing
+        // and the action that fixes it come back with the answer
+        let check = self
+            .app
+            .loop_worktrees()
+            .check_close_loop(context)
+            .ok()
+            .and_then(|all| all["repos"].as_array().and_then(|repos| repos.iter().find(|r| r["name"] == repo.name.as_str()).cloned()))
+            .unwrap_or(Value::Null);
+        let missing: Vec<String> = check["reasons"].as_array().into_iter().flatten().filter_map(|r| r["text"].as_str().map(String::from)).collect();
+        let next = if check.is_null() {
+            String::new()
+        } else if missing.is_empty() {
+            "Saved and confirmed on the remote. This repo is ready to finish.".to_string()
+        } else {
+            format!("Saved. Still missing before Finish: {}", missing.join(" "))
+        };
+        Ok(json!({
+            "ok": true, "repo": repo.name, "branch": outcome["branch"], "committed": outcome["committed"], "pushed": outcome["pushed"], "commit": outcome["commit"],
+            "check": check, "next": next,
+        }))
     }
 
     // ------------------------------------------------ create

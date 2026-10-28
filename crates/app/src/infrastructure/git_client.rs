@@ -276,6 +276,16 @@ impl GitClient {
     /// when one is set, else `git push -u origin <branch>`. Never forces, never switches branch, never touches another branch. Returns
     /// `{"ok", "branch", "committed", "pushed", "commit", "error"}`; `ok` is false at the first failing step (a commit that succeeded stays).
     pub fn commit_all_and_push(&self, folder: &str, message: &str, push: bool) -> Value {
+        self.commit_and_push_in(folder, message, push, false)
+    }
+
+    /// [`commit_all_and_push`] for a LOOP WORKTREE (`loop_work`): the loop's own `.specs/` state is not committed (the Finish check ignores it and the
+    /// close copies the plan home), and only the branch itself is pushed, by explicit refspec: never a force, never another ref.
+    pub fn commit_loop_work_and_push(&self, folder: &str, message: &str, push: bool) -> Value {
+        self.commit_and_push_in(folder, message, push, true)
+    }
+
+    fn commit_and_push_in(&self, folder: &str, message: &str, push: bool, loop_work: bool) -> Value {
         let mut result = json!({"ok": false, "branch": "", "committed": false, "pushed": false, "commit": "", "error": ""});
         let branch = self.get_current_branch(folder);
         if branch.is_empty() {
@@ -288,7 +298,8 @@ impl GitClient {
             return result;
         }
         let describe = |error: &str, code: i32| if error.is_empty() { code.to_string() } else { error.to_string() };
-        let (code, _, error) = self.run_git(folder, &["add", "-A"]);
+        let add: Vec<&str> = if loop_work { vec!["add", "-A", "--", ".", ":(exclude).specs"] } else { vec!["add", "-A"] };
+        let (code, _, error) = self.run_git(folder, &add);
         if code != 0 {
             result["error"] = json!(format!("git add failed: {}", describe(&error, code)));
             return result;
@@ -310,7 +321,14 @@ impl GitClient {
             return result;
         }
         let has_upstream = self.run_git(folder, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).0 == 0;
-        let args: Vec<&str> = if has_upstream { vec!["push"] } else { vec!["push", "-u", "origin", &branch] };
+        let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
+        let args: Vec<&str> = if loop_work {
+            vec!["push", "-u", "origin", &refspec]
+        } else if has_upstream {
+            vec!["push"]
+        } else {
+            vec!["push", "-u", "origin", &branch]
+        };
         let (code, _, error) = self.run_git(folder, &args);
         if code != 0 {
             let last = error.lines().last().map(String::from).unwrap_or_else(|| code.to_string());
@@ -409,6 +427,38 @@ mod tests {
         assert_eq!(git.list_worktrees(&f).len(), 1);
         assert_eq!(git.count_unpushed_commits(&f, &["no-such-base".to_string()]), None);
         assert_eq!(default_comparison_bases(" qa "), vec!["qa", "main", "master"]);
+    }
+
+    #[test]
+    fn saving_a_loop_worktree_commits_the_work_not_the_loop_state_and_pushes_only_its_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = dir.path().join("remote.git");
+        let folder = dir.path().join("work");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::create_dir_all(&remote).unwrap();
+        let git = client();
+        let (f, r) = (folder.display().to_string(), remote.display().to_string());
+        git.run_git(&r, &["init", "-q", "--bare"]);
+        std::fs::write(folder.join("a.txt"), "1").unwrap();
+        assert!(git.init_repo_with_initial_commit(&f, "init", "").0);
+        git.run_git(&f, &["remote", "add", "origin", &r]);
+        git.run_git(&f, &["checkout", "-q", "-b", "loop/x"]);
+        // an upstream pointing at ANOTHER branch name: a plain `git push` would follow it; the explicit refspec never does
+        git.run_git(&f, &["config", "branch.loop/x.remote", "origin"]);
+        git.run_git(&f, &["config", "branch.loop/x.merge", "refs/heads/somewhere-else"]);
+        std::fs::create_dir_all(folder.join(".specs/project/loop")).unwrap();
+        std::fs::write(folder.join(".specs/project/loop/state.txt"), "engine state").unwrap();
+        std::fs::write(folder.join("work.txt"), "the work").unwrap();
+        let saved = git.commit_loop_work_and_push(&f, "save", true);
+        assert_eq!((saved["ok"].clone(), saved["committed"].clone(), saved["pushed"].clone()), (json!(true), json!(true), json!(true)), "{saved}");
+        let committed = git.run_git(&f, &["show", "--name-only", "--pretty=format:", "HEAD"]).1;
+        assert!(committed.contains("work.txt") && !committed.contains(".specs"), "{committed}");
+        let branches = git.run_git(&r, &["branch", "--list"]).1;
+        assert!(branches.contains("loop/x") && !branches.contains("somewhere-else"), "{branches}");
+        // the check's own question, asked the same way: the remote holds the worktree HEAD
+        let head = git.run_git(&f, &["rev-parse", "HEAD"]).1;
+        assert_eq!(git.run_git(&r, &["rev-parse", "refs/heads/loop/x"]).1, head);
+        assert_eq!(git.run_git(&f, &["status", "--porcelain", "--", ".", ":(exclude).specs"]).1, "", "the tree the Finish check looks at is clean");
     }
 
     #[test]

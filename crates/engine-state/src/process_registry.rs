@@ -130,6 +130,9 @@ pub fn sweep(work: &str) -> usize {
     let mut added = 0;
     for pid in job.pids().into_iter().map(i64::from).filter(|pid| *pid != own && !known.contains(pid)) {
         let name = name_of(pid);
+        if ["conhost.exe", "openconsole.exe"].contains(&name.to_lowercase().as_str()) {
+            continue; // the console host of a hidden program: it ends with its program and is noise in the list
+        }
         rows.push(json!({
             "id": format!("left_over-{pid}"), "kind": "left_over", "turn": 0, "pid": pid, "started_at": now_iso(),
             "label": format!("left running by a turn: {}", if name.is_empty() { "unknown program" } else { &name }), "feature": "", "step": "", "lanes": [],
