@@ -100,6 +100,14 @@ pub fn step(tag: &str, kind: &str, text: &str) {
 
 /// `setup_files::refresh_loop_inputs` plus its log lines. A note is printed once per worktree; the copied names only when `quiet` is false.
 pub fn refresh_inputs(ctx: &Ctx, repo: &str, work: &str, tag: &str, quiet: bool) -> RefreshResult {
+    // a project that opted in to the E2E DEV baseline (PERMISSIONS.json) gets it applied here, before the network list is carried to the worktree
+    let data_dir = ctx.data_dir();
+    let access = crate::access_grant::AccessContext { repo, work, data_dir: &data_dir, toolkit_root: &ctx.toolkit_root, who: "engine" };
+    match crate::project_policy::apply_e2e_baseline(&access) {
+        Some(Err(why)) => step(tag, "warn", &format!("E2E DEV baseline not applied: {why}")),
+        Some(Ok(message)) if !quiet => step(tag, "check", &message),
+        _ => {}
+    }
     let result = setup_files::refresh_loop_inputs(repo, work, &ctx.data_dir().display().to_string(), &ctx.toolkit_root);
     if !result.copied.is_empty() && !quiet {
         step(tag, "copy", &format!("refreshed from the repo into the worktree: {}", result.copied.join(", ")));

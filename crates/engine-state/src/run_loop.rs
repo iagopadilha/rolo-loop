@@ -803,8 +803,10 @@ impl Runner {
             if !applied.is_empty() {
                 println!("[loop] forgotten dependencies applied to the ROADMAP before the turn: {}", applied.join("; "));
             }
+            // the user's answers to the commands the guard asked about (apply a migration, start the app on DEV): the agents read the file the flag names
+            let approvals_flag = if crate::approvals::write_turn_notes(work) { " --approvals" } else { "" };
             let prompt = format!(
-                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}",
+                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}{approvals_flag}",
                 opts.wave,
                 if opts.e2e { " --e2e" } else { "" },
                 plan_flags(work, opts.wave, &opts.primary_name)

@@ -52,16 +52,14 @@ impl App {
 }
 
 impl GuardEventService<'_> {
-    /// `{"events": last GUARD_EVENTS_LIMIT blocks, newest first, "counts": {rule: blocks}}` (counts cover the whole log).
+    /// `{"events": last GUARD_EVENTS_LIMIT blocks, newest first, "counts": {rule: blocks}, "groups": [...]}` (counts and groups cover the whole log).
+    /// `groups` is X2: the same refusal repeated 111 times is ONE row `{rule, detail, count, first_t, last_t, caller}` (`caller` = the command or
+    /// tool call that made it, redacted), the most frequent first, so the panel can say "blocked 111 times" and who did it.
     pub fn build_guard_summary(&self, work_dir: &str) -> Value {
-        let blocks: Vec<Value> = self
-            .app
-            .loop_files
-            .read_guard_lines(work_dir)
-            .iter()
-            .filter(|line| BLOCK_DECISIONS.contains(&text(line, "decision").trim().to_lowercase().as_str()))
-            .map(build_guard_event)
-            .collect();
+        let lines = self.app.loop_files.read_guard_lines(work_dir);
+        let blocked_lines: Vec<&Value> = lines.iter().filter(|line| BLOCK_DECISIONS.contains(&text(line, "decision").trim().to_lowercase().as_str())).collect();
+        let blocks: Vec<Value> = blocked_lines.iter().map(|line| build_guard_event(line)).collect();
+        let groups = group_blocks(&blocked_lines);
         let mut counts = Map::new();
         for event in &blocks {
             let rule = text(event, "rule");
@@ -69,8 +67,29 @@ impl GuardEventService<'_> {
             counts.insert(rule, json!(count));
         }
         let recent: Vec<&Value> = blocks.iter().rev().take(GUARD_EVENTS_LIMIT).collect();
-        json!({"events": recent, "counts": counts})
+        json!({"events": recent, "counts": counts, "groups": groups})
     }
+}
+
+const GUARD_GROUPS_LIMIT: usize = 10;
+
+/// One row per (rule, detail), most repeated first; the first caller seen is kept.
+fn group_blocks(lines: &[&Value]) -> Vec<Value> {
+    let mut rows: Vec<(String, String, i64, Value, Value, String)> = Vec::new();
+    for line in lines {
+        let event = build_guard_event(line);
+        let (rule, detail) = (text(&event, "rule"), text(&event, "detail"));
+        let caller = clip_redacted_text(&text(line, "attempt"), GUARD_DETAIL_LIMIT);
+        match rows.iter_mut().find(|r| r.0 == rule && r.1 == detail) {
+            Some(row) => {
+                row.2 += 1;
+                row.4 = event["t"].clone();
+            }
+            None => rows.push((rule, detail, 1, event["t"].clone(), event["t"].clone(), caller)),
+        }
+    }
+    rows.sort_by(|a, b| b.2.cmp(&a.2));
+    rows.into_iter().take(GUARD_GROUPS_LIMIT).map(|(rule, detail, count, first_t, last_t, caller)| json!({"rule": rule, "detail": detail, "count": count, "first_t": first_t, "last_t": last_t, "caller": caller})).collect()
 }
 
 #[cfg(test)]
@@ -94,6 +113,42 @@ mod tests {
         assert_eq!((events[0]["t"].clone(), events[0]["detail"].clone()), (json!("2026-01-01T10:00:24"), json!("token=[redacted] 24")));
         assert_eq!(summary["counts"], json!({"push-block": 13, "state-write": 11}));
         assert_eq!(build_guard_event(&json!({"turn": 4, "rule": ""}))["turn"], 4);
+    }
+
+    #[test]
+    fn repeats_are_one_row_with_a_count_and_the_caller() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::for_tests(dir.path());
+        let work = dir.path().display().to_string();
+        let log = engine_state::loop_state::loop_path(&work, "guard.log");
+        std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+        let mut lines: Vec<String> = (0..5)
+            .map(|i| json!({"t": format!("2026-01-01T10:00:0{i}"), "rule": "egress-runtime", "decision": "blocked", "detail": "host.example.com is not in the network list", "attempt": "Bash tool-x --password=abcdefghijklmnopqrstuvwxyz1234"}).to_string())
+            .collect();
+        lines.push(
+            json!({"t": "2026-01-01T10:01:00", "rule": "egress-host", "decision": "blocked", "detail": "other.example.com", "attempt": "curl other.example.com"})
+                .to_string(),
+        );
+        std::fs::write(
+            &log,
+            lines.join(
+                "
+",
+            ),
+        )
+        .unwrap();
+        let groups = app.guard_events().build_guard_summary(&work)["groups"].clone();
+        assert_eq!(groups.as_array().unwrap().len(), 2);
+        assert_eq!(
+            (groups[0]["count"].clone(), groups[0]["first_t"].clone(), groups[0]["last_t"].clone()),
+            (json!(5), json!("2026-01-01T10:00:00"), json!("2026-01-01T10:00:04"))
+        );
+        assert!(
+            groups[0]["caller"].as_str().unwrap().starts_with("Bash tool-x") && !groups[0]["caller"].as_str().unwrap().contains("abcdefghijklmnopqrstuvwxyz1234"),
+            "{}",
+            groups[0]["caller"]
+        );
+        assert_eq!((groups[1]["count"].clone(), groups[1]["caller"].clone()), (json!(1), json!("curl other.example.com")));
         assert_eq!(build_guard_event(&json!({"turn": true}))["rule"], "unknown");
     }
 }

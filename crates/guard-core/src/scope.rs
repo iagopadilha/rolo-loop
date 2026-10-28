@@ -692,9 +692,20 @@ fn in_folder(relative: &str, folder: &str) -> bool {
     relative.starts_with(folder) || relative == folder.trim_end_matches('/')
 }
 
-fn confirmed_subproject_map_folders(specs_dir: &str) -> Vec<String> {
-    let path = nt_join(&nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project"), "SUBPROJECTS.json");
-    let Some(data) = std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
+/// The confirmed monorepo folders of the project. The list lives in the PRIMARY repo's `.specs`: a map job of another repo is told where it
+/// is by `LOOP_PRIMARY_SPECS` (nothing is copied into that repo); without it the repo's own `.specs` is read.
+fn confirmed_subproject_map_folders(g: &G, specs_dir: &str) -> Vec<String> {
+    let exported = g.env.text("LOOP_PRIMARY_SPECS");
+    let primary = exported.trim();
+    let mut candidates = vec![nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project")];
+    if !primary.is_empty() {
+        candidates.push(nt_join(primary, "project"));
+    }
+    let Some(data) = candidates
+        .iter()
+        .map(|folder| nt_join(folder, "SUBPROJECTS.json"))
+        .find_map(|path| std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()))
+    else {
         return vec![];
     };
     let mut folders = Vec::new();
@@ -754,7 +765,8 @@ pub fn check_specs_only(g: &G, target: &str, rules: &[String], specs_dir: Option
         }
         return vec![h("system-only", format!("the system map writes only {SYSTEM_MAP_PATH}: {}", short(&relative)))];
     }
-    if has_rule(rules, "map-docs") && (in_folder(&relative, MAP_DOCS_FOLDER) || confirmed_subproject_map_folders(specs).iter().any(|f| in_folder(&relative, &g.fold(f))))
+    if has_rule(rules, "map-docs")
+        && (in_folder(&relative, MAP_DOCS_FOLDER) || confirmed_subproject_map_folders(g, specs).iter().any(|f| in_folder(&relative, &g.fold(f))))
     {
         return vec![];
     }

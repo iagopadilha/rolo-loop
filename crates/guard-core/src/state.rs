@@ -140,6 +140,8 @@ pub struct Permissions {
     pub allow: Vec<String>,
     pub deny_bash_regex: Vec<Value>,
     pub deny_path_regex: Vec<Value>,
+    /// The project's simple command releases (`commands`, `e2e_dev_baseline`): see [`crate::policy`].
+    pub project: crate::policy::ProjectCommands,
     pub cwd: Option<String>,
     pub specs_dir: Option<String>,
     pub slug: Option<String>,
@@ -176,6 +178,7 @@ pub fn load_permissions(specs_dir: Option<&str>) -> (Permissions, String) {
                     *slot = items.clone();
                 }
             }
+            permissions.project = crate::policy::ProjectCommands::from_json(&map);
             (permissions, String::new())
         }
         Ok(_) => {
@@ -265,7 +268,7 @@ pub fn truthy(v: &Value) -> bool {
     }
 }
 
-fn now_local_stamp() -> String {
+pub fn now_local_stamp() -> String {
     let format = time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]");
     let now = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
     now.format(format).unwrap_or_default()

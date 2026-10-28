@@ -6,7 +6,7 @@ use crate::net;
 use crate::paths::G;
 use crate::rules::*;
 use crate::scope::{executor_slug, has_rule, load_scope, note_identity_gap};
-use crate::state::{alert, describe_attempt, find_specs_dir, load_permissions, log, loop_file, py_json_dumps, truthy, value_text};
+use crate::state::{alert, current_turn, describe_attempt, find_specs_dir, load_permissions, log, loop_file, py_json_dumps, truthy, value_text};
 use serde_json::{json, Value};
 
 #[derive(Debug, Default, Clone)]
@@ -215,6 +215,19 @@ pub fn run(g: &G, profile_arg: &str, stdin_text: &str) -> Outcome {
     let mut names: Vec<&str> = blocked.iter().map(|(r, _)| r.as_str()).collect();
     names.sort();
     names.dedup();
+    if let Some(specs) = specs_dir.as_deref().filter(|s| !s.is_empty()) {
+        for request in &check.requests {
+            crate::policy::register_request(specs, request, current_turn(g, Some(specs)), check.perm.slug.as_deref(), &profile);
+        }
+    }
+    if names == ["ask-command"] {
+        // not a stop: the user is asked once (a card in the panel) and the agent carries on with what does not depend on this command
+        stderr.push_str(&format!(
+            "WAITING FOR THE USER'S APPROVAL [ask-command]: {}. A pending-approval card was raised for the user (nothing else to do for it). Do NOT stop the work and do NOT ask in the chat: mark only the task that needs this command as waiting for approval, carry on with the features and tasks that do not depend on it, and retry this exact command only when the engine says it was approved. If the user denied it, do not retry or work around it.\n",
+            blocked.iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>().join("; ")
+        ));
+        return Outcome { code: 2, stdout: String::new(), stderr };
+    }
     stderr.push_str(&format!(
         "BLOCKED by the orchestrator guard [{}]: {}. Do not try to work around it. Return STATUS: NEEDS_CONFIRM with the reason; the orchestrator takes it to the user. This block is final: do not retry this command or a variant of it. Continue without it, or report it in your final return.\n",
         names.join(", "),

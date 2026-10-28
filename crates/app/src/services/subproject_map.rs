@@ -399,6 +399,8 @@ impl SubprojectMapService<'_> {
         params.map_root = path.to_string();
         params.model = JOB_MODEL_CEILING.into();
         params.parallel_key = Some(parallel_key(folder, path));
+        // M1: the guard reads the confirmed subprojects from the primary's .specs, so nothing is copied into the other repo
+        params.extra_env = vec![("LOOP_PRIMARY_SPECS".to_string(), Path::new(&context.work_dir()).join(".specs").display().to_string())];
         let inventory_app = self.app.shared();
         let (inventory_folder, inventory_path) = (folder.to_string(), path.to_string());
         params.extra_before_start = Some(Box::new(move |update_progress| {

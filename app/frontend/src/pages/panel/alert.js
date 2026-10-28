@@ -103,7 +103,7 @@ function RaiseForm({ continueLabel = 'Raise the limit and continue' }) {
     </div>
     ${forecast && isNum(forecast.estimated_total) ? html`<div class="hint">${`The engine estimates about US$ ${usd(forecast.estimated_total)} for the whole run (about US$ ${usd(forecast.per_turn)} per turn, ${forecast.remaining_turns} turn(s) to go).`}</div>` : null}
     ${rungs.length ? html`<div class="card-row" role="group" aria-label="Quick limits">${rungs.map((rung) => html`<button key=${rung} type="button" class="btn btn-sm" disabled=${raise.busy}
-      onClick=${() => { raise.value = String(rung); raise.error = null; renderAll(); }}>${'US$ ' + rung}</button>`)}</div>` : null}
+      title=${'Raise the limit to US$ ' + rung + ' and continue, in one click'} onClick=${() => { raise.value = String(rung); raise.error = null; raiseLimit(); }}>${'US$ ' + rung}</button>`)}</div>` : null}
     ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${isNum((ladder || {}).suggested) ? 'The suggested limit covers the estimate with a margin.' : `Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>`;
 }
 /** P5: the limit and a way to raise it in every stopped state (error, stopped, paused), before the next turn can end on the cap. */

@@ -10,7 +10,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 - Errors are JSON: `{"ok": false, "error": "<message>", "code": "<code>"}`, with the status that fits the kind of error. A route that does not exist answers `{"ok": false, "error": "route not found"}` with `404`.
 - The "activity" column says whether the route counts as use of the app for the idle shutdown (`--idle-hours`).
 
-## Routes (133)
+## Routes (137)
 
 | Method | Path | Needs token | Counts as activity |
 |---|---|---|---|
@@ -75,6 +75,8 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `GET` | `/p/{project_id}/api/decisions` | no | no |
 | `POST` | `/p/{project_id}/api/decisions/{decision_id}/review` | yes | yes |
 | `POST` | `/p/{project_id}/api/decisions/{decision_id}/change` | yes | yes |
+| `GET` | `/p/{project_id}/api/approvals` | no | no |
+| `GET` | `/p/{project_id}/api/policy` | no | no |
 | `POST` | `/p/{project_id}/api/answer` | yes | yes |
 | `POST` | `/p/{project_id}/api/resume` | yes | yes |
 | `POST` | `/p/{project_id}/api/note` | yes | yes |
@@ -83,6 +85,9 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/loop/start` | yes | yes |
 | `POST` | `/p/{project_id}/api/instruction` | yes | yes |
 | `POST` | `/p/{project_id}/api/loop/raise-limit` | yes | yes |
+| `POST` | `/p/{project_id}/api/approvals/{approval_id}/approve` | yes | yes |
+| `POST` | `/p/{project_id}/api/approvals/{approval_id}/deny` | yes | yes |
+| `POST` | `/p/{project_id}/api/policy` | yes | yes |
 | `POST` | `/p/{project_id}/api/shutdown` | yes | yes |
 | `GET` | `/p/{project_id}/api/loop/settings` | no | no |
 | `GET` | `/p/{project_id}/api/whiteboard` | no | no |
@@ -166,6 +171,24 @@ The engine writes these keys into the run's `meta.json` after every turn. They a
 | `cost_forecast_warned_cap` | number | The cap for which the "forecast passes the cap" notice was already sent (one per cap). |
 
 `e2e=` in the ROADMAP now has four canonical words: `ok`, `failed`, `not-covered`, `pending`. The verifier's `PASS`/`FAIL`/`UNVERIFIED` (and `pass`, `fail`, `unverified`) are accepted and rewritten to `ok`/`failed`/`pending` by the engine.
+## Pending approvals, project policy and the cost limit (feature `loop-policies`)
+
+Policy: **a standard command that the project did not release asks; production is never released.** A migration (apply or create) and the standard development command (`dotnet run`, `npm run dev` and the like for other stacks) are detected by CLASS (`migrate_apply`, `migrate_create`, `dev_run`), not by one project's tool. The guard refuses the command, writes ONE request and tells the agent to carry on with the work that does not depend on it: the run does not stop. The panel shows one card per request. A command aimed at production (`--environment Production`, `NODE_ENV=production`, a production connection...) is refused for good, no request is made and there is no card or button for it.
+
+| Route | Body | Answer |
+|---|---|---|
+| `GET /p/{project_id}/api/approvals` | none | `{pending: [{id, class, what, env: "DEV", command, turn, slug, at, state, scope}], counts: {pending, approved, denied}, policy}`. `command` is masked (no `NAME=secret`, connection argument or long token). |
+| `POST /p/{project_id}/api/approvals/{approval_id}/approve` | `{always?: bool, reason?: text}` | `{ok, approval, resumed, pending}`. `always: true` also adds the class to the project's `commands` (the simple list below). When the last waiting request is answered and the run had stopped only because it waited (status `paused`, `stopped`, or `awaiting_user` with an approval in the reason) the run is relaunched (`resumed: true`). 404 for an id the guard never asked about. |
+| `POST /p/{project_id}/api/approvals/{approval_id}/deny` | `{reason?: text}` | Same answer; the agents are told not to retry or work around it. |
+| `GET /p/{project_id}/api/policy` | none | `{default: "ask", classes, alias, commands, production: "never", e2e_dev_baseline: {enabled, dev_hosts, production_hosts}}`. |
+| `POST /p/{project_id}/api/policy` | `{commands?: [text], e2e_dev_baseline?: {enabled?, dev_hosts?, production_hosts?}, reason: text}` | `{ok, policy}`. 400 when the reason is missing, an entry names production, an entry is not a command the policy asks about, or a development host reaches a production host. |
+
+The per-project policy is plain data in `PERMISSIONS.json` (other keys are kept, the replaced file is backed up): `"commands": ["migrations", "dev_run", "npm run dev"]` releases the listed classes (`migrate_apply`, `migrate_create`, `dev_run`, or the alias `migrations` for both migration classes) or literal commands; `"e2e_dev_baseline": {"enabled": true, "dev_hosts": [...], "production_hosts": [...]}` is the per-project DEV opt-in of the E2E baseline (off by default; when on, the engine applies the baseline before each turn and the app can start in DEV). Every answer and every policy change is a line in the permissions journal (`kind` `command_approval` or `policy`; no secret). The state payload carries `approvals` (same shape as `GET approvals` without `policy`).
+
+The guard summary of the state payload (`events`, `counts`) also carries `groups` (X2): `[{rule, detail, count, first_t, last_t, caller}]`, one row per repeated refusal (up to 10, most frequent first) with the command or tool call that made it (redacted). A map job that the guard would refuse fails before it starts, with every refused path in one message (M6).
+
+`POST loop/raise-limit` takes `{max_cost_usd: number}` or `{suggested: true}`. The default cost limit stays US$ 50. `suggested` raises it to the engine's suggested rung (`meta.cost_cap_ladder.suggested`, else the first rung above the limit in force), saves it and relaunches the loop: one click, no number to type. The quick-limit buttons of the panel call it with their rung.
+
 ## `GET /p/{project_id}/api/state`: live status fields
 
 These fields are added to the state payload (feature `live-status-and-notices`). None of them carries a command line, an environment value or a credential path.
@@ -180,7 +203,7 @@ The state payload also carries the permissions journal (feature `e2e-dev-baselin
 
 | Field | Shape | Meaning |
 |---|---|---|
-| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit` or `baseline`; `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Grants come from `harness grant` / `harness baseline`, the engine function `grant_access` and `POST /p/{project_id}/api/access/grant` (body `{kind: "host"|"cost_limit", value, reason}`, token required; answers `{ok, changed, message, entry}`; a refusal is `ok: false` with the sentence that says why, and it is journaled with `who: "panel"`). |
+| `permissions_log` | `{path, total, granted, refused, entries: [{id, at, kind, value, reason, who, outcome, detail, backup}]}` | The newest 50 lines of `.specs/project/loop/json/PERMISSIONS-LOG.json`, newest first. `kind` is `host`, `cost_limit`, `baseline`, `command_approval` (an answer to a pending approval) or `policy` (a change of the project policy); `outcome` is `granted` or `refused` (`detail` says what was done or why it was refused); `backup` is the copy of the replaced file, relative to the work folder, or empty. `reason` and `value` are redacted before they are written, so the journal never holds a credential. Grants come from `harness grant` / `harness baseline` and the engine function `grant_access`; the panel writes it only through the approval and policy routes below. |
 
 Planning gates (`/api/pipeline` and the readiness routes) also change:
 

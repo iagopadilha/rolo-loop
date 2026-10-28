@@ -31,6 +31,8 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "GET", &format!("{prefix}/decisions"), list_decisions);
     route(router, app, "POST", &format!("{prefix}/decisions/{{decision_id}}/review"), mark_reviewed);
     route(router, app, "POST", &format!("{prefix}/decisions/{{decision_id}}/change"), request_change);
+    route(router, app, "GET", &format!("{prefix}/approvals"), list_approvals);
+    route(router, app, "GET", &format!("{prefix}/policy"), get_policy);
 }
 
 fn with_context(app: &App, request: &Request, action: impl FnOnce(&ProjectContext) -> Response) -> Response {
@@ -115,6 +117,15 @@ fn list_decisions(app: &App, request: &Request) -> Response {
         }
     };
     with_context(app, request, |context| Response::json(200, app.decisions().list_decisions(context, turn)))
+}
+
+/// The pending-approval cards (a migration or the dev command waiting for the user), the counts and the project policy.
+fn list_approvals(app: &App, request: &Request) -> Response {
+    with_context(app, request, |context| Response::json(200, app.approvals().view(context)))
+}
+
+fn get_policy(app: &App, request: &Request) -> Response {
+    with_context(app, request, |context| Response::json(200, app.approvals().policy(context)))
 }
 
 fn mark_reviewed(app: &App, request: &Request) -> Response {
