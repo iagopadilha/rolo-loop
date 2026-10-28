@@ -4,6 +4,14 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Panel: STANDARD and LEGACY buttons for the Conformance of each repository in the Workspace dialog (S5), same code as `PUT repos/{name}/conformance` (the primary uses `POST conformance`); the server's refusal is shown as is.
+- Panel: importing a spec feature whose folder already exists asks Merge or Replace and sends `on_existing` (P3).
+- Panel: a "Permissions" button and dialog list the permissions journal (`state.permissions_log`) and release a host or a cost limit with a reason, like `harness grant`. New route `POST /p/{project_id}/api/access/grant` (token); the journal redacts values and reasons.
+- Panel: the cost limit form is in every stopped state (P5), says "limit saved" when only the relaunch failed (R6), and the bottom bar shows "E2E n of m done, k left" (R3) and a warning when the estimate passes the limit (R4).
+- Panel: the navbar status of a finished loop opens the Finish dialog instead of a second summary (F3); a question opens by itself only when no other dialog is open (F4).
+
 ### Changed
 
 - Panel: the Finish dialog shows the steps the engine sends (`GET wrap-up` `steps`) and each step's own action runs the engine call and re-reads the check.

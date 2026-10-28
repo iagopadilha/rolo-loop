@@ -430,6 +430,23 @@ impl LoopPanelService<'_> {
         }
     }
 
+    /// `POST access/grant {kind, value, reason}`: the same release as `harness grant` (`host` or `cost_limit`), journaled with who = `panel`. A refusal
+    /// is a normal answer (`ok: false` and the sentence that says why); the journal line is in `entry`.
+    pub fn grant_access(&self, context: &ProjectContext, body: &Value) -> Result<Value, AppError> {
+        let text = |key: &str| body.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+        let (kind, value, reason) = (text("kind"), text("value"), text("reason"));
+        if kind.trim().is_empty() || value.trim().is_empty() {
+            return Err(AppError::invalid_request("`kind` and `value` are required"));
+        }
+        let (repo, work) = (context.repo_path().to_string(), context.work_dir());
+        let data_dir = self.app.config.ctx.data_dir();
+        let toolkit_root = self.app.config.ctx.toolkit_root.display().to_string();
+        let access = engine_state::access_grant::AccessContext { repo: &repo, work: &work, data_dir: &data_dir, toolkit_root: &toolkit_root, who: "panel" };
+        let result = engine_state::access_grant::grant_access(&access, &kind, &value, &reason);
+        self.app.log.info("access_grant", &[("project", json!(context.project.id)), ("kind", json!(kind.trim())), ("granted", json!(result.granted))]);
+        Ok(json!({"ok": result.granted, "changed": result.changed, "message": result.message, "entry": result.entry}))
+    }
+
     /// `GET codebase/tree`: `{groups:[{folder, label, files:[{path, name}]}]}` for the root map and the map of each non-skipped subproject of the
     /// stored list (monorepo). Groups without files are left out; nothing is written.
     pub fn build_codebase_tree(&self, context: &ProjectContext) -> Value {

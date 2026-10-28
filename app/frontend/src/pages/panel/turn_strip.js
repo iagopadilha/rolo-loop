@@ -9,6 +9,8 @@ import { describeClaude } from './claude_badge.js';
 import { ctx } from './context.js';
 import { decisionsCounts, openDecisionsDialog } from './decisions.js';
 import { hasValidations, manualCount, openValidationsDialog } from './validations.js';
+import { openPermissionsDialog, permissionsEntries } from './permissions.js';
+import { costForecast } from './alert.js';
 
 const FALLBACK_DOT = '#4A4664';
 
@@ -18,6 +20,19 @@ export function stepsInTurn(turn) {
   return Array.isArray(turn.events) ? turn.events.length : null;
 }
 const stepsText = (turn) => { const k = stepsInTurn(turn); return k == null ? '' : `${k} step${k === 1 ? '' : 's'}`; };
+
+/** R3: "E2E 3 of 8 done, 5 left" from meta.e2e_progress (only runs with the final checks on). */
+function e2eText() {
+  const p = ctx.state && ctx.state.meta && ctx.state.meta.e2e_progress;
+  if (!p || !isNum(p.total) || p.total <= 0) return '';
+  return `E2E ${p.checked || 0} of ${p.total} done` + (isNum(p.pending) && p.pending > 0 ? `, ${p.pending} left` : '');
+}
+/** R4: the estimate of the whole run against the limit, shown only when it passes it. */
+function forecastText() {
+  const { forecast } = costForecast();
+  if (!forecast || forecast.exceeds_cap !== true || !isNum(forecast.estimated_total) || !isNum(forecast.cap)) return '';
+  return `Estimate US$ ${forecast.estimated_total.toFixed(0)} > limit US$ ${forecast.cap.toFixed(0)}`;
+}
 
 function TurnCard({ turn, on, isLive }) {
   const claudeTip = (describeClaude(turn) || {}).title;
@@ -47,6 +62,9 @@ export function TurnStrip() {
     <button type="button" class=${'z-btn-mono z-strip-decisions' + (open.critical ? ' is-critical' : '')} title="What the AI decided on its own: review, or ask for a change"
       onClick=${() => openDecisionsDialog({ state: ctx.state })}>AI decisions${openTotal ? html` <span class="z-strip-count">${openTotal}</span>` : null}</button>
     ${hasValidations(ctx.state) ? html`<button type="button" class="z-btn-mono" title="What the loop checks per feature, and what only you can check" onClick=${openValidationsDialog}>Validations${manualCount(ctx.state) ? html` <span class="z-strip-count">${manualCount(ctx.state)}</span>` : null}</button>` : null}
+    ${e2eText() ? html`<span class="z-btn-mono" title="Final checks of the verified features: done and still to do">${e2eText()}</span>` : null}
+    ${forecastText() ? html`<span class="z-btn-mono is-critical" title="The engine's estimate passes the cost limit: the loop will pause at the limit; raise it when it does, or raise it before the next start">${forecastText()}</span>` : null}
+    <button type="button" class="z-btn-mono" title="What was released to the loop (hosts, cost limit) and a form to release more" onClick=${openPermissionsDialog}>Permissions${permissionsEntries(ctx.state).length ? html` <span class="z-strip-count">${permissionsEntries(ctx.state).length}</span>` : null}</button>
     <button type="button" class="z-btn-mono" disabled=${pipe.sel == null} title="back to the latest turn (live)" onClick=${() => selectTurn(null)}>● latest</button>
   </section>`;
 }

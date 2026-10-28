@@ -9,6 +9,7 @@ import { ctx, ui, RESUME_WAIT_MS, status, loop, askKey, resumingNow, isPauseAsk,
 import { renderAll, schedulePoll } from '../project_panel.js';
 import { openErrors } from './errors.js';
 import { openStartLoopDialog } from './start_loop_dialog.js';
+import { openFinishDialog, wrapUpVisible } from './wrap_up.js';
 
 /** Opens the Start dialog (the old "New loop" card). Other screens call it as "go to Start loop". */
 export function openNewLoop() {
@@ -55,7 +56,7 @@ export function costForecast() {
   const m = (ctx.state && ctx.state.meta) || {};
   return { forecast: m.cost_forecast && typeof m.cost_forecast === 'object' ? m.cost_forecast : null, ladder: m.cost_cap_ladder && typeof m.cost_cap_ladder === 'object' ? m.cost_cap_ladder : null };
 }
-const raise = { value: null, error: null, busy: false };
+const raise = { value: null, error: null, busy: false, saved: null, savedWhy: '' };
 const usd = (v) => (isNum(v) ? v.toFixed(2) : DASH);
 const defaultRaise = () => { const { ladder } = costForecast(); if (ladder && isNum(ladder.suggested)) return String(ladder.suggested); const { cap, spent } = costNumbers(); return String(Math.ceil(((isNum(cap) ? cap : isNum(spent) ? spent : 0) + RAISE_STEP_USD) * 100) / 100); };
 function raiseProblem(raw) {
@@ -66,15 +67,49 @@ function raiseProblem(raw) {
 async function raiseLimit() {
   const value = raise.value == null ? defaultRaise() : raise.value, problem = raiseProblem(value);
   if (problem) { raise.error = problem; renderAll(); return; }
-  raise.busy = true; raise.error = null; renderAll();
+  raise.busy = true; raise.error = null; raise.saved = null; renderAll();
   try {
     await ctx.api.post('loop/raise-limit', { max_cost_usd: Number(value) });
     ui.resuming = { key: askKey(), since: Date.now(), label: 'new limit' }; raise.value = null;
     setTimeout(renderAll, RESUME_WAIT_MS + 300); schedulePoll(0);
     toast('Limit raised: the loop continues with the spent total kept.', 'ok');
     closeStatusDialog();
-  } catch (e) { raise.error = e.message || 'The limit was not raised.'; }
+  } catch (e) {
+    // R6: the back end saves the limit first and relaunches second; when only the relaunch was refused, say so (and offer a plain Resume)
+    // instead of showing the same form again as if nothing was saved.
+    raise.error = e.message || 'The limit was not raised.';
+    try {
+      const fresh = await ctx.api.get('state?visible=1', 15000);
+      if (fresh && fresh.meta && Number(fresh.meta.max_cost_usd) === Number(value)) { raise.saved = Number(value); raise.savedWhy = raise.error; raise.error = null; }
+    } catch (_) { /* the plain error stays */ }
+  }
   finally { raise.busy = false; renderAll(); }
+}
+/** The cost limit form: forecast, quick limits, new limit and the button. Used when the cap paused the loop and (P5) in every stopped state. */
+function RaiseForm({ continueLabel = 'Raise the limit and continue' }) {
+  const { spent, cap } = costNumbers(), value = raise.value == null ? defaultRaise() : raise.value;
+  const problem = raise.error || raiseProblem(value), showProblem = !!raise.error || (raise.value != null && !!problem);
+  const { forecast, ladder } = costForecast(), rungs = ladder ? list(ladder.rungs).filter(isNum) : [];
+  return html`<div>
+    <div class="stats-row"><${Stat} k="spent" v=${'US$ ' + usd(spent)} /><${Stat} k="limit" v=${'US$ ' + usd(cap)} /></div>
+    ${raise.saved != null ? html`<div class="nl-box nl-warn" role="alert"><strong>${`Limit saved: US$ ${usd(raise.saved)}.`}</strong> The relaunch failed because: ${raise.savedWhy}
+      <div class="card-row"><button type="button" class="btn btn-sm btn-primary" id="btn-resume-saved" disabled=${!!ui.busy.answer} onClick=${() => sendResume('resume request')}>Resume</button>
+        <span class="hint">the limit is not raised again</span></div></div>` : null}
+    <label class="field-label" for="raise-limit">New limit (US$)</label>
+    <div class="free">
+      <input id="raise-limit" type="number" min="0" step="1" value=${value} disabled=${raise.busy} aria-invalid=${showProblem ? 'true' : 'false'}
+        onInput=${(e) => { raise.value = e.currentTarget.value; raise.error = null; raise.saved = null; renderAll(); }} />
+      <button type="button" class="btn btn-primary" id="btn-raise-limit" disabled=${raise.busy || !!problem} onClick=${raiseLimit}>${continueLabel}</button>
+    </div>
+    ${forecast && isNum(forecast.estimated_total) ? html`<div class="hint">${`The engine estimates about US$ ${usd(forecast.estimated_total)} for the whole run (about US$ ${usd(forecast.per_turn)} per turn, ${forecast.remaining_turns} turn(s) to go).`}</div>` : null}
+    ${rungs.length ? html`<div class="card-row" role="group" aria-label="Quick limits">${rungs.map((rung) => html`<button key=${rung} type="button" class="btn btn-sm" disabled=${raise.busy}
+      onClick=${() => { raise.value = String(rung); raise.error = null; renderAll(); }}>${'US$ ' + rung}</button>`)}</div>` : null}
+    ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${isNum((ladder || {}).suggested) ? 'The suggested limit covers the estimate with a margin.' : `Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>`;
+}
+/** P5: the limit and a way to raise it in every stopped state (error, stopped, paused), before the next turn can end on the cap. */
+function RaiseBox() {
+  if (!isNum(costNumbers().cap)) return null;
+  return html`<details class="raise-box"><summary>Cost limit</summary><${RaiseForm} continueLabel="Raise the limit and resume" /></details>`;
 }
 
 // ---------- bodies of the status dialog ----------
@@ -124,13 +159,13 @@ export function ErrorBand() {
       <button type="button" class="btn btn-danger" disabled=${busy} title="relaunches the loop from the point where it fell" onClick=${() => sendResume('retry')}>Try again</button>
       <button type="button" class="btn" title="every error of this loop in one place, with what to do" onClick=${() => { closeStatusDialog(); openErrors(); }}>Errors</button>
       <span class="hint">to change the roadmap, use Back to planning in the top bar</span>
-    </div></div>`;
+    </div><${RaiseBox} /></div>`;
 }
 export function Stopped() {
   const l = loop(), busy = !!ui.busy.answer;
   return html`<div class="band-detail"><div class="question">The loop process is no longer running, but there was still work to do. It was probably closed or crashed. Resume relaunches the same command.</div>
     ${l.reason ? html`<div class="cause">${String(l.reason)}</div>` : null}
-    <div class="card-row"><button type="button" class="btn btn-primary" disabled=${busy} title="relaunches the loop with the same command" onClick=${() => sendResume('resume request')}>Resume</button></div></div>`;
+    <div class="card-row"><button type="button" class="btn btn-primary" disabled=${busy} title="relaunches the loop with the same command" onClick=${() => sendResume('resume request')}>Resume</button></div><${RaiseBox} /></div>`;
 }
 export function Paused() {
   const l = loop(), busy = !!ui.busy.answer;
@@ -138,26 +173,13 @@ export function Paused() {
     ${l.reason ? html`<div class="cause">${String(l.reason)}</div>` : null}
     ${l.next ? html`<div class="hint">${'After resuming: ' + l.next}</div>` : null}
     <div class="card-row"><button type="button" class="btn btn-primary" disabled=${busy} onClick=${() => sendResume('resume request')}>Resume the loop</button>
-      <span class="hint">the loop carries on from where it stopped</span></div></div>`;
+      <span class="hint">the loop carries on from where it stopped</span></div><${RaiseBox} /></div>`;
 }
 /** Cost cap hit: raise the limit and continue (new limit above the spent total) or stop here (the loop stays paused). */
 export function CostCap() {
-  const { spent, cap } = costNumbers(), value = raise.value == null ? defaultRaise() : raise.value;
-  const problem = raise.error || raiseProblem(value), showProblem = !!raise.error || (raise.value != null && !!problem);
   return html`<div class="band-detail">
     <div class="question">The loop reached its spending limit and paused. Nothing was lost: the spent total is kept and the work continues from where it stopped.</div>
-    <div class="stats-row"><${Stat} k="spent" v=${'US$ ' + usd(spent)} /><${Stat} k="limit" v=${'US$ ' + usd(cap)} /></div>
-    <div><label class="field-label" for="raise-limit">New limit (US$)</label>
-      <div class="free">
-        <input id="raise-limit" type="number" min="0" step="1" value=${value} disabled=${raise.busy} aria-invalid=${showProblem ? 'true' : 'false'}
-          onInput=${(e) => { raise.value = e.currentTarget.value; raise.error = null; renderAll(); }} />
-        <button type="button" class="btn btn-primary" id="btn-raise-limit" disabled=${raise.busy || !!problem} onClick=${raiseLimit}>Raise the limit and continue</button>
-      </div>
-      ${(() => { const { forecast, ladder } = costForecast(), rungs = ladder ? list(ladder.rungs).filter(isNum) : [];
-        return html`${forecast && isNum(forecast.estimated_total) ? html`<div class="hint">${`The engine estimates about US$ ${usd(forecast.estimated_total)} for the whole run (about US$ ${usd(forecast.per_turn)} per turn, ${forecast.remaining_turns} turn(s) to go).`}</div>` : null}
-          ${rungs.length ? html`<div class="card-row" role="group" aria-label="Quick limits">${rungs.map((rung) => html`<button key=${rung} type="button" class="btn btn-sm" disabled=${raise.busy}
-            onClick=${() => { raise.value = String(rung); raise.error = null; renderAll(); }}>${'US$ ' + rung}</button>`)}</div>` : null}`; })()}
-      ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${isNum((costForecast().ladder || {}).suggested) ? 'The suggested limit covers the estimate with a margin.' : `Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>
+    <${RaiseForm} />
     <div class="card-row"><button type="button" class="btn" id="btn-stop-here" onClick=${() => { closeStatusDialog(); toast('The loop stays paused. Use Finish or Back to planning when you are ready.', 'ok'); }}>Stop here</button>
       <span class="hint">the loop stays paused; nothing runs and nothing more is spent</span></div>
   </div>`;
@@ -201,11 +223,20 @@ function currentBody() {
 }
 /** True when clicking the indicator has something to show (an attention state, or done). */
 export const statusHasDialog = () => !!currentBody();
-export function openStatusDialog() { statusDialog.open = true; renderAll(); }
+/** F3: a finished loop with a worktree has ONE summary, the wrap-up (Finish dialog with its steps); the navbar status opens that instead of a second one. */
+export function openStatusDialog() {
+  if (status() === 'done' && !resumingNow() && !costCapPause() && wrapUpVisible()) {
+    openFinishDialog({ state: ctx.state, project: ctx.projectId, onDone: () => { renderAll(); schedulePoll(0); } });
+    return;
+  }
+  statusDialog.open = true; renderAll();
+}
 export function closeStatusDialog() { statusDialog.open = false; renderAll(); }
 /** Mounted by Panel in loop mode. Opens by itself ONCE per new question (awaiting_user event); closes by itself when nothing needs the user. */
 export function StatusDialog() {
-  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; }
+  // F4: the question opens by itself only when no other dialog is open (it waits for the next render otherwise, so it never interrupts one)
+  const otherDialogOpen = !statusDialog.open && !!document.querySelector('dialog[open]');
+  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && !otherDialogOpen && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; }
   const body = statusDialog.open ? currentBody() : null;
   if (!body) { statusDialog.open = false; return null; }
   const [title, Body] = body;
