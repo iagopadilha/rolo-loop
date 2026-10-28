@@ -23,6 +23,7 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "POST", &format!("{prefix}/loop/start"), start_loop);
     route(router, app, "POST", &format!("{prefix}/instruction"), send_instruction);
     route(router, app, "POST", &format!("{prefix}/loop/raise-limit"), raise_limit);
+    route(router, app, "POST", &format!("{prefix}/dependencies/apply"), apply_dependencies);
     route(router, app, "POST", &format!("{prefix}/shutdown"), ignore_legacy_shutdown);
     route(router, app, "GET", &format!("{prefix}/loop/settings"), get_loop_settings);
     route(router, app, "GET", &format!("{prefix}/whiteboard"), get_whiteboard);
@@ -79,6 +80,10 @@ fn get_loop_settings(app: &App, request: &Request) -> Response {
 
 fn raise_limit(app: &App, request: &Request) -> Response {
     after_planning(app, request, |context| guard_repos_free(app, context, || reply(app.loop_control().raise_loop_limit(context, &request.body))))
+}
+
+fn apply_dependencies(app: &App, request: &Request) -> Response {
+    after_planning(app, request, |context| reply(app.loop_control().apply_dependency_proposals(context)))
 }
 
 fn send_instruction(app: &App, request: &Request) -> Response {

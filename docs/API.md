@@ -10,7 +10,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 - Errors are JSON: `{"ok": false, "error": "<message>", "code": "<code>"}`, with the status that fits the kind of error. A route that does not exist answers `{"ok": false, "error": "route not found"}` with `404`.
 - The "activity" column says whether the route counts as use of the app for the idle shutdown (`--idle-hours`).
 
-## Routes (132)
+## Routes (133)
 
 | Method | Path | Needs token | Counts as activity |
 |---|---|---|---|
@@ -83,6 +83,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/loop/start` | yes | yes |
 | `POST` | `/p/{project_id}/api/instruction` | yes | yes |
 | `POST` | `/p/{project_id}/api/loop/raise-limit` | yes | yes |
+| `POST` | `/p/{project_id}/api/dependencies/apply` | yes | yes |
 | `POST` | `/p/{project_id}/api/shutdown` | yes | yes |
 | `GET` | `/p/{project_id}/api/loop/settings` | no | no |
 | `GET` | `/p/{project_id}/api/whiteboard` | no | no |
@@ -241,3 +242,9 @@ Additive, read-only. One object that joins what the validation produced; every l
 | `cleanup` | `{open, done, items: [{what, remove, feature}]}` | Test data the run left in the test environment, from `.specs/project/loop/CLEANUP.md` (`- [open] what | remove: how | feature: slug`). The engine never runs a removal; open items also appear in `manual_checks` with `source: "cleanup"` (Z3). |
 
 `loop.pause_kind` is `null`, `"validation_checkpoint"` (the loop waits, on purpose, for a check only a person can do: a ROADMAP feature with `checkpoint=...`; reason starts `Waiting for your validation`, options `I validated it, go on` and `I will validate it later, close without it`), `"credential"` or `"blocked_by_access"` (V3, U5 data side). With `--e2e`, an `e2e=ok|failed` that changed in a turn without any of its listed evidence written in that turn ends the run with `error` (G7).
+
+### Forgotten dependencies, one click (W3)
+
+`GET graph` also returns `dependency_proposals`: `{proposals: [{feature, depends_on, type, evidence, state, cycle}], review: [{feature, depends_on}]}`. `state` is `pending` (can be applied) or `cycle` (would close a cycle; never applied); a proposal the user refused earlier is left out. Read-only.
+
+`POST dependencies/apply` (no body) writes every pending `deps=` into the ROADMAP now, the same step the loop runs before each turn, and answers `{ok, applied: [{feature, depends_on}], problems: [text]}`. On a problem (`409`) the ROADMAP is untouched; it also answers `409` while a loop is alive.

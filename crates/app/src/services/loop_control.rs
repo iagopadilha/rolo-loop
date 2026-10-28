@@ -537,6 +537,17 @@ impl LoopControlService<'_> {
         (code == 0).then_some(branch)
     }
 
+    /// `POST dependencies/apply`: writes the `deps=` the audit proposes into the ROADMAP now, in one call (W3). Refused while a loop is alive: the
+    /// loop applies them itself before its next turn and a running turn may be editing the ROADMAP.
+    pub fn apply_dependency_proposals(&self, context: &ProjectContext) -> Reply {
+        if self.is_loop_alive(context) {
+            return failure(409, "the loop is running; it adds these dependencies itself before its next turn");
+        }
+        let result = engine_state::audit_deps::apply_now(&context.work_dir());
+        let problems = result["problems"].as_array().is_some_and(|p| !p.is_empty());
+        (if problems { 409 } else { 200 }, json!({"ok": !problems, "applied": result["applied"], "problems": result["problems"]}))
+    }
+
     /// `POST loop/raise-limit {max_cost_usd}`: the spend cap of THIS run goes up (meta `max_cost_usd`, which wins over `--max-cost`) and the same loop
     /// resumes. Refused unless the new cap is above what was already spent (`cost_usd`, never reset).
     pub fn raise_loop_limit(&self, context: &ProjectContext, body: &Value) -> Reply {

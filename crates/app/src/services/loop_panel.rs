@@ -390,7 +390,7 @@ impl LoopPanelService<'_> {
     pub fn build_graph(&self, context: &ProjectContext) -> Value {
         let roadmap_text = self.app.loop_files.read_roadmap(&context.work_dir());
         let (features, _) = loop_state::parse_roadmap(&roadmap_text);
-        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features)})
+        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features), "dependency_proposals": engine_state::audit_deps::proposals(&context.work_dir())})
     }
 
     // ------------------------------------------------ codebase maps (read only)
