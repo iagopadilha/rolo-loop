@@ -26,6 +26,8 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "POST", &format!("{prefix}/approvals/{{approval_id}}/approve"), approve_request);
     route(router, app, "POST", &format!("{prefix}/approvals/{{approval_id}}/deny"), deny_request);
     route(router, app, "POST", &format!("{prefix}/policy"), set_policy);
+    route(router, app, "POST", &format!("{prefix}/dependencies/apply"), apply_dependencies);
+    route(router, app, "POST", &format!("{prefix}/scripts/answer"), answer_script);
     route(router, app, "POST", &format!("{prefix}/shutdown"), ignore_legacy_shutdown);
     route(router, app, "GET", &format!("{prefix}/loop/settings"), get_loop_settings);
     route(router, app, "GET", &format!("{prefix}/whiteboard"), get_whiteboard);
@@ -96,6 +98,14 @@ fn deny_request(app: &App, request: &Request) -> Response {
 /// The simple per-project policy: the commands released without asking and the E2E DEV baseline opt-in.
 fn set_policy(app: &App, request: &Request) -> Response {
     respond_with_project_context(app, request, false, |context| reply(app.approvals().set_policy(context, &request.body)))
+}
+
+fn apply_dependencies(app: &App, request: &Request) -> Response {
+    after_planning(app, request, |context| reply(app.loop_control().apply_dependency_proposals(context)))
+}
+
+fn answer_script(app: &App, request: &Request) -> Response {
+    after_planning(app, request, |context| reply(app.loop_control().answer_project_script(context, &request.body)))
 }
 
 fn send_instruction(app: &App, request: &Request) -> Response {

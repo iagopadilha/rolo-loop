@@ -284,13 +284,14 @@ impl LoopPanelService<'_> {
             "graph": graph, "agents": agents, "validate": validate,
             "validations": e2e_evidence::validations(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
             "manual_checks": e2e_evidence::manual_checks(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
+            "validation_report": engine_state::validation_report::build(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
             "decisions_summary": self.app.decisions().open_counts(context),
             "recent_actions": self.list_recent_actions(&work_dir),
             "roadmap_approval": files.read_roadmap_approval(&work_dir, Some(context.repo_path())),
             "planning_required": self.app.planning_requirement().is_planning_required(context),
             "answers": parse_answers(&files.read_state_file(&work_dir, "ANSWERS.md")),
             "turns": turn_rows, "quarantine": quarantine,
-            "guard_events": guard["events"], "guard_counts": guard["counts"],
+            "guard_events": guard["events"], "guard_counts": guard["counts"], "guard_waiting": guard["waiting"],
             "monitor": {"url": project_url, "idle_in_s": null, "shutdown_in_s": shutdown},
         })
     }
@@ -328,6 +329,7 @@ impl LoopPanelService<'_> {
             "reason": if running { Value::Null } else { or_null(summary.get("reason")) },
             "next": if running { Value::Null } else { or_null(loop_json.get("next")) },
             "options": if running { vec![] } else { texts("options") }, "to_check": texts("to_check"),
+            "pause_kind": if running { Value::Null } else { or_null(loop_json.get("pause_kind")) },
             "credential_request": if running { Value::Null } else { or_null(loop_json.get("credential_request")) },
             "at": loop_json.get("at").cloned().unwrap_or(Value::Null),
             "pause_requested": self.app.loop_files.is_pause_requested(work_dir),
@@ -389,7 +391,7 @@ impl LoopPanelService<'_> {
     pub fn build_graph(&self, context: &ProjectContext) -> Value {
         let roadmap_text = self.app.loop_files.read_roadmap(&context.work_dir());
         let (features, _) = loop_state::parse_roadmap(&roadmap_text);
-        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features)})
+        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features), "dependency_proposals": engine_state::audit_deps::proposals(&context.work_dir())})
     }
 
     // ------------------------------------------------ codebase maps (read only)

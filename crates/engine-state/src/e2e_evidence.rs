@@ -294,26 +294,57 @@ pub fn no_surface_proof(input: &FeatureInput, config: &SurfaceConfig) -> Result<
 /// Features whose layer the user chose to skip (`User answer: continue without this layer` to a question tagged `[layer-stop:<slug>]`).
 /// `specs` is the `.specs/project` folder.
 pub fn skipped_features(specs: &str) -> Vec<String> {
+    answered_with(specs, STOP_MARK, SKIP_LAYER_OPTION)
+}
+
+/// Slugs tagged `<mark><slug>]` in a question of ANSWERS.md whose user answer starts with `option` (case-insensitive).
+fn answered_with(specs: &str, mark: &str, option: &str) -> Vec<String> {
     let text = read(&Path::new(specs).join("ANSWERS.md"));
-    let mut skipped = Vec::new();
+    let option = option.to_ascii_lowercase();
+    let mut found = Vec::new();
     for block in text.split("\n## Answer ") {
-        let Some(start) = block.find(STOP_MARK) else { continue };
-        let rest = &block[start + STOP_MARK.len()..];
+        let Some(start) = block.find(mark) else { continue };
+        let rest = &block[start + mark.len()..];
         let Some(end) = rest.find(']') else { continue };
         let answer = block.lines().find_map(|l| l.trim().strip_prefix("User answer:")).unwrap_or("").trim().to_ascii_lowercase();
         let slug = rest[..end].to_string();
-        if answer.starts_with(SKIP_LAYER_OPTION) && !skipped.contains(&slug) {
-            skipped.push(slug);
+        if answer.starts_with(&option) && !found.contains(&slug) {
+            found.push(slug);
         }
     }
-    skipped
+    found
+}
+
+/// The option that confirms a validation checkpoint (backlog V3).
+pub const VALIDATED_OPTION: &str = "I validated it, go on";
+/// The option that leaves the checkpoint on the manual list and lets the loop close (backlog V3).
+pub const VALIDATE_LATER_OPTION: &str = "I will validate it later, close without it";
+/// Appended to a validation stop reason so the answer can be tied back to the feature: `[validate-stop:<slug>]`.
+const VALIDATE_MARK: &str = "[validate-stop:";
+
+/// Features whose validation checkpoint the user confirmed.
+pub fn validated_features(specs: &str) -> Vec<String> {
+    let mut all = answered_with(specs, VALIDATE_MARK, VALIDATED_OPTION);
+    for slug in answered_with(specs, VALIDATE_MARK, VALIDATE_LATER_OPTION) {
+        if !all.contains(&slug) {
+            all.push(slug);
+        }
+    }
+    all
 }
 
 // ---------------------------------------------------------------- stops that wait for the user
 
-/// A stop that waits for the user: a credential decision or a blocked call.
+/// The kind of a stop, so the panel and the outside notice can tell a wanted pause from an error or a question.
+pub const KIND_BLOCKED: &str = "blocked_by_access";
+pub const KIND_CREDENTIAL: &str = "credential";
+pub const KIND_VALIDATION: &str = "validation_checkpoint";
+
+/// A stop that waits for the user: a credential decision, a blocked call or a validation checkpoint.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AwaitingStop {
+    /// One of [`KIND_BLOCKED`], [`KIND_CREDENTIAL`], [`KIND_VALIDATION`].
+    pub kind: &'static str,
     pub feature: String,
     pub reason: String,
     pub options: Vec<String>,
@@ -342,6 +373,7 @@ pub fn awaiting_stop(work: &str, specs: &str) -> Option<AwaitingStop> {
                 "E2E blocked by access on {slug}: the check could not run because this call was refused: {blocked}. The layer is NOT covered. Release that call with a permission rule and re-run the check, or choose to continue without this layer (it goes to the manual list). {STOP_MARK}{slug}]"
             );
             return Some(AwaitingStop {
+                kind: KIND_BLOCKED,
                 feature: slug.clone(),
                 reason,
                 options: vec!["I released the call, run the check again".into(), SKIP_LAYER_OPTION.into()],
@@ -370,6 +402,7 @@ pub fn awaiting_stop(work: &str, specs: &str) -> Option<AwaitingStop> {
             let request = json!({"name": names, "names": missing, "feature": slug, "who": who, "if_declined": declined,
                 "options": [format!("I added {names} to .specs/project/.env.test, check again"), SKIP_LAYER_OPTION]});
             return Some(AwaitingStop {
+                kind: KIND_CREDENTIAL,
                 feature: slug.clone(),
                 reason,
                 options: vec![format!("I added {names} to .specs/project/.env.test, check again"), SKIP_LAYER_OPTION.into()],
@@ -377,6 +410,25 @@ pub fn awaiting_stop(work: &str, specs: &str) -> Option<AwaitingStop> {
                 credential_request: Some(request),
             });
         }
+    }
+    // V3: a deliberate pause. Last, so every feature that does not depend on the checkpointed one has already been worked on.
+    let validated = validated_features(specs);
+    for (slug, fields) in features.iter() {
+        if fields.status() != "verified" || !fields.has("checkpoint") || validated.contains(slug) {
+            continue;
+        }
+        let what = fields.text("checkpoint").replace('_', " ");
+        let reason = format!(
+            "Waiting for your validation: feature {slug}. Do this: {what}. This is a planned pause, not an error: everything that does not depend on {slug} is already done. {VALIDATE_MARK}{slug}]"
+        );
+        return Some(AwaitingStop {
+            kind: KIND_VALIDATION,
+            feature: slug.clone(),
+            reason,
+            options: vec![VALIDATED_OPTION.into(), VALIDATE_LATER_OPTION.into()],
+            next: format!("after you confirm, the loop closes the E2E of {slug}; if you validate later, it stays on the manual list"),
+            credential_request: None,
+        });
     }
     None
 }
@@ -391,6 +443,7 @@ pub fn write_stop(work: &str, stop: &AwaitingStop) {
         map.insert("feature".into(), json!(stop.feature));
         map.insert("options".into(), json!(stop.options));
         map.insert("next".into(), json!(stop.next));
+        map.insert("pause_kind".into(), json!(stop.kind));
         match &stop.credential_request {
             Some(request) => map.insert("credential_request".into(), request.clone()),
             None => map.shift_remove("credential_request"),
@@ -441,6 +494,51 @@ pub fn evidence_stop_message(problems: &[String]) -> String {
         "E2E phase ended with results that are not backed by evidence: {}. Run the real check and list its artifact (`evidence=`), or give a verifiable no-surface reason; the loop does not accept a label alone.",
         problems.join("; ")
     )
+}
+
+// ---------------------------------------------------------------- G7: a result changes only with calls made in this turn
+
+/// Clock slack when comparing a file time with the start of the turn (file systems round their times).
+const CLOCK_SLACK: std::time::Duration = std::time::Duration::from_secs(2);
+
+fn touched_since(work: &str, item: &str, since: std::time::SystemTime) -> bool {
+    let Some(path) = resolve_inside(work, item) else { return false };
+    let Ok(modified) = std::fs::metadata(&path).and_then(|m| m.modified()) else { return false };
+    modified + CLOCK_SLACK >= since
+}
+
+/// Features whose `e2e=` became `ok` or `failed` in this turn (it was something else before) without any of their listed evidence being
+/// written since `since` (the start of the turn). A turn that made no E2E calls leaves no fresh result file, so it cannot change a result;
+/// marking everything at once after a reset fails here. A layer the user chose to skip is exempt. Returns one message per feature.
+pub fn changes_without_calls(work: &str, specs: &str, prev_roadmap: &str, since: std::time::SystemTime) -> Vec<String> {
+    let skipped = skipped_features(specs);
+    let before = parse_roadmap(prev_roadmap).0;
+    let after = parse_roadmap(&read(&Path::new(specs).join("ROADMAP.md"))).0;
+    let mut out = Vec::new();
+    for (slug, fields) in after.iter() {
+        let now = fields.get("e2e").and_then(E2eResult::parse);
+        if !matches!(now, Some(E2eResult::Ok) | Some(E2eResult::Failed)) || skipped.contains(slug) {
+            continue;
+        }
+        let was = before.get(slug).and_then(|f| f.get("e2e")).and_then(E2eResult::parse);
+        if was == now {
+            continue;
+        }
+        let input = FeatureInput::load(work, slug, fields);
+        let evidence = input.evidence();
+        if !evidence.iter().any(|item| touched_since(work, item, since)) {
+            let word = now.map(E2eResult::roadmap_word).unwrap_or("");
+            out.push(format!(
+                "{slug}: e2e={word} was written but no listed evidence was produced in this turn, so no E2E call was made for it; run the check and list the result file it writes"
+            ));
+        }
+    }
+    out
+}
+
+/// The stop message for [`changes_without_calls`].
+pub fn changes_without_calls_message(problems: &[String]) -> String {
+    format!("E2E results changed without calls in this turn: {}. A result is accepted only with the calls that produced it.", problems.join("; "))
 }
 
 // ---------------------------------------------------------------- what is validated, and what stays with the user
@@ -521,6 +619,7 @@ pub fn manual_checks(work: &str, specs: &str) -> Vec<Value> {
             list.push(item(json!(slug), "the checkpoint the feature declares", "an outside effect only a person can confirm", "checkpoint"));
         }
     }
+    list.extend(crate::env_cleanup::manual_rows(work)); // Z3: test data the run left in the test environment
     list
 }
 
@@ -716,5 +815,83 @@ mod tests {
         assert!(list.iter().filter(|m| m["source"] == "by_design").count() >= 4);
         assert!(list.iter().all(|m| !m["reason"].as_str().unwrap().is_empty()));
         assert!(list.iter().any(|m| m["source"] == "checkpoint" && m["feature"] == "a"));
+    }
+
+    #[test]
+    fn a_result_changed_in_a_turn_without_fresh_evidence_is_refused() {
+        let before =
+            "## S\n- [a] status=verified kind=back e2e=pending\n- [b] status=verified kind=back e2e=ok evidence=old.log\n- [c] status=verified kind=back e2e=pending\n";
+        let p = project("## S\n- [a] status=verified kind=back e2e=ok evidence=new.log\n- [b] status=verified kind=back e2e=ok evidence=old.log\n- [c] status=verified kind=back e2e=ok evidence=stale.log\n");
+        write(&p, "new.log", "PASS");
+        write(&p, "old.log", "PASS");
+        write(&p, "stale.log", "PASS");
+        let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        // every file is fresh relative to an old turn start: nothing is refused
+        assert!(changes_without_calls(&p.work, &p.specs, before, long_ago).is_empty());
+        // the turn started after every file was written: a and c changed to ok with no fresh evidence; b did not change
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3600);
+        let problems = changes_without_calls(&p.work, &p.specs, before, later);
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(problems[0].starts_with("a: e2e=ok was written but no listed evidence"));
+        assert!(problems[1].starts_with("c: "));
+    }
+
+    #[test]
+    fn a_skipped_layer_and_an_unchanged_result_are_not_checked_for_calls() {
+        let p = project("## S\n- [a] status=verified kind=back e2e=failed\n");
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3600);
+        assert!(changes_without_calls(&p.work, &p.specs, "## S\n- [a] status=verified kind=back e2e=failed\n", later).is_empty());
+        assert_eq!(changes_without_calls(&p.work, &p.specs, "## S\n- [a] status=verified kind=back e2e=pending\n", later).len(), 1);
+        write(&p, ".specs/project/ANSWERS.md", &format!("\n## Answer t [pending]\nQuestion: x {STOP_MARK}a]\nUser answer: {SKIP_LAYER_OPTION}\n"));
+        assert!(changes_without_calls(&p.work, &p.specs, "## S\n- [a] status=verified kind=back e2e=pending\n", later).is_empty());
+    }
+
+    #[test]
+    fn a_checkpoint_is_a_deliberate_pause_until_the_user_confirms_it() {
+        let p = project(
+            "## S
+- [a] status=verified kind=back checkpoint=send_a_test_mail e2e=ok evidence=o.log
+- [b] status=verified kind=back e2e=ok evidence=o.log
+",
+        );
+        write(&p, "o.log", "PASS");
+        let stop = awaiting_stop(&p.work, &p.specs).expect("a checkpoint waits for the user");
+        assert_eq!((stop.kind, stop.feature.as_str()), (KIND_VALIDATION, "a"));
+        assert!(stop.reason.starts_with("Waiting for your validation: feature a. Do this: send a test mail."), "{}", stop.reason);
+        assert!(stop.reason.contains("planned pause, not an error"));
+        assert_eq!(stop.options, vec![VALIDATED_OPTION.to_string(), VALIDATE_LATER_OPTION.to_string()]);
+        write_stop(&p.work, &stop);
+        assert_eq!(load_json(&state_file(&p.work, "LOOP.json"))["pause_kind"], KIND_VALIDATION);
+        for option in [VALIDATED_OPTION, VALIDATE_LATER_OPTION] {
+            write(
+                &p,
+                ".specs/project/ANSWERS.md",
+                &format!(
+                    "
+## Answer t [pending]
+Question: {} 
+User answer: {option}
+",
+                    stop.reason
+                ),
+            );
+            assert!(awaiting_stop(&p.work, &p.specs).is_none(), "{option}");
+        }
+    }
+
+    #[test]
+    fn a_blocked_call_and_a_credential_keep_their_own_kinds() {
+        let p = project(
+            "## S
+- [a] status=verified kind=back blocked-call=curl_x
+",
+        );
+        assert_eq!(awaiting_stop(&p.work, &p.specs).unwrap().kind, KIND_BLOCKED);
+        let q = project(
+            "## S
+- [a] status=verified kind=back needs-credential=SOME_NAME
+",
+        );
+        assert_eq!(awaiting_stop(&q.work, &q.specs).unwrap().kind, KIND_CREDENTIAL);
     }
 }

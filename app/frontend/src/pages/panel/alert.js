@@ -10,6 +10,7 @@ import { renderAll, schedulePoll } from '../project_panel.js';
 import { openErrors } from './errors.js';
 import { openStartLoopDialog } from './start_loop_dialog.js';
 import { openFinishDialog, wrapUpVisible } from './wrap_up.js';
+import { readStored, writeStored } from '../../util/storage.js';
 
 /** Opens the Start dialog (the old "New loop" card). Other screens call it as "go to Start loop". */
 export function openNewLoop() {
@@ -232,11 +233,15 @@ export function openStatusDialog() {
   statusDialog.open = true; renderAll();
 }
 export function closeStatusDialog() { statusDialog.open = false; renderAll(); }
+/** P6. The question the dialog already opened for is remembered in this browser (per project), so a page reload does not open it again. */
+const seenKey = () => 'harness.status.seen.' + (ctx.projectId || '');
+const alreadyShown = (key) => statusDialog.autoKey === key || readStored(seenKey(), null) === key;
+const rememberShown = (key) => { statusDialog.autoKey = key; writeStored(seenKey(), key); };
 /** Mounted by Panel in loop mode. Opens by itself ONCE per new question (awaiting_user event); closes by itself when nothing needs the user. */
 export function StatusDialog() {
   // F4: the question opens by itself only when no other dialog is open (it waits for the next render otherwise, so it never interrupts one)
   const otherDialogOpen = !statusDialog.open && !!document.querySelector('dialog[open]');
-  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && !otherDialogOpen && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; }
+  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && !otherDialogOpen && !alreadyShown(askKey())) { rememberShown(askKey()); statusDialog.open = true; }
   const body = statusDialog.open ? currentBody() : null;
   if (!body) { statusDialog.open = false; return null; }
   const [title, Body] = body;

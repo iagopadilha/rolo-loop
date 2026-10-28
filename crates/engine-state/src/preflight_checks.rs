@@ -143,7 +143,8 @@ pub fn hook_path_problems(ctx: &AppCtx) -> Vec<String> {
 
 /// claude version, permission modes and git: what changes from machine to machine.
 pub fn environment_problems(opts: &LoopOpts, repo: &str) -> Pair {
-    let (mut problems, mut warns) = (Vec::new(), Vec::new());
+    let mut problems = Vec::new();
+    let warns = Vec::new();
     let binary = claude_binaries::resolve(if opts.claude.is_empty() { "claude" } else { &opts.claude });
     if !binary.is_empty() && !binary.ends_with(".py") {
         let (_, out, err) = run_timeout(&binary, &["--help"], None, 60);
@@ -154,16 +155,19 @@ pub fn environment_problems(opts: &LoopOpts, repo: &str) -> Pair {
         if !text.contains("--max-budget-usd") {
             problems.push("this `claude` has no --max-budget-usd; update Claude Code".into());
         }
-        if opts.permission_mode == "auto" && !text.contains("\"auto\"") {
-            problems.push("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits".into());
-        } else if opts.permission_mode == "auto" {
-            warns.push("`auto` mode depends on the plan/account; if the first turn fails because of it, run with --permission-mode acceptEdits".into());
-        }
+        problems.extend(auto_mode_problem(&opts.permission_mode, &text));
     }
     if git(repo, &["worktree", "list"]).0 != 0 {
         problems.push("this git does not support `git worktree` (needs >= 2.5)".into());
     }
     (problems, warns)
+}
+
+/// W4. The `auto` permission mode: probed once from the `--help` text of the `claude` in use. When the help lists it, nothing is said (it
+/// works); when it does not, that is a problem with the fix in the same line. The old "depends on the plan/account" line, shown on every
+/// start even when `auto` works, is gone.
+pub fn auto_mode_problem(permission_mode: &str, help: &str) -> Option<String> {
+    (permission_mode == "auto" && !help.contains("\"auto\"")).then(|| "this `claude` does not list the `auto` mode; use --permission-mode acceptEdits".to_string())
 }
 
 // ---------------------------------------------------------------- preflight (--check and before every run)
@@ -509,7 +513,7 @@ pub fn dependency_audit_warnings(root: &str) -> Vec<String> {
     let loose: Vec<&audit_deps::Suggestion> = audit.suggestions.iter().filter(|s| s.cycle.is_empty()).collect();
     match loose.first() {
         Some(first) => vec![format!(
-            "{} forgotten dependency(ies) between features (e.g. {} -> {}). Run `harness audit --write` and decide; the orchestrator applies `deps=` before each wave.",
+            "{} forgotten dependency(ies) between features (e.g. {} -> {}). The panel lists them in Dependencies with one button to apply them now; the loop also adds the `deps=` itself before each turn.",
             loose.len(),
             first.feature,
             first.depends_on
@@ -941,6 +945,17 @@ mod tests {
         assert_eq!(warns.len(), 1, "{warns:?}");
         assert!(warns[0].starts_with("Node project (docs)") && warns[0].contains("without a lockfile"), "{}", warns[0]);
         assert_eq!(check_item_kind(&warns[0]), "node-modules");
+    }
+
+    #[test]
+    fn auto_mode_is_probed_and_only_a_missing_mode_is_said() {
+        let help = "--permission-mode <mode> (choices: \"acceptEdits\", \"auto\", \"dontAsk\")";
+        assert_eq!(auto_mode_problem("auto", help), None, "a working auto mode says nothing");
+        assert_eq!(auto_mode_problem("acceptEdits", "no such mode"), None);
+        assert_eq!(
+            auto_mode_problem("auto", "--permission-mode <mode> (choices: \"acceptEdits\")").as_deref(),
+            Some("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits")
+        );
     }
 
     #[test]

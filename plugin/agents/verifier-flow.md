@@ -81,6 +81,15 @@ This applies only inside the loop (your prompt came from the `/orchestrator` ski
 
 In your return add one line per decision the user should review, as `DECISION: [<slug>] level=<important|critical> <doubt> | chose: <choice> | revert: <how>` (`<slug>` is your feature, or `general`). **No `turn`: the orchestrator stamps it.** `important` = changes behavior, an API, data, security, a dependency or the feature's scope, or you were unsure and could not verify it. `critical` = `important` AND hard to revert or risky (data loss, security, public API break, irreversible migration, a scope change nobody asked for). Do NOT report routine choices (naming, placement inside the pattern, formatting); with nothing to report, add no line. You never write `VALIDATE.md` yourself.
 
+## Files the engine reads (keep them current, text only)
+
+All beside the feature's spec in `.specs/features/<slug>/`; one bullet per item, fields separated by `|`. Never write a credential value in any of them.
+
+- `VALIDATION.md`, the plan, written once and reused every turn: `- <case-id>: what it proves | covers: <REQ-ids> | call: <the call> | expect: <what must be in the answer or on the screen, not only 200> | needs: <test data or user>`. Change it only when the requirement changes; the engine shows a change as a new version. Re-run only the cases that failed or depend on the change.
+- `FINDINGS.md`: `- fix-now|decide|manual: <finding> | wrong: <list|lookup|screen|api|...>`. `fix-now` = clear expected result and low risk; the loop fixes it in the same run, and only if `BEHAVIOUR.md` says what the screen must do and `wrong:` names the side. `decide` = a product choice; `manual` = needs a person. When the intended behaviour is silent, write `decide` and ask; never guess the direction of the fix.
+- `BEHAVIOUR.md`: who operates the screen and which data it must reach, in plain sentences.
+- `.specs/project/loop/CLEANUP.md` (one for the run): `- [open] <test data the check created> | remove: <how to remove it> | feature: <slug>`; the engine lists it at the end and never runs it.
+
 ## Return (mandatory)
 
 Use exactly the `Report` format of the `flow-validator` skill. At the end, add a line for the orchestrator:

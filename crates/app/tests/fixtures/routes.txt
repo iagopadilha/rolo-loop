@@ -72,6 +72,8 @@ POST /p/{project_id}/api/loop/raise-limit token=1 activity=1 limit=65536
 POST /p/{project_id}/api/approvals/{approval_id}/approve token=1 activity=1 limit=65536
 POST /p/{project_id}/api/approvals/{approval_id}/deny token=1 activity=1 limit=65536
 POST /p/{project_id}/api/policy token=1 activity=1 limit=65536
+POST /p/{project_id}/api/dependencies/apply token=1 activity=1 limit=65536
+POST /p/{project_id}/api/scripts/answer token=1 activity=1 limit=65536
 POST /p/{project_id}/api/shutdown token=1 activity=1 limit=65536
 GET /p/{project_id}/api/loop/settings token=0 activity=0 limit=65536
 GET /p/{project_id}/api/whiteboard token=0 activity=0 limit=65536

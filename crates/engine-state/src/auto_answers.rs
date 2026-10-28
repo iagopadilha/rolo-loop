@@ -254,6 +254,18 @@ mod tests {
     }
 
     #[test]
+    fn an_instruction_is_taken_in_every_stopped_state_and_a_running_loop_refuses_it() {
+        for status in ["done", "error", "paused", "awaiting_user"] {
+            let (_d, work) = setup(json!({"status": status, "reason": "why it stopped"}));
+            assert!(write_answer(&work, "also cover the empty case").is_ok(), "{status}");
+            let answers = std::fs::read_to_string(state_file(&work, "ANSWERS.md")).unwrap();
+            assert!(answers.contains("User answer: also cover the empty case"), "{status}");
+        }
+        let (_d, work) = setup(json!({"status": "continue"}));
+        assert!(write_answer(&work, "x").is_err());
+    }
+
+    #[test]
     fn write_answer_needs_awaiting_user() {
         let (_d, work) = setup(json!({"status": "running"}));
         assert_eq!(write_answer(&work, "x").unwrap_err(), "--answer only applies when the loop stopped (awaiting_user, paused, error or done; current status: running)");

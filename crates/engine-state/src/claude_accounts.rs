@@ -193,6 +193,19 @@ pub fn claude_change_subject(name: &str, account: &str, is_main: bool, same_comm
     }
 }
 
+/// The kind of an account change, as the panel and the notice name it.
+pub fn change_kind(unusable: bool, same_command: bool, is_main: bool) -> &'static str {
+    if unusable {
+        "account_unusable"
+    } else if same_command {
+        "picker_switch"
+    } else if is_main {
+        "back_to_main"
+    } else {
+        "usage_limit_switch"
+    }
+}
+
 /// The part of the subject that names the account the loop is on now.
 pub fn claude_change_subject_core(name: &str, account: &str, is_main: bool, same_command: bool) -> String {
     let (method, who, _) = split_account_label(account);
@@ -303,6 +316,15 @@ pub fn other_usage_lines(opts: &LoopOpts, meta: &Value, main_name: &str) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_account_change_has_a_kind_for_the_panel_and_the_notice() {
+        assert_eq!(change_kind(true, false, false), "account_unusable");
+        assert_eq!(change_kind(true, true, true), "account_unusable");
+        assert_eq!(change_kind(false, true, false), "picker_switch");
+        assert_eq!(change_kind(false, false, true), "back_to_main");
+        assert_eq!(change_kind(false, false, false), "usage_limit_switch");
+    }
 
     #[test]
     fn labels_split_and_describe() {

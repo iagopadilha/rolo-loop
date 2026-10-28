@@ -10,7 +10,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 - Errors are JSON: `{"ok": false, "error": "<message>", "code": "<code>"}`, with the status that fits the kind of error. A route that does not exist answers `{"ok": false, "error": "route not found"}` with `404`.
 - The "activity" column says whether the route counts as use of the app for the idle shutdown (`--idle-hours`).
 
-## Routes (137)
+## Routes (144)
 
 | Method | Path | Needs token | Counts as activity |
 |---|---|---|---|
@@ -88,6 +88,8 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/approvals/{approval_id}/approve` | yes | yes |
 | `POST` | `/p/{project_id}/api/approvals/{approval_id}/deny` | yes | yes |
 | `POST` | `/p/{project_id}/api/policy` | yes | yes |
+| `POST` | `/p/{project_id}/api/dependencies/apply` | yes | yes |
+| `POST` | `/p/{project_id}/api/scripts/answer` | yes | yes |
 | `POST` | `/p/{project_id}/api/shutdown` | yes | yes |
 | `GET` | `/p/{project_id}/api/loop/settings` | no | no |
 | `GET` | `/p/{project_id}/api/whiteboard` | no | no |
@@ -249,3 +251,51 @@ Additive fields from feature `validation-evidence-and-incentives`. Nothing carri
 | `loop.credential_request` | `{name, names, feature, who, if_declined, options}` or `null` | Present while the loop waits on a credential decision. `options` always includes `continue without this layer`. |
 
 ROADMAP feature fields read by the gate: `evidence=a,b`, `no-surface=why_words`, `blocked-call=call`, `needs-credential=NAME`, `credential-owner=who`. The same facts may be written as `key: value` lines in `.specs/features/<slug>/E2E.md` (`evidence:`, `no-surface:`, `blocked-call:`, `credential:`, `credential-owner:`, `if-declined:`). With `--e2e`, `e2e=ok` without existing evidence and `e2e=not-covered` without a reason and proof of no surface end the run with `error` and a message naming what is missing; a blocked call or a missing credential ends it with `awaiting_user`. `.specs/project/loop/json/EVIDENCE.json` may override `surface_markers` and `no_surface_kinds`.
+
+### Validation report (`GET state` `validation_report`)
+
+Additive, read-only. One object that joins what the validation produced; every list is empty when there is nothing to say. No credential value is ever in it.
+
+| Key | Shape | Meaning |
+|---|---|---|
+| `groups` | `[{kind, cause, count, features, suggestion}]` | Validations that did not pass, grouped by cause (VA2). `kind` is `blocked_call`, `credential`, `failed`, `unproven`, `rejected` or `pending`; a feature is in one group only; the biggest group comes first. |
+| `plans` | `[{feature, cases, version, changed_in_turns, changed_since_last_turn, removed}]` | The versioned validation plan of each feature (`.specs/features/<slug>/VALIDATION.md`, one case per bullet: `- id: what | covers: REQ-1 | call: ... | expect: ... | needs: ...`). A new hash is a new `version`, remembered with its turn in `loop/json/VALIDATION-PLANS.json` (VA3). |
+| `review` | `[{feature, requirements_without_case, weak_cases: [{case, problem}]}]` | The review of the checks (VA6): requirement ids in `spec.md` that no case `covers`, and cases that cannot prove anything (no `expect`, or only `200`/"opens"). |
+| `cost` | `{features: [{feature, cost_usd, attempts, status}], total_usd, left_estimate_usd, closed, open}` | Cost and attempts per feature (VA5), written after each turn to `loop/json/FEATURE-COSTS.json`. `left_estimate_usd` is `null` until a feature is closed. |
+| `findings` | `[{feature, class, declared, text, wrong, question}]` | Findings of `.specs/features/<slug>/FINDINGS.md` sorted by what to do (Z2): `fix-now` (the loop fixes it in the same run), `decide`, `manual`. A `fix-now` needs `BEHAVIOUR.md` (the intended behaviour of the screen) and a `wrong:` side, else it becomes `decide` with a `question` (Z4). |
+| `behaviour_missing` | `[slug]` | Features with a screen or API (not `kind=generic`), past the spec step, that have no written `BEHAVIOUR.md`. |
+| `cleanup` | `{open, done, items: [{what, remove, feature}]}` | Test data the run left in the test environment, from `.specs/project/loop/CLEANUP.md` (`- [open] what | remove: how | feature: slug`). The engine never runs a removal; open items also appear in `manual_checks` with `source: "cleanup"` (Z3). |
+
+`loop.pause_kind` is `null`, `"validation_checkpoint"` (the loop waits, on purpose, for a check only a person can do: a ROADMAP feature with `checkpoint=...`; reason starts `Waiting for your validation`, options `I validated it, go on` and `I will validate it later, close without it`), `"credential"` or `"blocked_by_access"` (V3, U5 data side). With `--e2e`, an `e2e=ok|failed` that changed in a turn without any of its listed evidence written in that turn ends the run with `error` (G7).
+
+### Forgotten dependencies, one click (W3)
+
+`GET graph` also returns `dependency_proposals`: `{proposals: [{feature, depends_on, type, evidence, state, cycle}], review: [{feature, depends_on}]}`. `state` is `pending` (can be applied) or `cycle` (would close a cycle; never applied); a proposal the user refused earlier is left out. Read-only.
+
+`POST dependencies/apply` (no body) writes every pending `deps=` into the ROADMAP now, the same step the loop runs before each turn, and answers `{ok, applied: [{feature, depends_on}], problems: [text]}`. On a problem (`409`) the ROADMAP is untouched; it also answers `409` while a loop is alive.
+
+### Claude accounts: backups listed, account changes notified, wrapper table as information (A2, A3, A5)
+
+- `GET /api/app/settings`: the item `claude_fallback_binaries` also carries `accounts`: `[{command, role, found, method, email, org, plan}]`, the main command first and then the backups in the order they are tried, from the cached `auth status` (the poll never waits for it). `found` is false for a command that is not on the machine; the account fields are empty when it is not signed in. Never a token.
+- Every change of the account that runs the loop (usage-limit switch, back to the main command, the `cc` picker moving to another account, an unusable account) is sent to every notice channel, the same ones as a stop. The notice names the account, the plan, why it changed and the reset time.
+- `GET errors`: stderr of a turn that ended well, when it is the account wrapper's status table (it names the account it opened), is listed as an `info` item with id `turn-<n>-account` and the title `Turn <n>: account used: <name>, <p>% of the 5-hour window`; it never counts as a problem. Stderr with a failure word keeps its own classification.
+
+### Installs and registries (I6, I7)
+
+- `GET loop/settings` also returns `setup`: `{command, source, steps}`. `source` is `roadmap` (the ROADMAP `**Setup:**` line names a command), `detected` (the repo's manifests give one; the screen can fill the line with `command`) or `none`. `steps` is `[{dir, command, routine}]` for `detected`. Nothing runs to find it.
+- The network effective list (`GET network` `effective`, origin `builtin`) now also holds, read only (GET and HEAD), the package registries of the stacks the project uses, found by marker files up to two folders down: node, python, dotnet (NuGet and its CDN hosts), go, rust, java (Maven and Gradle), php and ruby. They follow the same switches as the built-in read list: turn `egress_builtin_read` off, or deny a host in `egress_never`, to remove them.
+
+### The project's own scripts (I3)
+
+`GET loop/settings` also returns `scripts`: `{safe, ask, remembered_allow, remembered_deny}`. Each row is `{command, dir, source, kind, hint?}`: `source` is `package.json` or `dotnet`, `kind` is `safe` (a plain check such as build, lint, test, typecheck whose body publishes, deploys, installs or downloads nothing) or `ask`. `hint` is `{why, text}` with `why` one of `network`, `long` or `prompt`: the reason a headless turn may wait on that command, in a sentence. Rows the user already answered leave `ask`.
+
+`POST scripts/answer` with `{command, allow}` remembers the answer once (kept in `.specs/project/loop/json/SCRIPTS.json`, command text only, never run from there). Only a script the project declares is accepted (`400` otherwise). It answers `{ok, command, allow, scripts}` with the fresh report.
+
+### What waits for an install (I5)
+
+`GET state` also returns `guard_waiting`: `[{command, rule, turn, features, text}]`, one per command the guard refused under the `install` rule in the latest turn that had a refusal. `features` are the ones the loop works on (LOOP.json `feature`, else the ones being specced or built) and `text` reads `waiting for: <command> (feature <slug>). Run it yourself in the loop worktree, or release it once with a permission rule.` The command is redacted and clipped. The pause banner shows it while the loop is stopped or waiting.
+
+### Command line: resume and instruct (H5, G8)
+
+- `harness resume <repo> [--instruction TEXT]` resumes a stopped loop from outside the panel. It reads the command the loop saved (`.specs/project/loop/json/LOOP-CMD.json`), checks and rebuilds it with the same rules as the panel's Resume (this program, the `loop` subcommand, only known options with checked values, this repository, a folder of this project), adds the instruction when there is one and the `claude` commands of the user's config, then runs `harness loop`. It needs no token. A second loop on the same worktree is refused by the loop's own lock; a saved command that is not trusted starts nothing and says so (exit 2).
+- `harness loop <repo> --instruction TEXT` is `--answer` under a name that fits every stopped state: it is accepted when the run is `awaiting_user`, `paused`, `error` or `done`, goes to `ANSWERS.md`, and is never repeated by a relaunch. The panel's `POST instruction` already accepts the same states.

@@ -62,6 +62,9 @@ options:
                         option's text)
   --answer ANSWER       answers the question that stopped the loop
                         (awaiting_user) and continues; goes to ANSWERS.md
+  --instruction TEXT    the same as --answer, named for the states that are
+                        not a question: also accepted when the run is paused,
+                        done or in error; the next turn applies it
   --max-cost MAX_COST   cap of US$ summed over all turns (0 turns it off); a
                         cap raised in the panel (meta max_cost_usd) wins; when
                         exceeded the loop PAUSES (resumable)

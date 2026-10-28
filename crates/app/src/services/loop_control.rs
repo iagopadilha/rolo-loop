@@ -521,6 +521,8 @@ impl LoopControlService<'_> {
                 "delivery": self.read_delivery(context),
                 "workspace": {"repos": repos, "worktree_created": worktree_created, "branch": text_of(meta.get("branch")), "reattach_branch": reattach_branch, "uncommitted": uncommitted},
                 "models": {"orchestrator": self.app.config.orchestrator_model, "agents": AGENTS_MODEL},
+                "scripts": engine_state::project_scripts::report(context.repo_path(), &context.work_dir()),
+                "setup": engine_state::detect_setup::setup_suggestion(context.repo_path(), loop_settings.settings.get("setup").and_then(Value::as_str).unwrap_or("")),
             }),
         )
     }
@@ -539,6 +541,32 @@ impl LoopControlService<'_> {
         let reference = format!("refs/heads/{branch}");
         let (code, _, _) = loop_io::run_timeout_raw("git", &["-C", &primary.path, "rev-parse", "--verify", "--quiet", &reference], None, 15);
         (code == 0).then_some(branch)
+    }
+
+    /// `POST scripts/answer {command, allow}`: remembers, once, whether the agents may run one of the project's own scripts (I3). Only a script the
+    /// project declares can be answered (the list comes from its `package.json` files and .NET projects), so the file never holds free text.
+    pub fn answer_project_script(&self, context: &ProjectContext, body: &Value) -> Reply {
+        let Some(command) = body.get("command").and_then(Value::as_str).map(str::trim).filter(|c| !c.is_empty()) else { return failure(400, "give the command") };
+        let Some(allow) = body.get("allow").and_then(Value::as_bool) else { return failure(400, "allow must be true or false") };
+        let declared = engine_state::project_scripts::scan(context.repo_path()).iter().any(|row| row["command"].as_str() == Some(command));
+        if !declared {
+            return failure(400, "this project does not declare that script");
+        }
+        if !engine_state::project_scripts::remember(&context.work_dir(), command, allow) {
+            return failure(500, "the answer could not be saved");
+        }
+        (200, json!({"ok": true, "command": command, "allow": allow, "scripts": engine_state::project_scripts::report(context.repo_path(), &context.work_dir())}))
+    }
+
+    /// `POST dependencies/apply`: writes the `deps=` the audit proposes into the ROADMAP now, in one call (W3). Refused while a loop is alive: the
+    /// loop applies them itself before its next turn and a running turn may be editing the ROADMAP.
+    pub fn apply_dependency_proposals(&self, context: &ProjectContext) -> Reply {
+        if self.is_loop_alive(context) {
+            return failure(409, "the loop is running; it adds these dependencies itself before its next turn");
+        }
+        let result = engine_state::audit_deps::apply_now(&context.work_dir());
+        let problems = result["problems"].as_array().is_some_and(|p| !p.is_empty());
+        (if problems { 409 } else { 200 }, json!({"ok": !problems, "applied": result["applied"], "problems": result["problems"]}))
     }
 
     /// The limit one click raises to: the engine's suggested rung (`meta.cost_cap_ladder.suggested`), else the first rung above the cap in force.

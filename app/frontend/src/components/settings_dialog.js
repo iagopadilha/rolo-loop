@@ -107,6 +107,9 @@ function SettingRow({ item, caveman, onSaved }) {
     ${error ? html`<div class="nl-err" role="alert">${error}</div>` : null}
     ${item.note ? html`<div class="hint set-note" id=${'set-note-' + item.key}>${item.note}</div>` : null}
     <div class="hint set-when">${item.restart_required ? RESTART_TEXT : NEXT_RUN_TEXT}</div>
+    ${item.key === 'claude_fallback_binaries' && Array.isArray(item.accounts) && item.accounts.length ? html`<ul class="set-accounts" id="set-accounts">
+      ${item.accounts.map((a) => html`<li key=${a.command}><span class="mono">${a.command}</span> ${a.role === 'main' ? '(main)' : '(backup)'}: ${!a.found ? 'not found on this machine' : (a.email || a.method || 'not signed in') + (a.plan ? ' · ' + a.plan : '')}</li>`)}
+    </ul>` : null}
     ${item.key === 'loop_caveman' ? html`<${CavemanComparison} caveman=${caveman} />` : null}
   </section>`;
 }

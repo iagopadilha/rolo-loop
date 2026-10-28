@@ -8,6 +8,7 @@ mod forward;
 mod grant_cmd;
 mod install_cmd;
 mod paths;
+mod resume_cmd;
 mod serve_cmd;
 mod state_cmd;
 
@@ -32,6 +33,8 @@ enum Command {
     Baseline(grant_cmd::BaselineArgs),
     /// Releases one thing the E2E needs (a network entry or a higher cost limit) and journals it
     Grant(grant_cmd::GrantArgs),
+    /// Resumes a stopped loop from outside the panel, with the same checks and settings as the panel's Resume
+    Resume(resume_cmd::Args),
     /// Writes ~/.loop-harness/config.json so the skill finds the app
     Install(install_cmd::Args),
     /// The panel on a fake project with mocked, moving loop data (never calls claude)
@@ -90,6 +93,7 @@ fn main() {
         Command::DemoEngine(a) => app::demo::stubs::engine_stub(&a.args),
         Command::Doctor(args) => doctor_cmd::run(args),
         Command::Install(args) => install_cmd::run(args),
+        Command::Resume(args) => resume_cmd::run(args),
         Command::Paths(args) => paths::run(args),
         Command::Baseline(args) => grant_cmd::baseline(&cfg::Env::process(), args),
         Command::Grant(args) => grant_cmd::grant(&cfg::Env::process(), args),

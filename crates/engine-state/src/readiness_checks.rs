@@ -153,6 +153,9 @@ fn touched_subprojects(root: &str, features: &Features, repos: &[RepoRef]) -> To
             let (conf_folder, conf_entry) = &t.confirmed.iter().find(|(k, _)| *k == key).expect("present").1;
             let (conf_folder, conf_entry) = (conf_folder.clone(), conf_entry.clone());
             let Some(project) = subprojects::owner_in(Some(&conf_entry), &relative) else {
+                if is_root_owned(&relative) {
+                    continue; // W2: a well-known root file belongs to the root; the root rules are the right ones, nothing to warn about
+                }
                 match t.outside.iter_mut().find(|(s, _)| s == slug) {
                     Some((_, paths)) => paths.push(raw),
                     None => t.outside.push((slug.clone(), vec![raw])),
@@ -168,6 +171,38 @@ fn touched_subprojects(root: &str, features: &Features, repos: &[RepoRef]) -> To
         }
     }
     t
+}
+
+/// W2. Files and folders that belong to the repository root by convention (agent instructions, docs, licence, CI, repo settings), never to a
+/// subproject. `relative` uses `/` or `\`; matching is case-insensitive.
+pub fn is_root_owned(relative: &str) -> bool {
+    let path = relative.trim().replace('\\', "/");
+    let path = path.trim_start_matches("./").trim_end_matches('/').to_ascii_lowercase();
+    if path.is_empty() {
+        return false;
+    }
+    const ROOT_FOLDERS: [&str; 5] = [".github", ".gitlab", ".circleci", ".azure-pipelines", ".husky"];
+    const ROOT_FILES: [&str; 14] = [
+        "claude.md",
+        "agents.md",
+        "readme",
+        "license",
+        "changelog",
+        "contributing",
+        "codeowners",
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig",
+        ".gitlab-ci.yml",
+        "azure-pipelines.yml",
+        "makefile",
+        ".dockerignore",
+    ];
+    let first = path.split('/').next().unwrap_or("");
+    if path.contains('/') {
+        return ROOT_FOLDERS.contains(&first);
+    }
+    ROOT_FILES.iter().any(|name| first == *name || first.strip_prefix(name).is_some_and(|rest| rest.starts_with('.')))
 }
 
 fn sorted_unique(list: &[String]) -> Vec<String> {
@@ -574,6 +609,24 @@ mod tests {
             system_map_warning(&root, &two, &[]),
             vec!["no system map: the agents have no description of how the subprojects talk (features touch api, web; Map the system in the Subprojects table)"]
         );
+    }
+
+    #[test]
+    fn root_files_belong_to_the_root_and_do_not_warn() {
+        for owned in ["CLAUDE.md", "README.md", "readme", "LICENSE", ".github/workflows/ci.yml", ".gitignore", "Makefile", ".\\CLAUDE.md", "CHANGELOG.md"] {
+            assert!(is_root_owned(owned), "{owned}");
+        }
+        for foreign in ["elsewhere/q", "src/CLAUDE.md", "docs/README.md", "api/.gitignore", "readme-notes/x", "", "CLAUDE"] {
+            assert!(!is_root_owned(foreign), "{foreign}");
+        }
+        let parent = tempfile::tempdir().unwrap();
+        let root_path = parent.path().join("main");
+        std::fs::create_dir_all(&root_path).unwrap();
+        let root = monorepo(&root_path);
+        let features = parse_roadmap("## Stage 1\n- [a] status=pending paths=api/x,CLAUDE.md,.github/workflows/ci.yml\n- [b] status=pending paths=elsewhere/q\n").0;
+        let (_, warns) = subprojects_preflight(&root, &features, &[]);
+        assert!(warns.iter().all(|w| !w.contains("CLAUDE.md") && !w.contains(".github")), "{warns:?}");
+        assert!(warns.contains(&"feature b: paths outside any subproject (elsewhere/q): the agents use the root rules only".to_string()), "{warns:?}");
     }
 
     #[test]

@@ -49,8 +49,8 @@ use crate::turn_gates::*;
 use crate::worktree_state::{acquire_lock, count_new_commits, fingerprint, heads_of, release_lock, rewind, roadmap_score, settle_dirty_worktrees, LeftoverOpts};
 use crate::worktrees::{ensure_worktrees, Ctx, WtOpts};
 use crate::{
-    claude_binaries, cli_output, cost_budget, decisions, delivery, e2e_evidence, egress_proxy, graph_view, loop_summary, monitor_proc, notify, process_registry,
-    project_repos, result_vocabulary, usage_windows,
+    claude_binaries, cli_output, cost_budget, decisions, delivery, e2e_evidence, egress_proxy, feature_cost, graph_view, loop_summary, monitor_proc, notify,
+    process_registry, project_repos, result_vocabulary, usage_windows, validation_plan,
 };
 use cfg::env::{app_env_value, load_all};
 use cfg::Env;
@@ -320,7 +320,7 @@ impl Runner {
         json!({
             "running": running, "stage": stage,
             "event": status, "project": pycompat::last_segment(repo), "branch": meta.get("branch"), "turn": meta.get("turns"), "cost": meta.get("cost_usd"), "reason": reason,
-            "next": state.get("next"), "options": if state.get("options").is_some_and(Value::is_array) { state["options"].clone() } else { json!([]) },
+            "next": state.get("next"), "pause_kind": state.get("pause_kind"), "options": if state.get("options").is_some_and(Value::is_array) { state["options"].clone() } else { json!([]) },
             "to_check": if state.get("to_check").is_some_and(Value::is_array) { state["to_check"].clone() } else { json!([]) },
             "features": features, "commits": log.lines().take(8).collect::<Vec<_>>(), "push": meta.get("push"), "summary": summary, "pr": meta.get("pr"), "pr_status": meta.get("pr_status"),
             "validate": delivery::validate_items(work).into_iter().take(8).collect::<Vec<_>>(), "graph": graph_view::ascii_graph(&graph), "graph_short": graph_view::short(&graph, 220),
@@ -440,7 +440,9 @@ impl Runner {
         let now = describe_claude_used(name, account, is_main);
         println!("[loop] turn {turn} ran on {now}; before it was {before}");
         let same_command = previous.0 == name && unusable.is_none();
-        let only = if same_command { Some(local_notice_channels(&self.env())) } else { None }; // another account of the same command is noise for email/webhook
+        // A2: every account change goes to the same channels as a stop (message, e-mail, webhook), the picker's change of account included: the
+        // user is not at the panel when the account that runs the loop changes, and the notice names the account, the plan, why and the reset time.
+        let only: Option<Vec<String>> = None;
         let mut unusable_subject = String::new();
         let reason;
         if let Some(u) = &unusable {
@@ -462,15 +464,7 @@ impl Runner {
                 limit_suffix(&phrase_of(&command_base_name(&previous.0)))
             );
         }
-        let kind = if unusable.is_some() {
-            "account_unusable"
-        } else if same_command {
-            "picker_switch"
-        } else if is_main {
-            "back_to_main"
-        } else {
-            "usage_limit_switch"
-        };
+        let kind = change_kind(unusable.is_some(), same_command, is_main);
         let event = json!({
             "kind": kind, "turn": turn, "at": now_iso(), "to_main": is_main,
             "from": {"command": command_base_name(&previous.0), "account": previous.1}, "to": {"command": command_base_name(name), "account": account},
@@ -812,6 +806,12 @@ impl Runner {
                 plan_flags(work, opts.wave, &opts.primary_name)
             );
             let started = Instant::now();
+            let started_at = std::time::SystemTime::now();
+            let active_before = feature_cost::active_features(&specs);
+            let plans_changed = validation_plan::record_plans(work, &specs, turn); // a validation plan edited since the last turn is a new version
+            if !plans_changed.is_empty() {
+                println!("[loop] validation plan changed since the last turn: {}", plans_changed.join(", "));
+            }
             let clock = local_now();
             println!("[loop] turn {turn} | {:02}:{:02}:{:02}", clock.hour(), clock.minute(), clock.second());
             return_to_main_command(opts);
@@ -892,6 +892,7 @@ impl Runner {
             cost += f64_of(data.get("total_cost_usd"));
             set(meta, "turns", json!(turn));
             set(meta, "cost_usd", json!(round4(cost)));
+            feature_cost::record_turn(work, turn, f64_of(data.get("total_cost_usd")), &feature_cost::features_of_turn(work, &specs, &active_before));
             self.record_cost_forecast(work, meta, turn, cost, opts);
             let _ = save_meta(&meta_path(work), meta);
 
@@ -1187,6 +1188,13 @@ impl Runner {
                     continue;
                 }
                 return self.finish(work, meta, "awaiting_user", &paused, opts);
+            }
+            if opts.e2e && prev.is_some() {
+                // a turn that made no E2E call (no fresh result file) cannot change a result, even if the roadmap was marked all at once
+                let unproven = e2e_evidence::changes_without_calls(work, &specs, &prev_text, started_at);
+                if !unproven.is_empty() {
+                    return self.finish(work, meta, "error", &e2e_evidence::changes_without_calls_message(&unproven), opts);
+                }
             }
             let status = text(state.get("status"));
             let reason = if truthy(state.get("reason")) { text(state.get("reason")) } else { text(state.get("next")) };
