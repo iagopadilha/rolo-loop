@@ -47,7 +47,7 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 
 ```
 /plugin marketplace add iagopadilha/claude-maestro
-/plugin install claude-maestro@claude-maestro
+/plugin install agent-maestro@agent-maestro
 harness install
 harness doctor
 ```

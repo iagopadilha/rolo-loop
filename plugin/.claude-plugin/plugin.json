@@ -1,5 +1,5 @@
 {
-  "name": "claude-maestro",
+  "name": "agent-maestro",
   "version": "0.3.1",
   "dependencies": [
     {
