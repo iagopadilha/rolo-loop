@@ -48,6 +48,7 @@ pub mod preflight_checks;
 pub mod process_registry;
 pub mod prod_database_script;
 pub mod project_repos;
+pub mod project_scripts;
 pub mod readiness_checks;
 pub mod repo_catalog;
 pub mod repos;

@@ -10,7 +10,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 - Errors are JSON: `{"ok": false, "error": "<message>", "code": "<code>"}`, with the status that fits the kind of error. A route that does not exist answers `{"ok": false, "error": "route not found"}` with `404`.
 - The "activity" column says whether the route counts as use of the app for the idle shutdown (`--idle-hours`).
 
-## Routes (133)
+## Routes (134)
 
 | Method | Path | Needs token | Counts as activity |
 |---|---|---|---|
@@ -84,6 +84,7 @@ The panel is served by `harness serve` on `127.0.0.1` (first free port from 4780
 | `POST` | `/p/{project_id}/api/instruction` | yes | yes |
 | `POST` | `/p/{project_id}/api/loop/raise-limit` | yes | yes |
 | `POST` | `/p/{project_id}/api/dependencies/apply` | yes | yes |
+| `POST` | `/p/{project_id}/api/scripts/answer` | yes | yes |
 | `POST` | `/p/{project_id}/api/shutdown` | yes | yes |
 | `GET` | `/p/{project_id}/api/loop/settings` | no | no |
 | `GET` | `/p/{project_id}/api/whiteboard` | no | no |
@@ -259,3 +260,9 @@ Additive, read-only. One object that joins what the validation produced; every l
 
 - `GET loop/settings` also returns `setup`: `{command, source, steps}`. `source` is `roadmap` (the ROADMAP `**Setup:**` line names a command), `detected` (the repo's manifests give one; the screen can fill the line with `command`) or `none`. `steps` is `[{dir, command, routine}]` for `detected`. Nothing runs to find it.
 - The network effective list (`GET network` `effective`, origin `builtin`) now also holds, read only (GET and HEAD), the package registries of the stacks the project uses, found by marker files up to two folders down: node, python, dotnet (NuGet and its CDN hosts), go, rust, java (Maven and Gradle), php and ruby. They follow the same switches as the built-in read list: turn `egress_builtin_read` off, or deny a host in `egress_never`, to remove them.
+
+### The project's own scripts (I3)
+
+`GET loop/settings` also returns `scripts`: `{safe, ask, remembered_allow, remembered_deny}`. Each row is `{command, dir, source, kind, hint?}`: `source` is `package.json` or `dotnet`, `kind` is `safe` (a plain check such as build, lint, test, typecheck whose body publishes, deploys, installs or downloads nothing) or `ask`. `hint` is `{why, text}` with `why` one of `network`, `long` or `prompt`: the reason a headless turn may wait on that command, in a sentence. Rows the user already answered leave `ask`.
+
+`POST scripts/answer` with `{command, allow}` remembers the answer once (kept in `.specs/project/loop/json/SCRIPTS.json`, command text only, never run from there). Only a script the project declares is accepted (`400` otherwise). It answers `{ok, command, allow, scripts}` with the fresh report.
