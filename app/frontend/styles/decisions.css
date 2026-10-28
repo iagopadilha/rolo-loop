@@ -9,6 +9,8 @@
 .dl-item{border:1px solid var(--line2);background:var(--panel);border-radius:0;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0;}
 .dl-item.is-critical{border-color:var(--red-line);background:var(--red-bg);}
 .dl-item.is-reviewed{opacity:.7;}
+.dl-item.dl-approval{border-color:var(--amber-line);background:var(--amber-bg);}
+.dl-ask{margin:0;}
 .dl-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
 .dl-level{font-size:10px;font-weight:600;letter-spacing:.08em;padding:1px 6px;border-radius:0;border:1px solid var(--amber-line);color:var(--amber);background:var(--amber-bg);}
 .dl-level.is-critical{border-color:var(--red-line);color:var(--red-text);background:var(--red-bg);}

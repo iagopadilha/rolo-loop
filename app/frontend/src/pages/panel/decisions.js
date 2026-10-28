@@ -18,12 +18,20 @@ export function decisionsCounts(state = ctx.state) {
   return { critical: Number(summary.open_critical) || 0, important: Number(summary.open_important) || 0 };
 }
 
-/** Count of decisions waiting for a review; click opens the dialog. */
+/** Commands the loop wants to run on DEV and may not yet (state.approvals, from the guard's requests). */
+export function pendingApprovals(state = ctx.state) {
+  const counts = ((state && state.approvals) || {}).counts || {};
+  return Number(counts.pending) || 0;
+}
+
+/** Count of decisions waiting for a review and approvals waiting for an answer; click opens the dialog. */
 export function DecisionsCount({ project, state } = {}) {
   const { critical, important } = decisionsCounts(state || ctx.state);
-  if (!critical && !important) return html`<span class="dc-none">No AI decision to review</span>`;
+  const waiting = pendingApprovals(state || ctx.state);
+  if (!critical && !important && !waiting) return html`<span class="dc-none">No AI decision to review</span>`;
   return html`<button type="button" class="dc" onClick=${() => openDecisionsDialog({ project, state })} title="AI decisions to review">
     <span class="dc-n">AI decisions to review</span>
+    ${waiting ? html`<span class="dc-chip is-critical">${waiting + ' to approve'}</span>` : null}
     ${critical ? html`<span class="dc-chip is-critical">${critical + ' critical'}</span>` : null}
     ${important ? html`<span class="dc-chip">${important + ' important'}</span>` : null}</button>`;
 }
@@ -33,9 +41,11 @@ function useDecisions(turn) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busyIds, setBusyIds] = useState({});
+  const [approvals, setApprovals] = useState([]);
   const route = 'decisions' + (turn == null ? '' : '?turn=' + encodeURIComponent(turn));
   const load = useCallback(async () => {
     try { setData(await ctx.api.get(route, 15000)); setError(''); } catch (failure) { setError(failure.message); }
+    if (turn == null) { try { setApprovals(((await ctx.api.get('approvals', 15000)) || {}).pending || []); } catch (failure) { setApprovals([]); } }
   }, [route]);
   useEffect(() => { setData(null); load(); }, [load]);
   const act = async (item, action, doneText) => {
@@ -46,8 +56,18 @@ function useDecisions(turn) {
       await load(); schedulePoll(300); renderAll();
     } catch (failure) { toast('Not done: ' + failure.message, 'err'); } finally { setBusyIds((current) => ({ ...current, [item.id]: false })); }
   };
+  const answer = async (item, action, body, doneText) => {
+    setBusyIds((current) => ({ ...current, [item.id]: true }));
+    try {
+      const out = await ctx.api.post('approvals/' + encodeURIComponent(item.id) + '/' + action, body);
+      toast(out && out.resumed ? doneText + ' The loop carries on.' : doneText, 'ok');
+      await load(); schedulePoll(300); renderAll();
+    } catch (failure) { toast('Not done: ' + failure.message, 'err'); } finally { setBusyIds((current) => ({ ...current, [item.id]: false })); }
+  };
   return {
-    data, error, busyIds, reload: load,
+    data, error, busyIds, approvals, reload: load,
+    approve: (item, always) => answer(item, 'approve', { always: !!always }, always ? 'Approved for this project.' : 'Approved.'),
+    deny: (item) => answer(item, 'deny', {}, 'Denied.'),
     review: (item) => act(item, 'review', 'Marked as reviewed.'),
     change: (item) => act(item, 'change', 'Added to the follow-up draft.'),
   };
@@ -57,8 +77,8 @@ function DecisionsBody({ turn, showTurnTitles }) {
   const decisions = useDecisions(turn);
   if (decisions.error && !decisions.data) return html`<div class="dl-error" role="alert">${'Could not read the decisions: ' + decisions.error}</div>`;
   if (!decisions.data) return html`<div class="dl-empty">Reading the decisions…</div>`;
-  return html`<${DecisionList} items=${decisions.data.items || []} unparsed=${decisions.data.unparsed || []} busyIds=${decisions.busyIds}
-    onReview=${decisions.review} onChange=${decisions.change} renderFeature=${renderFeature} showTurnTitles=${showTurnTitles} />`;
+  return html`<${DecisionList} items=${decisions.data.items || []} unparsed=${decisions.data.unparsed || []} approvals=${decisions.approvals} busyIds=${decisions.busyIds}
+    onReview=${decisions.review} onChange=${decisions.change} onApprove=${decisions.approve} onDeny=${decisions.deny} renderFeature=${renderFeature} showTurnTitles=${showTurnTitles} />`;
 }
 
 function DecisionsDialogContent() {

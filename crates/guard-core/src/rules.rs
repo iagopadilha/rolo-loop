@@ -30,7 +30,7 @@ pub const READ_ONLY_GIT: [&str; 20] = [
 ];
 
 /// Rules that not even `PERMISSIONS.json` releases.
-pub const HARD: [&str; 14] = [
+pub const HARD: [&str; 15] = [
     "push-protected",
     "push-force",
     "approval-write",
@@ -45,6 +45,7 @@ pub const HARD: [&str; 14] = [
     "mcp-allowlist",
     "skill-allowlist",
     "engine-file-write",
+    "migration-target",
 ];
 pub const HEADLESS_RULES: [&str; 3] = ["headless-push", "headless-gh", "permissions-write"];
 pub const GUARDED_EXTRA_RULES: [&str; 3] = ["prod-sql-write", "egress-upload", "engine-file-write"];
@@ -96,6 +97,7 @@ fn base_profile(profile: &str) -> Option<Vec<&'static str>> {
             "grafana-write",
             "sql-write",
             "migration-target",
+            "ask-command",
         ],
         "verifier" => vec![
             "git-write",
@@ -116,6 +118,7 @@ fn base_profile(profile: &str) -> Option<Vec<&'static str>> {
             "grafana-write",
             "sql-write",
             "migration-target",
+            "ask-command",
         ],
         "spec" => vec![
             "specs-only",
@@ -315,7 +318,9 @@ ci!(
 );
 const PROD_ENV_VALUE: &str = r#"["']?(?:production|prod)["']?"#;
 pub static PROD_ENV_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(r#"(?:ASPNETCORE_ENVIRONMENT|DOTNET_ENVIRONMENT)["']?\s*=\s*{PROD_ENV_VALUE}(?![\w-])|--environment(?:\s+|=){PROD_ENV_VALUE}(?![\w-])"#))
+    Re::ci(&format!(
+        r#"(?:ASPNETCORE_ENVIRONMENT|DOTNET_ENVIRONMENT|NODE_ENV|APP_ENV|RAILS_ENV|FLASK_ENV|DJANGO_ENV)["']?\s*=\s*{PROD_ENV_VALUE}(?![\w-])|--(?:environment|env|stage)(?:\s+|=){PROD_ENV_VALUE}(?![\w-])"#
+    ))
 });
 ci!(CONNECTION_ARG_RE, r#"--(?:connection|connection-string|connectionstring)(?:\s+|=)("[^"]*"|'[^']*'|\S+)"#);
 ci!(CONNECTION_ENV_RE, r#"\b(?:ConnectionStrings?[:_]{1,2}\w*|DB_(?:HOST|CONNECTION)\w*|DATABASE_URL)\s*=\s*("[^"]*"|'[^']*'|\S+)"#);

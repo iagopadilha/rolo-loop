@@ -156,7 +156,7 @@ export function CostCap() {
       ${(() => { const { forecast, ladder } = costForecast(), rungs = ladder ? list(ladder.rungs).filter(isNum) : [];
         return html`${forecast && isNum(forecast.estimated_total) ? html`<div class="hint">${`The engine estimates about US$ ${usd(forecast.estimated_total)} for the whole run (about US$ ${usd(forecast.per_turn)} per turn, ${forecast.remaining_turns} turn(s) to go).`}</div>` : null}
           ${rungs.length ? html`<div class="card-row" role="group" aria-label="Quick limits">${rungs.map((rung) => html`<button key=${rung} type="button" class="btn btn-sm" disabled=${raise.busy}
-            onClick=${() => { raise.value = String(rung); raise.error = null; renderAll(); }}>${'US$ ' + rung}</button>`)}</div>` : null}`; })()}
+            title=${'Raise the limit to US$ ' + rung + ' and continue, in one click'} onClick=${() => { raise.value = String(rung); raise.error = null; raiseLimit(); }}>${'US$ ' + rung}</button>`)}</div>` : null}`; })()}
       ${showProblem ? html`<div class="nl-box nl-bad" role="alert">${problem}</div>` : html`<div class="hint">${isNum((costForecast().ladder || {}).suggested) ? 'The suggested limit covers the estimate with a margin.' : `Suggested: the current limit plus US$ ${RAISE_STEP_USD}.`}</div>`}</div>
     <div class="card-row"><button type="button" class="btn" id="btn-stop-here" onClick=${() => { closeStatusDialog(); toast('The loop stays paused. Use Finish or Back to planning when you are ready.', 'ok'); }}>Stop here</button>
       <span class="hint">the loop stays paused; nothing runs and nothing more is spent</span></div>

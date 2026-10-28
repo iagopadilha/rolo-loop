@@ -6,6 +6,7 @@ pub mod check;
 pub mod egress;
 pub mod net;
 pub mod paths;
+pub mod policy;
 pub mod rules;
 pub mod run;
 pub mod scope;

@@ -275,6 +275,7 @@ impl LoopPanelService<'_> {
         json!({
             "processes": processes, "now": now_block,
             "permissions_log": engine_state::access_grant::journal_view(&work_dir, PERMISSIONS_LOG_LIMIT),
+            "approvals": engine_state::approvals::view(&work_dir),
             "now": now_iso(), "project": get_project_name(&meta, context), "repo": context.repo_path(), "work": work_dir, "branch": g("branch"),
             "project_ref": {"id": context.project.id, "name": context.project.name, "repo_path": context.project.repo_path},
             "loop": self.build_loop_block(&work_dir, &summary, turn.clone()),

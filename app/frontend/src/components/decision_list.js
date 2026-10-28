@@ -40,10 +40,31 @@ function DecisionItem({ item, busy, onReview, onChange, renderFeature }) {
   </li>`;
 }
 
-/** <DecisionList items unparsed busyIds onReview onChange renderFeature showTurnTitles emptyText /> */
-export function DecisionList({ items = [], unparsed = [], busyIds = {}, onReview, onChange, renderFeature, showTurnTitles = true, emptyText = EMPTY_DECISIONS_TEXT }) {
-  if (!items.length && !unparsed.length) return html`<div class="dl-empty">${emptyText}</div>`;
+/** One pending approval: a command the loop wants to run on DEV and may not yet. The loop keeps working on the rest meanwhile. Production never
+    gets a card, so there is no button for it. */
+function ApprovalCard({ item, busy, onApprove, onDeny, renderFeature }) {
+  return html`<li class="dl-item dl-approval">
+    <div class="dl-top">
+      <span class="dl-level mono">APPROVAL</span>
+      ${item.slug ? html`<span class="dl-feature">${renderFeature ? renderFeature(item.slug) : item.slug}</span>` : null}
+      <span class="dl-state mono">${'on ' + (item.env || 'DEV')}</span>
+    </div>
+    <p class="dl-ask">${'The loop wants to ' + (item.what || 'run a command') + ' on ' + (item.env || 'DEV') + '.'}</p>
+    <code class="dl-raw-text">${item.command}</code>
+    <div class="dl-actions">
+      <button type="button" class="btn btn-sm btn-primary" disabled=${busy} title="Run it this once. The loop goes on by itself." onClick=${() => onApprove(item, false)}>Approve</button>
+      <button type="button" class="btn btn-sm" disabled=${busy} title="Approve it and stop asking for this kind of command in this project (saved in the project's list)." onClick=${() => onApprove(item, true)}>Approve always for this project</button>
+      <button type="button" class="btn btn-sm" disabled=${busy} title="Do not run it. The loop leaves that task undone and carries on." onClick=${() => onDeny(item)}>Deny</button>
+    </div>
+  </li>`;
+}
+
+/** <DecisionList items unparsed approvals busyIds onReview onChange onApprove onDeny renderFeature showTurnTitles emptyText /> */
+export function DecisionList({ items = [], unparsed = [], approvals = [], busyIds = {}, onReview, onChange, onApprove, onDeny, renderFeature, showTurnTitles = true, emptyText = EMPTY_DECISIONS_TEXT }) {
+  if (!items.length && !unparsed.length && !approvals.length) return html`<div class="dl-empty">${emptyText}</div>`;
   return html`<div class="dl">
+    ${approvals.length ? html`<section class="dl-group"><h3 class="dl-turn mono">Waiting for your approval</h3>
+      <ul class="dl-list">${approvals.map((item) => html`<${ApprovalCard} key=${item.id} item=${item} busy=${!!busyIds[item.id]} onApprove=${onApprove} onDeny=${onDeny} renderFeature=${renderFeature} />`)}</ul></section>` : null}
     ${groupByTurn(items).map((group) => html`<section key=${String(group.turn)} class="dl-group">
       ${showTurnTitles ? html`<h3 class="dl-turn mono">${group.turn == null ? TURN_UNKNOWN_TEXT : 'Turn ' + group.turn}</h3>` : null}
       <ul class="dl-list">${group.items.map((item) => html`<${DecisionItem} key=${item.id} item=${item} busy=${!!busyIds[item.id]}

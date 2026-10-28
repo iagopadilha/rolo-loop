@@ -24,6 +24,7 @@ pub mod action;
 pub mod agent_history;
 pub mod app_diagnostics;
 pub mod app_settings_service;
+pub mod approvals;
 pub mod chat;
 pub mod chat_scope_context;
 pub mod claude_accounts;

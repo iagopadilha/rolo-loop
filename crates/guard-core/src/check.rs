@@ -44,11 +44,13 @@ pub struct Check<'a> {
     pub prot: Protected,
     pub perm: Permissions,
     pub net: Option<Ctx<'a>>,
+    /// Commands refused because they wait for the user's approval (the caller writes one request for each).
+    pub requests: Vec<crate::policy::Request>,
 }
 
 impl<'a> Check<'a> {
     pub fn new(g: &'a G, perm: Permissions) -> Check<'a> {
-        Check { g, prot: Protected::new(g), perm, net: None }
+        Check { g, prot: Protected::new(g), perm, net: None, requests: Vec::new() }
     }
 
     fn cwd(&self) -> Option<&str> {
@@ -403,11 +405,15 @@ impl<'a> Check<'a> {
                 }
             }
         }
+        let classified = crate::policy::classify_command(command);
         if has_rule(rules, "migration-target") {
-            let reason = self.migration_target_reason(command);
+            let reason = self.migration_target_reason(command, &classified);
             if !reason.is_empty() {
                 hits.push(hit("migration-target", reason));
             }
+        }
+        if has_rule(rules, "ask-command") && !hits.iter().any(|(rule, _)| rule == "migration-target") {
+            self.ask_command_hits(&classified, specs.as_deref(), &mut hits);
         }
         for pattern in self.perm.deny_bash_regex.clone() {
             if Self::project_pattern_matches(&pattern, command, warnings) {
@@ -422,27 +428,52 @@ impl<'a> Check<'a> {
         hits
     }
 
-    fn migration_target_reason(&self, command: &str) -> String {
-        if !MIGRATION_CMD_RE.is_match(command) {
+    /// A migration, or any command the project policy asks about (create/apply a migration, start the app), aimed at production: refused for
+    /// good (`migration-target` is a HARD rule, `PERMISSIONS.json` cannot release it and no approval is ever asked for it).
+    fn migration_target_reason(&self, command: &str, classified: &[(&'static str, String)]) -> String {
+        if !MIGRATION_CMD_RE.is_match(command) && classified.is_empty() {
             return String::new();
         }
+        let what = if MIGRATION_CMD_RE.is_match(command) || classified.iter().any(|(c, _)| *c != crate::policy::CLASS_DEV_RUN) { "migration" } else { "dev command" };
         if PROD_ENV_RE.is_match(command) {
-            return "migration against the Production environment: migrations run on DEV only".into();
+            return format!("{what} against the Production environment: migrations and dev commands run on DEV only");
         }
         let inherited = ["ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT"].iter().map(|n| format!("{n}={}", self.g.env.text(n))).collect::<Vec<_>>().join(" ");
         if PROD_ENV_RE.is_match(&inherited) {
-            return "migration while ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT is Production: migrations run on DEV only".into();
+            return format!("{what} while ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT is Production: migrations and dev commands run on DEV only");
         }
         let hosts = prod_hosts(self.g);
         for pattern in [&*CONNECTION_ARG_RE, &*CONNECTION_ENV_RE] {
             for m in pattern.find_all(command) {
                 let value = m.group(1).unwrap_or("").to_lowercase();
                 if hosts.iter().any(|h| value.contains(h.as_str())) {
-                    return "migration whose connection points to production: migrations run on DEV only".into();
+                    return format!("{what} whose connection points to production: migrations and dev commands run on DEV only");
                 }
             }
         }
         String::new()
+    }
+
+    /// The default policy `ask`: a classified command the project did not release (`commands` in PERMISSIONS.json) and the user did not
+    /// answer waits for approval. The request is kept in `self.requests`; the caller writes it. An answer of `denied` keeps it refused.
+    fn ask_command_hits(&mut self, classified: &[(&'static str, String)], specs: Option<&str>, hits: &mut Hits) {
+        use crate::policy::{decision_of, plain, Request, APPROVED, DENIED};
+        for (class, statement) in classified {
+            if self.perm.project.releases(class, statement) {
+                continue;
+            }
+            let request = Request::new(class, statement);
+            match specs.and_then(|s| decision_of(s, &request.id)).as_deref() {
+                Some(APPROVED) => continue,
+                Some(DENIED) => {
+                    hits.push(hit("ask-command", format!("you denied this request ({}): {} [{}]", request.id, plain(class), request.command)));
+                    continue;
+                }
+                _ => {}
+            }
+            hits.push(hit("ask-command", format!("waiting for approval ({}): {} on DEV [{}]", request.id, plain(class), request.command)));
+            self.requests.push(request);
+        }
     }
 
     // ---- MCP, SQL, skills, agents -----------------------------------------------------------------------------------------------------

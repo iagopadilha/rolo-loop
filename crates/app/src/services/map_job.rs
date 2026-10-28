@@ -74,6 +74,8 @@ pub struct MapStart {
     /// Optional, runs after the snapshot in the job thread (e.g. a later inventory); an error ends the job as error.
     pub extra_before_start: Option<ExtraBeforeStart>,
     pub parallel_key: Option<String>,
+    /// Environment of the job (the guard reads `LOOP_PRIMARY_SPECS` to find the primary repo's confirmed subprojects).
+    pub extra_env: Vec<(String, String)>,
 }
 
 impl MapStart {
@@ -92,6 +94,7 @@ impl MapStart {
             job_type: JOB_TYPE_MAP.into(),
             extra_before_start: None,
             parallel_key: None,
+            extra_env: Vec::new(),
         }
     }
 }
@@ -127,6 +130,7 @@ impl MapJobRunner<'_> {
             job_type,
             extra_before_start,
             parallel_key,
+            extra_env,
         } = params;
         let started_at = engine_state::loop_io::now_iso(); // same local format as the `t` of guard.log
         let holder: Arc<Mutex<Option<WorkspaceSnapshot>>> = Arc::new(Mutex::new(None));
@@ -140,7 +144,13 @@ impl MapJobRunner<'_> {
         }
         let app = self.app.shared();
         let (snapshot_slot, snapshot_repo, snapshot_ignored) = (holder.clone(), repo_path.clone(), ignored_paths.clone());
+        // M6: the guard's rules are applied to the paths this map will write BEFORE anything is spent; every refusal comes in one message
+        let (dry_cwd, dry_root, dry_env) = (work_dir.clone().unwrap_or_else(|| repo_path.clone()), map_root_path.display().to_string(), extra_env.clone());
         let before_start: super::claude_jobs::BeforeStart = Box::new(move |update_progress| {
+            let refusals = engine_state::map_dry_check::check(&dry_cwd, &dry_root, &dry_env);
+            if !refusals.is_empty() {
+                return Err(ClaudeJobError::new(engine_state::map_dry_check::message(&refusals)));
+            }
             let guard = WorkspaceFileGuard::default();
             *snapshot_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(guard.take_snapshot(&snapshot_repo, &path_refs(&snapshot_ignored), &DEFAULT_IGNORED_NAMES));
             if use_inventory {
@@ -159,6 +169,7 @@ impl MapJobRunner<'_> {
         let mut command = ClaudeJobCommand::new(argv, "");
         command.work_dir = work_dir;
         command.parallel_key = parallel_key;
+        command.extra_env = extra_env;
         command.before_start = Some(before_start);
         command.finalize = Some(Box::new(move |result| {
             finish_app.map_jobs().finish(&finish_project, &finish_repo, &finish_root, &finish_folder, &finish_holder, &allowed_folders, &started_at, result)
@@ -316,6 +327,27 @@ mod tests {
         let index = std::fs::read_to_string(repo.join("docs/codebase/README.md")).unwrap();
         assert!(index.contains("- [STACK.md](STACK.md): languages") && index.contains("Mapped at commit unknown on "));
         assert!(std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap().contains("maestro:context"));
+    }
+
+    #[test]
+    fn a_map_the_guard_would_refuse_fails_at_once_with_every_refusal_in_one_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
+        std::fs::create_dir_all(repo.join("svc")).unwrap();
+        let runner = Arc::new(Mapper { write_into: Some(repo.join("svc/docs/codebase")), also_touch: None, guard_log: None });
+        let app = App::for_tests_with(dir.path(), runner);
+        let repo_text = repo.display().to_string();
+        let mut params = MapStart::new(&repo_text, "p1");
+        params.map_root = "svc".into();
+        params.work_dir = Some(repo.join("svc").display().to_string());
+        let job = app.map_jobs().start(params).unwrap();
+        let finished = wait_finished(&app, &repo_text, job["id"].as_str().unwrap());
+        let error = finished["error"].as_str().unwrap_or("").to_string();
+        assert_eq!(finished["state"], "error", "{finished}");
+        assert!(error.starts_with("The guard would refuse 8 of the files this map writes") && error.contains("nothing was spent"), "{error}");
+        assert!(!repo.join("svc/docs/codebase/STACK.md").exists(), "no agent ran");
     }
 
     #[test]

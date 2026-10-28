@@ -230,8 +230,12 @@ impl LoopControlService<'_> {
     /// Call with the relaunch lock held. Output goes to `internal/monitor-relaunch.log`.
     fn spawn_detached_loop(&self, context: &ProjectContext, action: &str, argv: &[String], folder: &str, extra_env: &[(String, String)]) -> Reply {
         let log_path = self.app.loop_commands.get_relaunch_log_path(&context.work_dir());
+        // X1: every process the loop starts (builds, setup, tools) is told to opt out of telemetry, at the source
+        let mut launch_env: Vec<(String, String)> = extra_env.to_vec();
+        let known: Vec<(String, String)> = std::env::vars().chain(extra_env.iter().cloned()).collect();
+        launch_env.extend(engine_state::turn_environment::missing_opt_outs(&known));
         let spawned =
-            self.write_launch_marker(&log_path, action).and_then(|_| self.app.processes.spawn_detached(argv, folder, &log_path.display().to_string(), extra_env));
+            self.write_launch_marker(&log_path, action).and_then(|_| self.app.processes.spawn_detached(argv, folder, &log_path.display().to_string(), &launch_env));
         match spawned {
             Ok(pid) => {
                 self.app.relaunched_pids.lock().unwrap_or_else(|e| e.into_inner()).insert(context.project.id.clone(), pid);
@@ -537,14 +541,26 @@ impl LoopControlService<'_> {
         (code == 0).then_some(branch)
     }
 
-    /// `POST loop/raise-limit {max_cost_usd}`: the spend cap of THIS run goes up (meta `max_cost_usd`, which wins over `--max-cost`) and the same loop
-    /// resumes. Refused unless the new cap is above what was already spent (`cost_usd`, never reset).
+    /// The limit one click raises to: the engine's suggested rung (`meta.cost_cap_ladder.suggested`), else the first rung above the cap in force.
+    fn suggested_limit(meta: &Map<String, Value>) -> Option<f64> {
+        if let Some(rung) = meta.get("cost_cap_ladder").and_then(|l| l.get("suggested")).and_then(Value::as_f64).filter(|v| *v > 0.0) {
+            return Some(rung);
+        }
+        let cap = meta.get("max_cost_usd").and_then(Value::as_f64).filter(|v| *v > 0.0).unwrap_or(ENGINE_DEFAULT_MAX_COST);
+        engine_state::cost_budget::cap_ladder(cap).first().copied()
+    }
+
+    /// `POST loop/raise-limit {max_cost_usd}` or `{suggested: true}` (the engine's suggested limit, no number to type): the spend cap of THIS run goes
+    /// up (meta `max_cost_usd`, which wins over `--max-cost`) and the same loop resumes. Refused unless the new cap is above what was already spent
+    /// (`cost_usd`, never reset). The default cap stays 50; this is the one action that raises it.
     pub fn raise_loop_limit(&self, context: &ProjectContext, body: &Value) -> Reply {
-        let value = body.get("max_cost_usd");
-        let Some(limit) = value.filter(|_| is_finite_non_negative_number(value)).and_then(Value::as_f64).filter(|v| *v > 0.0) else {
+        let mut meta = self.app.loop_commands.read_meta(&context.work_dir());
+        let value = body.get("max_cost_usd").filter(|v| !v.is_null());
+        let wants_suggested = value.is_none() && body.get("suggested").and_then(Value::as_bool) == Some(true);
+        let requested = if wants_suggested { Self::suggested_limit(&meta) } else { value.filter(|_| is_finite_non_negative_number(value)).and_then(Value::as_f64) };
+        let Some(limit) = requested.filter(|v| *v > 0.0) else {
             return failure(400, "max_cost_usd must be a number greater than 0");
         };
-        let mut meta = self.app.loop_commands.read_meta(&context.work_dir());
         let spent = if is_finite_non_negative_number(meta.get("cost_usd")) { meta["cost_usd"].as_f64().unwrap_or(0.0) } else { 0.0 };
         if limit <= spent {
             let rounded = (spent * 10000.0).round_ties_even() / 10000.0;
@@ -737,6 +753,36 @@ mod tests {
         assert_eq!(roadmap_suggested_wave("Use --wave 4 here"), Some(4));
         assert_eq!(roadmap_suggested_wave("fully sequential plan"), Some(1));
         assert_eq!(roadmap_suggested_wave("## Stage 1\n- [a] status=pending\n"), None);
+    }
+
+    #[test]
+    fn one_click_raise_uses_the_engines_suggestion_or_the_first_rung() {
+        let meta = |v: Value| v.as_object().unwrap().clone();
+        assert_eq!(LoopControlService::suggested_limit(&meta(json!({"cost_cap_ladder": {"suggested": 75.0}, "max_cost_usd": 50}))), Some(75.0));
+        // no forecast yet: the first rung above the limit in force
+        assert_eq!(LoopControlService::suggested_limit(&meta(json!({"max_cost_usd": 50}))), Some(65.0));
+        // nothing recorded: the default cap (50) stays the base
+        assert_eq!(LoopControlService::suggested_limit(&meta(json!({}))), Some(65.0));
+        assert_eq!(LoopControlService::suggested_limit(&meta(json!({"cost_cap_ladder": {"suggested": null}, "max_cost_usd": 100}))), Some(125.0));
+    }
+
+    #[test]
+    fn the_raise_route_saves_the_suggested_limit_and_still_refuses_a_bad_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::for_tests(dir.path());
+        let repo = dir.path().join("p");
+        std::fs::create_dir_all(repo.join(".specs/project/loop")).unwrap();
+        let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
+        let meta_path = loop_state::loop_path(&context.work_dir(), "meta.json");
+        write_json_atomic(&meta_path, &json!({"cost_usd": 40.0, "max_cost_usd": 50.0, "cost_cap_ladder": {"saved": 50.0, "rungs": [65.0, 75.0], "suggested": 75.0}}))
+            .unwrap();
+        let service = app.loop_control();
+        // the relaunch needs a saved command and fails in a test, but the limit is saved before it
+        let _ = service.raise_loop_limit(&context, &json!({"suggested": true}));
+        assert_eq!(read_json_object(&meta_path)["max_cost_usd"], json!(75.0));
+        assert_eq!(service.raise_loop_limit(&context, &json!({})).0, 400, "no number and no suggestion asked");
+        assert_eq!(service.raise_loop_limit(&context, &json!({"max_cost_usd": 10})).0, 400, "below the spent total");
+        assert_eq!(read_json_object(&meta_path)["max_cost_usd"], json!(75.0));
     }
 
     #[test]
