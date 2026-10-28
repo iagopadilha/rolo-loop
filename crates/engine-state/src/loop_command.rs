@@ -92,7 +92,7 @@ pub const ALLOWED_FLAGS: [&str; 23] = [
     "--orchestrator-model",
     "--permission-mode",
 ];
-const DROPPED_FLAGS_WITH_VALUE: [&str; 7] = ["--answer", "--option", "--leftovers", "--claude", "--claude-fallback", "--setup", "--summary-dir"];
+const DROPPED_FLAGS_WITH_VALUE: [&str; 8] = ["--answer", "--instruction", "--option", "--leftovers", "--claude", "--claude-fallback", "--setup", "--summary-dir"];
 
 fn is_same_path(first: &str, second: &str) -> bool {
     nt_normcase(&nt_realpath(first)) == nt_normcase(&nt_realpath(second))

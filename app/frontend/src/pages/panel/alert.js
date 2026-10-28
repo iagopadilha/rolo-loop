@@ -9,6 +9,7 @@ import { ctx, ui, RESUME_WAIT_MS, status, loop, askKey, resumingNow, isPauseAsk,
 import { renderAll, schedulePoll } from '../project_panel.js';
 import { openErrors } from './errors.js';
 import { openStartLoopDialog } from './start_loop_dialog.js';
+import { readStored, writeStored } from '../../util/storage.js';
 
 /** Opens the Start dialog (the old "New loop" card). Other screens call it as "go to Start loop". */
 export function openNewLoop() {
@@ -189,6 +190,10 @@ export function Done() {
 /** The loop waits for a quarantine decision: the pause banner of the LOOP zone and its dialog hold this decision, not the navbar. */
 export const quarantineAsk = () => status() === 'awaiting_user' && list(ctx.state && ctx.state.quarantine).length > 0;
 const statusDialog = { open: false, autoKey: null };
+/** P6. The question the dialog already opened for is remembered in this browser (per project), so a page reload does not open it again. */
+const seenKey = () => 'harness.status.seen.' + (ctx.projectId || '');
+const alreadyShown = (key) => statusDialog.autoKey === key || readStored(seenKey(), null) === key;
+const rememberShown = (key) => { statusDialog.autoKey = key; writeStored(seenKey(), key); };
 const BODY_BY_STATUS = {
   awaiting_user: ['The loop has a question for you', Ask], error: ['The loop stopped with an error', ErrorBand], stopped: ['The loop stopped', Stopped],
   paused: ['The loop is paused', Paused], done: ['The loop is done', Done],
@@ -205,7 +210,7 @@ export function openStatusDialog() { statusDialog.open = true; renderAll(); }
 export function closeStatusDialog() { statusDialog.open = false; renderAll(); }
 /** Mounted by Panel in loop mode. Opens by itself ONCE per new question (awaiting_user event); closes by itself when nothing needs the user. */
 export function StatusDialog() {
-  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; }
+  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && !alreadyShown(askKey())) { rememberShown(askKey()); statusDialog.open = true; }
   const body = statusDialog.open ? currentBody() : null;
   if (!body) { statusDialog.open = false; return null; }
   const [title, Body] = body;

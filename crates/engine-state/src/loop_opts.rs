@@ -161,7 +161,7 @@ enum Kind {
     Append,
 }
 
-const FLAGS: [(&str, Kind); 39] = [
+const FLAGS: [(&str, Kind); 40] = [
     ("--help", Kind::Switch),
     ("--wave", Kind::Int),
     ("--e2e", Kind::Switch),
@@ -181,6 +181,7 @@ const FLAGS: [(&str, Kind); 39] = [
     ("--claude-fallback", Kind::Append),
     ("--option", Kind::Int),
     ("--answer", Kind::Text),
+    ("--instruction", Kind::Text),
     ("--max-cost", Kind::Float),
     ("--orchestrator-model", Kind::Text),
     ("--rewind", Kind::Int),
@@ -340,7 +341,7 @@ pub fn parse(args: &[String]) -> Parsed {
                 "--claude" => o.claude = value.clone(),
                 "--claude-fallback" => o.claude_fallback.push(value.clone()),
                 "--option" => o.option = int(&value)?,
-                "--answer" => o.answer = value.clone(),
+                "--answer" | "--instruction" => o.answer = value.clone(),
                 "--max-cost" => o.max_cost = float(&value)?,
                 "--orchestrator-model" => o.orchestrator_model = value.clone(),
                 "--rewind" => o.rewind = Some(int(&value)?),
@@ -395,6 +396,13 @@ mod tests {
             Parsed::Exit { code: 2, stderr, .. } => stderr.lines().last().unwrap_or("").to_string(),
             _ => panic!("expected an error"),
         }
+    }
+
+    #[test]
+    fn an_instruction_is_an_answer_by_another_name() {
+        assert_eq!(opts(&["C:\\repo", "--instruction", "cover the empty case"]).answer, "cover the empty case");
+        assert_eq!(opts(&["C:\\repo", "--instruction=again"]).answer, "again");
+        assert_eq!(error(&["x", "--instruction"]), "run_loop.py: error: argument --instruction: expected one argument");
     }
 
     #[test]
