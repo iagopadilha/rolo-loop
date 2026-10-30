@@ -2,12 +2,14 @@
    opens the StatusDialog (mounted by app.js) whose body is one of the components here: Ask, ErrorBand, Stopped, Paused, CostCap, Done.
    Also the answer / resume senders, the Start dialog opener and the idle note. */
 import { html } from '../../util/preact.js';
-import { DASH, isNum, num, cost, dur, txt, list } from '../../util/format.js';
+import { DASH, isNum, num, cost, dur, txt, list, maskHome } from '../../util/format.js';
 import { toast } from '../../components/toast.js';
 import { Dialog } from '../../components/dialog.js';
 import { ctx, ui, RESUME_WAIT_MS, status, loop, askKey, resumingNow, isPauseAsk, isRecommended } from './context.js';
 import { renderAll, schedulePoll } from '../project_panel.js';
 import { openErrors } from './errors.js';
+import { ProgressTrail } from './progress_trail.js';
+import { repoInfo } from './header.js';
 import { openStartLoopDialog } from './start_loop_dialog.js';
 
 /** Opens the Start dialog (the old "New loop" card). Other screens call it as "go to Start loop". */
@@ -19,7 +21,7 @@ export function openNewLoop() {
   });
 }
 
-export async function sendAnswer(body, label) {
+async function sendAnswer(body, label) {
   if (ui.busy.answer) return;
   ui.busy.answer = true; renderAll();
   try { await ctx.api.post('answer', body); ui.resuming = { key: askKey(), since: Date.now(), label }; ui.freeText = ''; setTimeout(renderAll, RESUME_WAIT_MS + 300); }
@@ -43,7 +45,7 @@ export function costCapPause() {
   return (s === 'paused' && COST_CAP_REASON.test(reason)) || (s === 'error' && OLD_COST_CAP_REASON.test(reason));
 }
 /** Spent total and effective cap of the run, from /state: meta.max_cost_usd (raised in the panel) wins over the cost limit of the command. */
-export function costNumbers() {
+function costNumbers() {
   const state = ctx.state || {}, m = state.meta || {};
   const limit = list(state.limits).find((x) => x.key === 'cost') || {};
   const spent = isNum(m.cost_usd) ? m.cost_usd : isNum(limit.value) ? limit.value : null;
@@ -111,7 +113,7 @@ export function Ask() {
       <span class="hint">the loop carries on from where it stopped</span></div>` : null}
   </div>`;
 }
-export function ErrorBand() {
+function ErrorBand() {
   const l = loop(), busy = !!ui.busy.answer;
   return html`<div class="band-detail"><div class="cause">${txt(l.reason)}</div>
     ${l.next ? html`<div class="hint">${'Planned next step: ' + l.next}</div>` : null}<${VerifyBlock} />
@@ -136,7 +138,7 @@ export function Paused() {
       <span class="hint">the loop carries on from where it stopped</span></div></div>`;
 }
 /** Cost cap hit: raise the limit and continue (new limit above the spent total) or stop here (the loop stays paused). */
-export function CostCap() {
+function CostCap() {
   const { spent, cap } = costNumbers(), value = raise.value == null ? defaultRaise() : raise.value;
   const problem = raise.error || raiseProblem(value), showProblem = !!raise.error || (raise.value != null && !!problem);
   return html`<div class="band-detail">
@@ -154,7 +156,7 @@ export function CostCap() {
   </div>`;
 }
 /** Link to the PR (GitHub URL shortened), or the raw value as text. */
-export function PrLink({ pr }) {
+function PrLink({ pr }) {
   if (pr == null || pr === '') return html`<span>${DASH}</span>`;
   const s = String(pr);
   if (/^https?:\/\//i.test(s)) return html`<a href=${s} target="_blank" rel="noopener noreferrer">${s.replace(/^https?:\/\/(www\.)?github\.com\//i, '')}</a>`;
@@ -171,15 +173,15 @@ export function Done() {
   return html`<div class="band-detail">
     <div class="stats-row"><${Stat} k="turns" v=${num(m.turns)} /><${Stat} k="cost" v=${cost(m.cost_usd)} /><${Stat} k="verified features" v=${`${num(c.verified)} / ${num(c.total)}`} /><${Stat} k="blocked" v=${num(c.blocked)} /></div>
     <div><div class="stat-k">pull request</div><div class="stat-v"><${PrLink} pr=${m.pr} />${m.pr_status ? html`<span class="dim-mono">${'  ' + m.pr_status}</span>` : null}</div></div>
-    ${vals.length ? html`<div class="check"><div class="check-title">${`For you to validate (${vals.length}) · see the Plan & files tab on the left`}</div></div>` : null}
+    ${vals.length ? html`<div class="check"><div class="check-title">${`For you to validate (${vals.length}) · see the Decisions page`}</div></div>` : null}
     <div class="hint">${idleText() + ' To change the roadmap, use Back to planning in the top bar; to wrap up, use Finish.'}</div>
   </div>`;
 }
 
 // ---------- the status dialog ----------
 /** The loop waits for a quarantine decision: the pause banner of the LOOP zone and its dialog hold this decision, not the navbar. */
-export const quarantineAsk = () => status() === 'awaiting_user' && list(ctx.state && ctx.state.quarantine).length > 0;
-const statusDialog = { open: false, autoKey: null };
+const quarantineAsk = () => status() === 'awaiting_user' && list(ctx.state && ctx.state.quarantine).length > 0;
+const statusDialog = { open: false, autoKey: null, attention: false };
 const BODY_BY_STATUS = {
   awaiting_user: ['The loop has a question for you', Ask], error: ['The loop stopped with an error', ErrorBand], stopped: ['The loop stopped', Stopped],
   paused: ['The loop is paused', Paused], done: ['The loop is done', Done],
@@ -190,15 +192,29 @@ function currentBody() {
   if (quarantineAsk()) return null;
   return BODY_BY_STATUS[status()] || null;
 }
-/** True when clicking the indicator has something to show (an attention state, or done). */
-export const statusHasDialog = () => !!currentBody();
-export function openStatusDialog() { statusDialog.open = true; renderAll(); }
-export function closeStatusDialog() { statusDialog.open = false; renderAll(); }
-/** Mounted by Panel in loop mode. Opens by itself ONCE per new question (awaiting_user event); closes by itself when nothing needs the user. */
+/** The dialog always has something to show once the project is loaded: what needs the user (if anything) and where the project stands. */
+export const statusHasDialog = () => !!ctx.state;
+
+/** Where the project stands: the checklist of the old Context tab and the workspace (repo, worktree, branch) of the loop. */
+function ProjectStatus() {
+  const repo = repoInfo();
+  const row = (key, value) => (value ? html`<div class="ps-kv"><dt>${key}</dt><dd class="mono" title=${value}>${value}</dd></div>` : null);
+  return html`<section class="ps" aria-label="Project status">
+    <div class="small-label">Where this project stands</div>
+    <${ProgressTrail} vertical=${true} />
+    ${repo.repo ? html`<div class="small-label">Workspace</div>
+      <dl class="ps-list">${row('Repo', maskHome(repo.repo))}${row('Worktree', maskHome(repo.worktree))}${row('Branch', repo.branch)}</dl>` : null}
+  </section>`;
+}
+
+export function openStatusDialog() { statusDialog.attention = !!currentBody(); statusDialog.open = true; renderAll(); }
+function closeStatusDialog() { statusDialog.open = false; renderAll(); }
+/** Mounted by Panel in loop mode. Opens by itself ONCE per new question (awaiting_user event); an attention dialog closes by itself when nothing needs the user. */
 export function StatusDialog() {
-  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; }
-  const body = statusDialog.open ? currentBody() : null;
-  if (!body) { statusDialog.open = false; return null; }
-  const [title, Body] = body;
-  return html`<${Dialog} title=${title} width=${640} onClose=${closeStatusDialog} actions=${[{ text: 'Close', onClick: (a) => a.close() }]}><${Body} /><//>`;
+  if (status() === 'awaiting_user' && !quarantineAsk() && !resumingNow() && statusDialog.autoKey !== askKey()) { statusDialog.autoKey = askKey(); statusDialog.open = true; statusDialog.attention = true; }
+  const body = currentBody();
+  if (statusDialog.open && statusDialog.attention && !body) statusDialog.open = false;
+  if (!statusDialog.open) return null;
+  const [title, Body] = body || ['Project status', null];
+  return html`<${Dialog} title=${title} width=${640} onClose=${closeStatusDialog} actions=${[{ text: 'Close', onClick: (a) => a.close() }]}>${Body ? html`<${Body} />` : null}<${ProjectStatus} /><//>`;
 }

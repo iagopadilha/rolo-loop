@@ -1,6 +1,6 @@
 /* Table of the subprojects of a monorepo (presentational): the screen state and the API calls live in
    pages/panel/subprojects.js. Every action is a callback in `actions`; nothing here talks to the server. */
-import { html, useState, useEffect } from '../util/preact.js';
+import { html, Fragment, useState, useEffect } from '../util/preact.js';
 import { dur } from '../util/format.js';
 
 export const MAP_DOCUMENT_TOTAL = 7;
@@ -9,7 +9,7 @@ export const DAMAGED_TEXT = 'context block damaged';
 const ROOT_MAP_LEFTOVER_TEXT = 'The root docs/codebase has maps from an earlier version: the maps now live in each subproject; remove the root ones yourself when you want.';
 
 export const isDamaged = (text) => /context block damaged/i.test(String(text || ''));
-export const elapsedText = (job, now) => {
+const elapsedText = (job, now) => {
   const started = job && Date.parse(job.started_at);
   return Number.isFinite(started) ? dur(Math.max(0, (now - started) / 1000)) : '';
 };
@@ -27,11 +27,22 @@ export function useNow(active) {
 
 export const Chip = ({ text, kind = '', title }) => html`<span class=${'sp-chip ' + kind} title=${title || undefined}>${text}</span>`;
 
+/** Header shared by the monorepo and the single-repository installers: the step indicator and the sentence of the current step.
+    allDone: the current (last) step is finished too, so it shows the check like the earlier ones. */
+export function StepHeader({ step, steps, text, allDone = false }) {
+  return html`<${Fragment}><ol class="sp-inst-steps" aria-label="Setup steps">${steps.map(([n, label]) => {
+    const done = n < step || (allDone && n === step);
+    return html`<li key=${n} class=${'sp-inst-step' + (done ? ' done' : n === step ? ' current' : '')} aria-current=${n === step ? 'step' : undefined}>
+    <span class="sp-inst-n" aria-hidden="true">${done ? '✓' : n}</span><span>${label}</span></li>`;
+  })}</ol>
+    <p class="sp-inst-d">${text}</p><//>`;
+}
+
 /** The map queue of the payload: `map_queue` (items by path) of the parallel back end, or the old `queue` of an older one. */
 export const mapQueueOf = (data) => (data && (data.map_queue || data.queue)) || null;
 
 /** State of one row in the queue: running / queued / queued_stopped / failed / null. */
-export function mapQueueState(row, queue) {
+function mapQueueState(row, queue) {
   if (row.map && row.map.running) return { kind: 'running' };
   if (!queue) return null;
   const item = queue.items && queue.items[row.path];

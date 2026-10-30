@@ -1,0 +1,52 @@
+/* v2 design tokens (spec 01). Two themes on <html data-theme="light|dark">. The v2 names (--fg, --fg2, --side, --fill, --accent...) are
+   the source of truth; the legacy names used by the older stylesheets are REMAPPED below so every screen follows the theme.
+   No webfonts: system stacks only (the app makes no external request). */
+:root{
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,"Segoe UI",system-ui,sans-serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Consolas,monospace;
+  --r-sm:6px; --r-md:8px; --r-lg:12px; --r-pill:999px;
+  --side-w:248px; --side-w-icons:56px; --head-h:52px;
+}
+
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  /* v2 */
+  --bg:#FFFFFF; --side:#F5F5F7; --fg:#1D1D1F; --fg2:#636368; --line:#E5E5EA; --fill:#F2F2F7; --fill2:#E5E5EA; --sel:#E3E3E8;
+  --accent:#5E4AE3; --accent-soft:#E9E5FC; --accent-ink:#FFFFFF; --danger:#C4161C; --card:#FFFFFF;
+  --hatch:repeating-linear-gradient(135deg,transparent 0 7px,#F0F0F3 7px 8px);
+  --ok:#1B7448; --warn:#8F5300; --info:#2F52C9;
+  /* legacy remap */
+  --panel0:#F5F5F7; --panel:#FFFFFF; --panel2:#F2F2F7; --panel3:#E9E9EE; --black:#000;
+  --line2:#E5E5EA; --line3:#D1D1D6; --line4:#8E8E93;
+  --text:#1D1D1F; --text2:#3A3A3C; --muted:#636368; --dim:#636368;
+  --amber:#5E4AE3; --amber-soft:#4A38C8; --amber-bg0:#F1EEFD; --amber-bg1:#EDE9FB; --amber-bg:#E9E5FC; --amber-line:#C9C0F5;
+  --amber-glow:rgba(94,74,227,.18); --amber-ring:rgba(94,74,227,.4);
+  --green:#1B7448; --green-soft:#17683F; --green-bg:#E3F5EB; --green-line:#A6DABD; --green-ink:#FFFFFF;
+  --red:#C4161C; --red-hover:#A81218; --red-bg:#FDECEC; --red-line:#F2B8BA; --red-line-dim:#F7D3D4; --red-text:#9B1015; --red-soft:#7E0D11; --red-ink:#FFFFFF;
+  --red-glow:rgba(196,22,28,.15);
+  --blue:#2F52C9; --blue-dim:#5A6FA8; --blue-bg:#E8EDFC; --blue-line:#B9C6F0;
+  --violet:#6B4FD8; --violet-bg:#EEE9FC; --violet-line:#CBBDF4; --cyan:#0E7C8A;
+  --shadow:rgba(0,0,0,.12); --scrim:rgba(20,20,24,.45); --hover-wash:rgba(0,0,0,.025); --hover-wash2:rgba(0,0,0,.05);
+}
+
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#1C1C1E; --side:#232326; --fg:#F5F5F7; --fg2:#ABABB0; --line:#38383A; --fill:#2C2C2E; --fill2:#3A3A3C; --sel:#3A3A3C;
+  --accent:#9D8CFF; --accent-soft:#2E2850; --accent-ink:#1C1C1E; --danger:#FF6961; --card:#202022;
+  --hatch:repeating-linear-gradient(135deg,transparent 0 7px,#2A2A2C 7px 8px);
+  --ok:#4CC38A; --warn:#E0A94A; --info:#8AA4FF;
+  --panel0:#1A1A1C; --panel:#202022; --panel2:#2C2C2E; --panel3:#333336; --black:#000;
+  --line2:#38383A; --line3:#48484A; --line4:#6E6E73;
+  --text:#F5F5F7; --text2:#D1D1D6; --muted:#ABABB0; --dim:#9A9AA0;
+  --amber:#9D8CFF; --amber-soft:#B8ABFF; --amber-bg0:#25213F; --amber-bg1:#28244A; --amber-bg:#2E2850; --amber-line:#4A4290;
+  --amber-glow:rgba(157,140,255,.2); --amber-ring:rgba(157,140,255,.4);
+  --green:#4CC38A; --green-soft:#7BE3A5; --green-bg:#14291F; --green-line:#2C5A40; --green-ink:#08170E;
+  --red:#FF6961; --red-hover:#FF8A82; --red-bg:#2A1716; --red-line:#5A2A26; --red-line-dim:#3A2523; --red-text:#FFB4AC; --red-soft:#FFD2CD; --red-ink:#1A0B09;
+  --red-glow:rgba(255,105,97,.18);
+  --blue:#8AA4FF; --blue-dim:#7C93C8; --blue-bg:#1E2438; --blue-line:#33405C;
+  --violet:#B3A3FF; --violet-bg:#2A2342; --violet-line:#4A3F80; --cyan:#5CC8D6;
+  --shadow:rgba(0,0,0,.5); --scrim:rgba(10,10,12,.7); --hover-wash:rgba(255,255,255,.03); --hover-wash2:rgba(255,255,255,.06);
+}
+
+html,body{font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}

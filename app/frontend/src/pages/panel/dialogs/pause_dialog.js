@@ -18,9 +18,9 @@ import { featureName } from '../pipeline_model.js';
 const QUARANTINE_FAILURE_LIMIT = 2; // the engine quarantines a feature at its second failure
 const SUMMARY_POLL_INTERVAL_MS = 1500;
 const SUMMARY_GIVE_UP_MS = 240000;
-const BADGE_COLOR = '#f5b82e';
-const FAILURE_COLOR = '#f85149';
-const ATTEMPT_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: FAILURE_COLOR, BLOCKED: FAILURE_COLOR };
+const BADGE_COLOR = 'var(--warn)';
+const FAILURE_COLOR = 'var(--danger)';
+const ATTEMPT_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--warn)', QUEUED: 'var(--info)', FAIL: FAILURE_COLOR, BLOCKED: FAILURE_COLOR };
 
 const GREETING = 'I read the recorded facts of this pause. Ask why the feature failed, what each option risks, or ask me to draft the guidance for the new attempt.';
 const SUGGESTIONS = ['Why did this feature fail?', 'What is the risk of trying again?', 'Write the guidance for the new attempt'];
@@ -31,7 +31,7 @@ function SummaryBox({ detail, summaryState, onRegenerate }) {
   const tag = summaryState.busy ? 'writing…' : isAi ? '✦ AI-generated' + (summary.at ? ' · ' + fmtDay(summary.at) : '') : 'from the recorded facts';
   return html`<div class="bd-summary">
     <div class="bd-summary-head">
-      <span class="bd-label bd-label-blue">SUMMARY</span>
+      <span class="bd-label bd-label-blue">Summary</span>
       <span class="bd-tag">${tag}</span>
       <span class="bd-spacer"></span>
       <button type="button" class="bd-link" disabled=${summaryState.busy} onClick=${onRegenerate}>↻ regenerate</button>
@@ -152,14 +152,14 @@ function PauseBody({ slug, bridge, onFinished }) {
     </div>
     ${detail.reason ? html`<div class="bd-reason">${detail.reason}</div>` : null}
 
-    <div class="bd-section-label">ATTEMPT HISTORY</div>
+    <div class="bd-section-label">Attempt history</div>
     <div class="bd-attempts">${attempts.length ? attempts.map((attempt, index) => html`<div key=${index} class="bd-attempt">
         <span class="bd-turn">${'T' + attempt.turn}</span><span class="bd-mono">${txt(attempt.agent)}</span>
-        <span class="bd-mono" style=${{ color: ATTEMPT_COLOR[attempt.status] || '#8b929c' }}>${txt(attempt.status)}</span>
+        <span class="bd-mono" style=${{ color: ATTEMPT_COLOR[attempt.status] || 'var(--fg2)' }}>${txt(attempt.status)}</span>
         <span class="bd-attempt-out">${txt(attempt.out)}</span></div>`)
       : html`<div class="bd-dim-note">No recorded attempt.</div>`}</div>
 
-    ${failedTests.length ? html`<div class="bd-section-label">FAILED TESTS · EXPECTED × GOT</div>
+    ${failedTests.length ? html`<div class="bd-section-label">Failed tests · expected × got</div>
       <div class="bd-tests">${failedTests.map((failed, index) => html`<div key=${index} class="bd-test">
         <div class="bd-test-head"><span class="bd-test-name">${txt(failed.name)}</span>${failed.why ? html`<span class="bd-test-why">${failed.why}</span>` : null}</div>
         ${failed.expected != null || failed.got != null ? html`<div class="bd-test-pills">
@@ -169,7 +169,7 @@ function PauseBody({ slug, bridge, onFinished }) {
 
     <div class="bd-pair">
       <div class="bd-box">
-        <div class="bd-box-head"><span class="bd-label bd-box-title">UNCOMMITTED CODE</span>
+        <div class="bd-box-head"><span class="bd-label bd-box-title">Uncommitted code</span>
           ${uncommitted.length ? html`<button type="button" class="bd-button bd-button-danger bd-button-small" disabled=${isBusy} onClick=${revertChanges}>Revert changes</button>` : null}</div>
         ${uncommitted.length ? uncommitted.map((path) => html`<div key=${path} class="bd-path">${path}</div>`) : html`<div class="bd-dim-note">Nothing uncommitted in the working folder.</div>`}
       </div>
@@ -180,7 +180,7 @@ function PauseBody({ slug, bridge, onFinished }) {
       </div>
     </div>
 
-    <div class="bd-section-label">GUIDANCE FOR THE NEW ATTEMPT</div>
+    <div class="bd-section-label">Guidance for the new attempt</div>
     <textarea class="bd-textarea" value=${guidance} placeholder="Write here, or use an answer of the chat →"
       onInput=${(event) => setGuidance(event.currentTarget.value)}></textarea>
     <div class="bd-actions">
@@ -195,7 +195,7 @@ export function openPauseDialog(slug) {
   const bridge = { setGuidance: null };
   let dialog = null;
   dialog = openBigDialog({
-    badge: 'NEEDS YOU', badgeColor: BADGE_COLOR, title: html`<${FeatureLabel} slug=${slug} /> in quarantine`,
+    badge: 'Needs you', badgeColor: BADGE_COLOR, title: html`<${FeatureLabel} slug=${slug} /> in quarantine`,
     body: () => html`<${PauseBody} slug=${slug} bridge=${bridge} onFinished=${() => dialog.close()} />`,
     chat: {
       title: 'Resolve with the orchestrator', placeholder: 'Describe how you want the loop to resolve it…',

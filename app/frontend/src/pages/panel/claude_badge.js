@@ -5,6 +5,7 @@
    Data: the fields `claude`, `auth_method` ("login" | "token" | "api_key" | ""), `auth_email`, `auth_plan`, `cc_account` that the back end
    puts on every turn and, inherited from its turn, on every agent. Turns logged before those fields still carry `claude_account`, read here. */
 import { html, useState } from '../../util/preact.js';
+import { money } from '../../util/format.js';
 import { ctx } from './context.js';
 
 export const METHOD_WORDS = { login: 'subscription · browser login', token: 'subscription · sign-in token', api_key: 'API key · billed per token' };
@@ -13,7 +14,7 @@ const LABEL_WORDS = { login: 'login', token: 'token', 'API key': 'api_key', api_
 const DEFAULT_MAX_PARALLEL = 3;
 
 /** "claude", "cc": the command of a turn without its folder and extension ('' when it was not recorded). */
-export function commandOf(source) {
+function commandOf(source) {
   const path = String((source && (source.claude || source.command)) || '');
   return path.split(/[\\/]/).pop().replace(/\.(cmd|bat|exe|py)$/i, '');
 }
@@ -35,7 +36,7 @@ const pad = (number) => String(number).padStart(2, '0');
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** "14:30" for a reset today, "Mon 27/10 09:00" for another day (local time of the browser, from the epoch the loop recorded). */
-export function resetText(epochSeconds) {
+function resetText(epochSeconds) {
   if (!epochSeconds) return '';
   const moment = new Date(epochSeconds * 1000), today = new Date();
   const time = `${pad(moment.getHours())}:${pad(moment.getMinutes())}`;
@@ -63,13 +64,6 @@ export function ageText(seconds) {
   return minutes < 1 ? 'read just now' : minutes < 120 ? `read ${minutes} min ago` : `read ${Math.floor(minutes / 60)} h ago`;
 }
 
-/** Tooltip lines for one command/account row of `state.meta.claude_usage_view`: its windows, or "usage unknown". */
-export function usageViewLines(row) {
-  const who = row.cc_account ? `${row.command} (cc account ${row.cc_account})` : row.command;
-  if (!row.windows || !row.windows.length) return [`${who}: usage unknown`];
-  return [`${who}: ${row.windows.map(windowText).join(' · ')}${ageText(row.age_seconds) ? ' · ' + ageText(row.age_seconds) : ''}`];
-}
-
 /** Every command/account with its 5-hour and weekly usage; a window at 100 % is drawn in the warning colour. Nothing without rows. */
 export function ClaudeUsageWindows() {
   const rows = (ctx.state && ctx.state.meta && ctx.state.meta.claude_usage_view) || [];
@@ -82,7 +76,7 @@ export function ClaudeUsageWindows() {
 }
 
 /** What a badge shows for one turn or agent: { command, method, short, words, warning, title }; null when nothing is known. */
-export function describeClaude(source, { inherited = false } = {}) {
+function describeClaude(source, { inherited = false } = {}) {
   const command = commandOf(source), method = methodCodeOf(source);
   if (!command && !method) return null;
   const data = source || {};
@@ -106,7 +100,7 @@ export function ClaudeBadge({ source, inherited = false }) {
 }
 
 /** Text of the "who spawns the agents" note; the limit comes from the ROADMAP header (`Max parallel tasks`) when the panel state has it. */
-export function whoSpawnsLines() {
+function whoSpawnsLines() {
   const meta = (ctx.state && ctx.state.meta) || {};
   const limit = Number(meta.max_parallel_tasks) || DEFAULT_MAX_PARALLEL;
   const limitText = meta.max_parallel_tasks_in_header ? `${limit} (Max parallel tasks, in the ROADMAP header)` : `${limit} (the default of Max parallel tasks)`;
@@ -126,7 +120,6 @@ export function WhoSpawnsToggle() {
   </span>`;
 }
 
-const money = (value) => '$' + (Number(value) || 0).toFixed(2);
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 /** Turns, panel calls and cost per sign-in method and per command (the back end computes them: `state.meta.claude_totals`). */

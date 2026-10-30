@@ -4,17 +4,17 @@
    context (PROJECT.md) and the rules (RULES.md) (POST planning/send, reply followed through GET planning/job/<id>). Layout: styles/planning_layout.css.
    The back end enforces every gate; this screen only shows them. */
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../../util/preact.js';
-import { isNum, cost, list, fmtHour } from '../../util/format.js';
+import { isNum, cost, list, fmtHour, maskHome } from '../../util/format.js';
 import { toast } from '../../components/toast.js';
 import { confirmDialog, openDialog } from '../../components/dialog.js';
 import { pickFolderNativeFirst } from '../../components/folder_browser.js';
 import { Markdown } from '../../components/markdown.js';
 import { ctx, approval } from './context.js';
 import { renderAll, schedulePoll } from '../project_panel.js';
-import { Think } from './chat.js';
+import { Think } from '../../components/think.js';
 import { RoadmapPreview } from './roadmap_preview.js';
 import { APPROVAL_NOTICE } from './new_loop.js';
-import { RepoManager, RepoConfirm, featureRepoRows, fetchProjectRepos, fetchCatalog, normPath, repoConfirmContent } from '../repo_manager.js';
+import { RepoManager, RepoConfirm, featureRepoRows, fetchProjectRepos, fetchCatalog, repoConfirmContent } from '../repo_manager.js';
 import { loadWorkspace } from './workspace.js';
 import { reloadProgress, initializeStructure, chooseConformance, mapCodebase, mapRunning, MapStatus, monorepoMode } from './progress_trail.js';
 import { SubprojectsInstallerPanel, loadSubprojects, subprojectsData, onSubprojectsChanged } from './subprojects.js';
@@ -525,7 +525,7 @@ function ImportSources({ api }) {
     ${sources == null ? html`<p class="plan-env-note">loading…</p>` : null}
     ${sources && !sources.length && !err ? html`<p class="plan-env-note">No source configured.</p>` : null}
     ${list(sources).map((s, i) => html`<div class="plan-src" key=${i} data-source=${i}>
-      <div class="plan-src-path mono" title=${s.path}>${s.path} <span class=${s.exists ? 'plan-env-yes' : 'plan-env-no'}>${s.exists ? 'found' : 'file not found'}</span></div>
+      <div class="plan-src-path mono" title=${maskHome(s.path)}>${maskHome(s.path)} <span class=${s.exists ? 'plan-env-yes' : 'plan-env-no'}>${s.exists ? 'found' : 'file not found'}</span></div>
       ${list(s.names).length ? html`<ul class="plan-src-names">${list(s.names).map((n) => html`<li key=${n}><label class="plan-env-check"><input type="checkbox" checked=${!!picked[n]} disabled=${busy} onChange=${(e) => toggle(n, e.currentTarget.checked)} /><code>${n}</code></label></li>`)}</ul>`
         : html`<div class="plan-env-note">No name with a value in this file.</div>`}</div>`)}
     ${result ? html`<div class="nl-box nl-ok" role="status" id="plan-src-result">${IMPORT_RESULT_LABELS.filter(([k]) => list(result[k]).length).map(([k, label]) => html`<div key=${k}><b>${label}:</b> ${list(result[k]).join(', ')}</div>`)}</div>` : null}
@@ -546,7 +546,7 @@ function AccessCard({ access }) {
     <p class="plan-env-note">At run time credentials come from one place only: this project's <code>.env.test</code>. Other files on this machine are read only when you import names from them (button above). Values are never shown.</p>
     <ol class="plan-access-layers" aria-label="Credential layers">${layers.map((l) => html`<li key=${l.name} class=${'plan-access-layer' + (l.exists ? '' : ' none')} data-layer=${l.name}>
       <div><b>${l.label || l.name}</b> <span class=${l.exists ? 'plan-env-yes' : 'plan-env-no'}>${l.exists ? 'found' : 'file not found'}</span></div>
-      <div class="plan-env-note mono" title=${l.path}>${l.path}</div>
+      <div class="plan-env-note mono" title=${maskHome(l.path)}>${maskHome(l.path)}</div>
       ${list(l.names).length ? html`<div class="plan-access-names">${list(l.names).map((n) => html`<code key=${n.name} class=${n.winning ? 'plan-access-win' : 'plan-access-lose'} title=${n.winning ? 'this value is the one used' : 'no value here'}>${n.name}${n.winning ? ' ✓' : ''}</code>`)}</div>`
         : html`<div class="plan-env-note">No names from this file.</div>`}</li>`)}</ol>
     <h4 class="plan-access-h">Read access through MCP</h4>
@@ -683,7 +683,7 @@ const PREREQ_RENDERERS = {
     html`<ul class="plan-map-docs" aria-label="Documents the map writes in docs/codebase (a guide, not the source of truth)">${MAP_DOCS.map(([name, what]) => html`<li key=${name} class=${written.has(name) ? 'ok' : ''}><span aria-hidden="true">${written.has(name) ? '✓' : '·'}</span><b>${name}</b> ${what}</li>`)}</ul>`,
   ],
 };
-export function registerPrereqRenderer(gateId, renderer) { PREREQ_RENDERERS[gateId] = renderer; }
+function registerPrereqRenderer(gateId, renderer) { PREREQ_RENDERERS[gateId] = renderer; }
 const renderPrereqBody = (cur, written) => { const render = PREREQ_RENDERERS[cur.id]; return render ? render(cur, written) : null; };
 
 /** Monorepo: the three steps (subprojects, conformance, maps) are ONE installer card. It stays on screen after the last map

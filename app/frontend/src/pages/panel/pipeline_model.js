@@ -8,9 +8,10 @@ import { list, isNum } from '../../util/format.js';
 import { renderAll, requestRender } from '../project_panel.js';
 
 // ---------- visual constants (design palette) ----------
-export const STEP_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: '#f85149', BLOCKED: '#f85149', PENDING: '#4b525c' };
-export const FEATURE_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUARANTINE: '#f85149', ATTENTION: '#f5b82e', 'IN PROGRESS': '#7fb2ff', 'NOT DISPATCHED': '#4b525c' };
-const COLOR_AMBER = '#f5b82e', COLOR_GREEN = '#3fb950', COLOR_RED = '#f85149', COLOR_IDLE = '#4b525c';
+// colors are theme tokens (styles/v2/tokens.css), so they follow light/dark; never append hex alpha to them (use color-mix)
+export const STEP_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--accent)', QUEUED: 'var(--info)', FAIL: 'var(--danger)', BLOCKED: 'var(--danger)', PENDING: 'var(--line4)' };
+export const FEATURE_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--accent)', QUARANTINE: 'var(--danger)', ATTENTION: 'var(--warn)', 'IN PROGRESS': 'var(--info)', 'NOT DISPATCHED': 'var(--line4)' };
+const COLOR_AMBER = 'var(--accent)', COLOR_GREEN = 'var(--ok)', COLOR_RED = 'var(--danger)', COLOR_IDLE = 'var(--line4)';
 const PENDING = 'PENDING';
 /** The fixed flow shown for every feature when the server sends no steps. */
 const DEFAULT_STEPS = [
@@ -24,8 +25,8 @@ const DEFAULT_STEPS = [
 const RUNNING_REFRESH_MS = 10000;
 const REQUEST_TIMEOUT_MS = 30000;
 
-/** Screen state: data (normalized GET pipeline), sel = selected turn n (null = live), node = {f, s} | {orch:true} | null. */
-export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'diagram', tab: 'pipeline' };
+/** Screen state (view = timeline | diagram | list; insp = inspector open; over = inspector sheet/overlay shown on narrow screens): data (normalized GET pipeline), sel = selected turn n (null = live), node = {f, s} | {orch:true} | null. */
+export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'timeline', insp: true, over: false, feature: null };
 
 // ---------- loading ----------
 const stateKey = (state) => `${state && state.meta ? state.meta.turns : null}|${state && state.loop ? state.loop.status : null}|${state && state.loop ? state.loop.turn : null}`;
@@ -94,10 +95,10 @@ export function curN() {
 /** Selects a turn (null = live), going back to the default node of that turn. */
 export function selectTurn(n) { pipe.sel = n; pipe.node = null; requestRender(); }
 /** Selects a node: {f: featureId, s: stepIndex} or {orch: true}. */
-export function selectNode(node) { pipe.node = node; requestRender(); }
+export function selectNode(node) { pipe.node = node; pipe.feature = node && !node.orch ? node.f : null; requestRender(); }
 
 /** Events of turn n, as recorded (empty when the turn does not exist). */
-export function turnEvents(n) { const turn = turnsData().find((item) => item.n === n); return turn ? turn.events : []; }
+function turnEvents(n) { const turn = turnsData().find((item) => item.n === n); return turn ? turn.events : []; }
 /** The turn n as recorded, or null. */
 export function turnAt(n) { return turnsData().find((item) => item.n === n) || null; }
 /** FAIL/BLOCKED events of turn n. */
@@ -187,7 +188,7 @@ export function stepRuns(featureId, stepIndex) {
 }
 
 /** Transitive dependents of a feature (slug deps only), each once. */
-export function dependents(id) {
+function dependents(id) {
   const cache = memoFor();
   if (cache.dependents.has(id)) return cache.dependents.get(id);
   const features = featuresWithWaves(), found = [], seen = new Set([id]), queue = [id];
@@ -217,4 +218,63 @@ export function emptyReason() {
   if (!pipe.data) return pipe.loading || pipe.key === undefined ? 'Loading the pipeline…' : 'The pipeline is not available.';
   if (!pipe.data.turns.length) return 'No turn recorded yet. The pipeline appears when the loop runs its first turn.';
   return null;
+}
+
+
+// ---------- loop timeline (loop_timeline.js) ----------
+/** Turns in which each feature had at least one event up to turn `n` (null = live): { [featureId]: [turn numbers, ascending] }. */
+export function workedTurns(n) {
+  const limit = n == null ? liveN() : n, found = {};
+  for (const turn of turnsData()) {
+    if (limit != null && turn.n > limit) break;
+    for (const event of turn.events) {
+      if (!event.feature) continue;
+      const mine = found[event.feature] || (found[event.feature] = []);
+      if (mine[mine.length - 1] !== turn.n) mine.push(turn.n);
+    }
+  }
+  return found;
+}
+
+/** Status of a feature at turn `n` for the loop view: the replay of the events, except that the live turn trusts the server saying a feature is verified. */
+export function loopStatusAt(id, n) {
+  const at = n == null ? curN() : n, status = featureStatusAt(id, at);
+  if (status === 'DONE' || at !== liveN() || !pipe.data) return status;
+  const server = pipe.data.features.find((feature) => feature.id === id);
+  return server && String(server.status).toLowerCase() === 'verified' ? 'DONE' : status;
+}
+
+/** Figures of the loop header at turn `n`: features verified of the total, cost so far, steps running right now. */
+export function loopSummary(n) {
+  const at = n == null ? curN() : n, features = featuresWithWaves(), state = stateAt(at);
+  const extra = Object.keys(state).filter((id) => !features.some((feature) => feature.id === id));
+  const ids = [...features.map((feature) => feature.id), ...extra];
+  const verified = ids.filter((id) => loopStatusAt(id, at) === 'DONE').length;
+  const running = Object.values(state).reduce((total, cells) => total + cells.filter((cell) => cell.st === 'RUNNING').length, 0);
+  const spent = turnsData().filter((turn) => at == null || turn.n <= at).reduce((total, turn) => total + (isNum(turn.cost_usd) ? turn.cost_usd : 0), 0);
+  return { verified, total: ids.length, running, spent };
+}
+
+/** The step of a feature worth looking at in turn `at`: the one running, else the last one that has run, else the first. */
+export function defaultStepOf(slug, at) {
+  const cells = stateAt(at == null ? curN() : at)[slug];
+  if (!cells) return -1;
+  const running = cells.findIndex((cell) => cell.st === 'RUNNING');
+  if (running >= 0) return running;
+  for (let index = cells.length - 1; index >= 0; index -= 1) if (cells[index].st !== PENDING) return index;
+  return 0;
+}
+/** Selects a feature (timeline bar, card): its worth-looking-at step when it has run at the shown turn, else just the feature. */
+export function selectFeature(slug) {
+  const step = defaultStepOf(slug, curN());
+  pipe.feature = slug; pipe.node = step >= 0 ? { f: slug, s: step } : null;
+  requestRender();
+}
+/** Slug of the feature the inspector describes (null when the orchestrator, or nothing, is selected). */
+export function selectedFeature() {
+  const node = pipe.node;
+  if (node) return node.orch ? null : node.f;
+  if (pipe.feature) return pipe.feature;
+  const first = activeNode();
+  return first && !first.orch ? first.f : null;
 }

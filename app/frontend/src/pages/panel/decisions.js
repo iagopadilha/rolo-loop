@@ -8,12 +8,14 @@ import { DecisionList, EMPTY_DECISIONS_TEXT } from '../../components/decision_li
 import { ctx } from './context.js';
 import { renderAll, schedulePoll } from '../project_panel.js';
 import { FeatureLabel } from './feature_label.js';
+import { Section, List, Row } from '../../components/page.js';
+import { txt, list, fmtDay } from '../../util/format.js';
 
-export const DECISIONS_EXPLANATION = 'Choices the AI made on its own while it worked (a doubt, what it chose and how to undo it). Mark the ones you agree with as reviewed, or ask for a change.';
+const DECISIONS_EXPLANATION = 'Choices the AI made on its own while it worked (a doubt, what it chose and how to undo it). Mark the ones you agree with as reviewed, or ask for a change.';
 const renderFeature = (slug) => html`<${FeatureLabel} slug=${slug} />`;
 
 /** Open counts of the state payload: { critical, important } (0 when the server does not report them yet). */
-export function decisionsCounts(state = ctx.state) {
+function decisionsCounts(state = ctx.state) {
   const summary = (state && state.decisions_summary) || {};
   return { critical: Number(summary.open_critical) || 0, important: Number(summary.open_important) || 0 };
 }
@@ -70,12 +72,20 @@ export function openDecisionsDialog() {
   openDialog({ title: 'AI decisions to review', width: 760, cls: 'dlg-decisions', content: html`<${DecisionsDialogContent} />`, actions: [{ text: 'Close' }] });
 }
 
-/** "Decisions" section of a turn (turn_tabs.js): only the decisions of that turn. */
+/** The AI decisions of one turn (the Decisions page puts its own section label above). */
 export function TurnDecisions({ turn }) {
-  return html`<section class="td" aria-label="Decisions of this turn">
-    <div class="pl-eyebrow spaced">DECISIONS TO REVIEW</div>
-    <p class="dl-explain">${DECISIONS_EXPLANATION}</p>
-    <${DecisionsBody} key=${turn} turn=${turn} showTurnTitles=${false} /></section>`;
+  return html`<${DecisionsBody} key=${turn} turn=${turn} showTurnTitles=${false} />`;
+}
+
+/** What you answered the loop (the last 5 of ANSWERS.md), newest first. */
+export function AnswersList() {
+  const answers = list(ctx.state && ctx.state.answers).slice(-5).reverse();
+  if (!answers.length) return null;
+  return html`<${Section} title="Your answers" note="ANSWERS.md">
+    <${List} label="Your answers" cols="minmax(0,1fr) 120px" narrow="minmax(0,1fr)">
+      ${answers.map((entry, index) => html`<${Row} key=${index} chevron=${false}>
+        <span class="ls-main"><span class="ls-title ls-wrap">${txt(entry.question)}</span><span class="ls-sub ls-wrap">${txt(entry.answer)}</span></span>
+        <span class="ls-meta ls-opt ls-end">${entry.date ? fmtDay(entry.date) : '—'}</span><//>`)}<//><//>`;
 }
 
 export { EMPTY_DECISIONS_TEXT };

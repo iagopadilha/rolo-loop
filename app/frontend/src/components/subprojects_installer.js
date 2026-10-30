@@ -2,9 +2,9 @@
    The screen state and the API calls live in pages/panel/subprojects.js (SubprojectsInstallerPanel); nothing here talks to the server.
    The current step follows the back end gates (props.gates); Back lets the user look at an earlier step. */
 import { html, useState, useEffect } from '../util/preact.js';
-import { dur } from '../util/format.js';
+import { dur, secondsBetween } from '../util/format.js';
 import { StandardsBlock } from './standards_block.js';
-import { Chip, Warnings, useNow, mapFileCount, mapQueueOf, MAP_DOCUMENT_TOTAL, DAMAGED_TEXT, isDamaged } from './subprojects_table.js';
+import { Chip, StepHeader, Warnings, useNow, mapFileCount, mapQueueOf, MAP_DOCUMENT_TOTAL, DAMAGED_TEXT, isDamaged } from './subprojects_table.js';
 
 const STEPS = [[1, 'Subprojects'], [2, 'Conformance'], [3, 'Maps']];
 const CONFORMANCE = ['STANDARD', 'LEGACY'];
@@ -25,17 +25,6 @@ const isTarget = (row) => !row.skip && row.exists !== false;
 const needsMap = (row) => isTarget(row) && row.has_code && !mapFileCount(row);
 const suggestionOf = (row) => (row.suggestion && row.suggestion.suggestion) || '';
 const itemOf = (queue, path) => (queue && queue.items && queue.items[path]) || null;
-const seconds = (from, to) => { const a = Date.parse(from), b = Date.parse(to); return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, (b - a) / 1000) : null; };
-
-/** Step indicator, also used by the single-repository installer (components/project_installer.js) with its own `steps`.
-    allDone (WS-04): the current (last) step is finished too, so it shows the check like the earlier ones. */
-export function StepIndicator({ step, steps = STEPS, allDone = false }) {
-  return html`<ol class="sp-inst-steps" aria-label="Setup steps">${steps.map(([n, label]) => {
-    const done = n < step || (allDone && n === step);
-    return html`<li key=${n} class=${'sp-inst-step' + (done ? ' done' : n === step ? ' current' : '')} aria-current=${n === step ? 'step' : undefined}>
-    <span class="sp-inst-n" aria-hidden="true">${done ? '✓' : n}</span><span>${label}</span></li>`;
-  })}</ol>`;
-}
 
 // ---------- step 1: the list ----------
 function ListRow({ row, editable, actions }) {
@@ -69,7 +58,7 @@ function SubprojectsStep({ data, rows, confirmed, locked, mapping, validating, n
       <span class="sp-top-gap"></span>
       <button type="button" class="btn btn-sm btn-ghost" disabled=${locked || mapping} onClick=${actions.notMonorepo}>Not a monorepo</button>
     </div>
-    ${validating ? html`<div class="sp-note" role="status"><span class="spinner sm" aria-hidden="true"></span> ${`Validating the list with AI… ${validation.started_at ? dur(seconds(validation.started_at, new Date(now).toISOString()) || 0) : ''}`}</div>` : null}
+    ${validating ? html`<div class="sp-note" role="status"><span class="spinner sm" aria-hidden="true"></span> ${`Validating the list with AI… ${validation.started_at ? dur(secondsBetween(validation.started_at, new Date(now).toISOString()) || 0) : ''}`}</div>` : null}
     ${data.reason && !confirmed ? html`<div class="sp-note">${'Detection: ' + data.reason}</div>` : null}
     ${data.validation_error ? html`<div class="sp-note sp-note-bad" role="alert">${'The AI validation did not work: ' + data.validation_error}</div>` : null}
     ${data.error ? html`<div class="sp-note sp-note-bad" role="alert">${data.error}</div>` : null}
@@ -115,9 +104,9 @@ function MapLine({ row, item, now, locked, actions }) {
   const started = (item && item.started_at) || (row.map && row.map.job && row.map.job.started_at);
   const documents = Math.max(files, Number(item && item.documents) || 0);
   let status;
-  if (state === 'running') status = html`<span class="sp-map-run" role="status"><span class="spinner sm" aria-hidden="true"></span><span>${`Mapping… ${started ? dur(seconds(started, new Date(now).toISOString()) || 0) : ''} · ${documents} of ${MAP_DOCUMENT_TOTAL} documents`}</span></span>`;
+  if (state === 'running') status = html`<span class="sp-map-run" role="status"><span class="spinner sm" aria-hidden="true"></span><span>${`Mapping… ${started ? dur(secondsBetween(started, new Date(now).toISOString()) || 0) : ''} · ${documents} of ${MAP_DOCUMENT_TOTAL} documents`}</span></span>`;
   else if (state === 'done') {
-    const took = item && item.started_at && item.finished_at ? seconds(item.started_at, item.finished_at) : null;
+    const took = item && item.started_at && item.finished_at ? secondsBetween(item.started_at, item.finished_at) : null;
     status = html`<span class="sp-inst-ok"><span aria-hidden="true">✓</span> ${`Done · ${documents} of ${MAP_DOCUMENT_TOTAL} documents${took != null ? ' · ' + dur(took) : ''}`}</span>`;
   } else if (state === 'failed') status = html`<span class="sp-bad" role="alert">${'Failed: ' + ((item && item.error) || 'the map failed')}</span>`;
   else status = html`<span class="sp-muted">${state === 'queued' ? 'Queued' : 'Waiting'}</span>`;
@@ -212,8 +201,7 @@ export function SubprojectsInstaller({ data, draft = null, busy = false, mapErro
     : 'Map the system';
 
   return html`<div class="sp-inst" id="sp-installer" data-step=${step}>
-    <${StepIndicator} step=${skipConformance && step === 3 ? 2 : step} steps=${skipConformance ? [[1, 'Subprojects'], [2, 'Maps']] : STEPS} allDone=${step === 3 && allDone && !!everMapped} />
-    <p class="sp-inst-d">${STEP_TEXT[step]}</p>
+    <${StepHeader} step=${skipConformance && step === 3 ? 2 : step} steps=${skipConformance ? [[1, 'Subprojects'], [2, 'Maps']] : STEPS} allDone=${step === 3 && allDone && !!everMapped} text=${STEP_TEXT[step]} />
     ${step === 1 ? html`<${SubprojectsStep} data=${data} rows=${rows} confirmed=${confirmed} locked=${locked} mapping=${mapping} validating=${validating} now=${now} mapError=${mapError} actions=${actions} />`
       : step === 2 ? html`<${ConformanceStep} rows=${rows} choices=${choices} setChoice=${(path, value) => setChoices((current) => ({ ...current, [path]: value }))} locked=${locked} standards=${skipConformance ? null : standards} />`
       : html`<${MapsStep} data=${data} rows=${rows} queue=${queue} now=${now} locked=${locked} mapping=${mapping} needsSystem=${needsSystem} systemRetry=${actions.systemMap} actions=${actions} />`}

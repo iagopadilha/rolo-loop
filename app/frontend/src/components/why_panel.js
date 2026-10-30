@@ -1,4 +1,4 @@
-/* "Why use this panel?" dialog: opens from the "?" button and by itself on the first visit (remembered in localStorage). */
+/* "Why Agents Maestro?" dialog: opens from the "?" button and by itself on the first visit (remembered in localStorage). */
 import { html } from '../util/preact.js';
 import { openDialog } from './dialog.js';
 import { readStored, writeStored } from '../util/storage.js';
@@ -15,44 +15,45 @@ const GLOSSARY = [
   ['worktree', 'a working copy of the repository in a sibling folder (…-worktree-loop) on the loop branch. The loop works there, not in your folder.'],
 ];
 
-const PLEX_SANS = 'IBM Plex Sans, sans-serif', PLEX_MONO = 'IBM Plex Mono, monospace';
+const PLEX_SANS = 'var(--sans)', PLEX_MONO = 'var(--mono)';
 const Box = ({ x, y, w, title, sub, color }) => html`<g>
-  <rect x=${x} y=${y} width=${w} height="58" rx="10" fill="#15171A" stroke=${color} stroke-width="1.5" />
-  <text x=${x + w / 2} y=${y + 24} text-anchor="middle" fill="#E6E6E3" font-size="13" font-weight="600" font-family=${PLEX_SANS}>${title}</text>
-  <text x=${x + w / 2} y=${y + 42} text-anchor="middle" fill="#8B9098" font-size="10.5" font-family=${PLEX_MONO}>${sub}</text>
+  <rect x=${x} y=${y} width=${w} height="58" rx="10" fill="var(--fill)" stroke=${color} stroke-width="1.5" />
+  <text x=${x + w / 2} y=${y + 24} text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="600" font-family=${PLEX_SANS}>${title}</text>
+  <text x=${x + w / 2} y=${y + 42} text-anchor="middle" fill="var(--fg2)" font-size="10.5" font-family=${PLEX_MONO}>${sub}</text>
 </g>`;
 const Arrow = ({ x1, x2, y, label }) => html`<g>
-  <path d=${`M${x1} ${y} L${x2 - 4} ${y}`} stroke="#4A4F57" stroke-width="1.5" marker-end="url(#why-arrow)" />
-  <text x=${(x1 + x2) / 2} y=${y - 7} text-anchor="middle" fill="#7D838C" font-size="9.5" font-family=${PLEX_MONO}>${label}</text>
+  <path d=${`M${x1} ${y} L${x2 - 4} ${y}`} stroke="var(--line4)" stroke-width="1.5" marker-end="url(#why-arrow)" />
+  <text x=${(x1 + x2) / 2} y=${y - 7} text-anchor="middle" fill="var(--fg2)" font-size="8" font-family=${PLEX_MONO}>${label}</text>
 </g>`;
 
 function FlowDiagram() {
-  return html`<svg class="why-diagram" viewBox="0 0 660 92" role="img" aria-label="Flow: the /orchestrator skill is the brain; the app engine runs the turns; the state lives in .specs files; the panel reads all of it and sends your clicks back to the engine.">
-    <defs><marker id="why-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#4A4F57" /></marker></defs>
-    <${Box} x=${4} y=${18} w=${140} title="/orchestrator skill" sub="brain (prompt)" color="#A58BFF" />
+  return html`<svg class="why-diagram" viewBox="0 0 660 92" role="img" aria-label="Flow: the /orchestrator skill plans and dispatches; the harness engine runs the turns behind the guard; everything is written to .specs files; this app reads them and sends your clicks back to the engine.">
+    <defs><marker id="why-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--line4)" /></marker></defs>
+    <${Box} x=${4} y=${18} w=${140} title="/orchestrator" sub="plans and dispatches" color="var(--accent)" />
     <${Arrow} x1=${144} x2=${186} y=${47} label="each turn" />
-    <${Box} x=${186} y=${18} w=${140} title="app · engine" sub="run_loop, state…" color="#F2B544" />
+    <${Box} x=${186} y=${18} w=${140} title="harness engine" sub="turns, state, guard" color="var(--warn)" />
     <${Arrow} x1=${326} x2=${368} y=${47} label="writes" />
-    <${Box} x=${368} y=${18} w=${120} title=".specs/" sub="dozens of .md/.json" color="#5CC8D6" />
-    <${Arrow} x1=${488} x2=${530} y=${47} label="reads all" />
-    <${Box} x=${530} y=${18} w=${126} title="panel" sub="one single view" color="#5BD38A" />
-    <path d="M593 76 C593 90, 256 90, 256 78" fill="none" stroke="#F2B544" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#why-arrow)" />
-    <text x="424" y="88" text-anchor="middle" fill="#F2B544" font-size="9.5" font-family=${PLEX_MONO}>your clicks (with confirmation)</text>
+    <${Box} x=${368} y=${18} w=${120} title=".specs/" sub="roadmap, specs" color="var(--cyan)" />
+    <${Arrow} x1=${488} x2=${530} y=${47} label="reads" />
+    <${Box} x=${530} y=${18} w=${126} title="this app" sub="timeline, answers" color="var(--ok)" />
+    <path d="M593 76 C593 90, 256 90, 256 78" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#why-arrow)" />
+    <text x="424" y="88" text-anchor="middle" fill="var(--warn)" font-size="9.5" font-family=${PLEX_MONO}>your clicks (with confirmation)</text>
   </svg>`;
 }
 
-/** Body of the "Why use this panel?" dialog. */
-export function WhyContent() {
+/** Body of the "Why Agents Maestro?" dialog. */
+function WhyContent() {
   const p = (text) => html`<p class="dlg-text">${text}</p>`;
   return html`
-    ${p('Claude Maestro is a local control panel for loop engineering and graph engineering on top of Claude Code. It runs on your machine and uses your own Claude subscription through the claude CLI: no API token needed.')}
-    ${p('The loop produces dozens of files: ROADMAP, STATE, VALIDATE, ANSWERS, LOOP.json, one spec per feature, turns, snapshots and the transcript of every agent. Opening .md files one by one does not show the whole. The panel gathers them in one view: the roadmap as a graph, the turns and agents, the specs, the questions from the loop, what to validate, the cost and the limits.')}
+    ${p('Agents Maestro is a local control panel for the spec-driven loop on top of Claude Code. It runs on your machine and uses your own Claude subscription through the claude CLI: no API key. The panel makes no request outside your computer.')}
+    ${p('A loop produces dozens of files: the roadmap, the state, decisions to validate, your answers, one spec per feature, the turns and the transcript of every agent. Opening them one by one does not show the whole. The app gathers them in one place: the timeline of features and turns, the specs, the questions from the loop, what to validate, the cost and the limits.')}
     <${FlowDiagram} />
     <ul class="why-list">
-      <li><strong>Act on a specific point. </strong>Open a node of the graph (a feature, a turn, an agent) and work on exactly that point: inspect it, chat about it, instruct the loop or answer its question.</li>
-      <li><strong>Commands become buttons. </strong>harness.py loop --check, --answer, --option and --rewind, the loop state and the delivery become buttons with confirmation: fewer commands to remember, fewer copy-and-paste mistakes.</li>
+      <li><strong>Act on a specific point. </strong>Select a feature on the timeline, a turn or an agent and work on exactly that point: inspect it, open its page, ask the agent about it or answer its question.</li>
+      <li><strong>Commands become buttons. </strong>Check, start, pause, answer, rewind and deliver are buttons with confirmation: fewer commands to remember, fewer copy-and-paste mistakes.</li>
+      <li><strong>Guardrails. </strong>In every agent the loop starts, the guard blocks git push, commits outside the checkpoint, writes outside the feature's paths, secrets in commands and hosts that are not on the project's network list.</li>
       <li><strong>Any starting point. </strong>A new project (creates the folder and .specs), an existing repository without .specs (maps it and generates the roadmap) or a loop stopped midway (opens it and shows where it stopped).</li>
-      <li><strong>Who does what. </strong>The loop runs in the app engine. The brain is the /orchestrator skill of the plugin: the prompt every turn runs. The panel only shows and triggers what you click.</li>
+      <li><strong>Who does what. </strong>The orchestrator skill is the brain: the prompt each turn runs. The harness engine runs the turns and keeps the state. This app only shows what happened and triggers what you click.</li>
     </ul>
     <div class="small-label">Mini glossary</div>
     <dl class="why-glossary">${GLOSSARY.map(([t, d]) => [html`<dt key=${'t-' + t}>${t}</dt>`, html`<dd key=${'d-' + t}>${d}</dd>`])}</dl>`;
@@ -61,7 +62,7 @@ export function WhyContent() {
 export function openWhy() {
   writeStored(SEEN_KEY, true);
   openDialog({
-    title: 'Why use this panel?', width: 720, cls: 'dlg-why',
+    title: 'Why Agents Maestro?', width: 720, cls: 'dlg-why',
     content: html`<${WhyContent} />`,
     actions: [{ text: 'Got it', cls: 'btn-primary' }],
   });
@@ -74,5 +75,5 @@ export function openWhyOnFirstVisit() {
 
 /** The "?" button that opens the dialog. */
 export function WhyButton() {
-  return html`<button type="button" class="btn btn-ghost btn-help" aria-label="Why use this panel?" title="Why use this panel?" onClick=${openWhy}>?</button>`;
+  return html`<button type="button" class="btn btn-ghost btn-help" aria-label="Why Agents Maestro?" title="Why Agents Maestro?" onClick=${openWhy}>?</button>`;
 }

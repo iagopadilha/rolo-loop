@@ -10,7 +10,7 @@
    projects/<id>/repos route when the new one is not served yet) and opens its setup dialog.
    The back end decides every state and refusal; the payload is read tolerantly (an old payload lacks the new keys). */
 import { html, useState, useEffect, useRef } from '../../util/preact.js';
-import { list, txt, midPath } from '../../util/format.js';
+import { list, txt, midPath, maskHome } from '../../util/format.js';
 import { appApi, requestJson } from '../../api/api_client.js';
 import { toast } from '../../components/toast.js';
 import { openDialog, confirmDialog } from '../../components/dialog.js';
@@ -35,7 +35,7 @@ const names = (items) => {
 const pathsOf = (items) => list(items).map((x) => (x && typeof x === 'object' ? x.path || x.name || '' : String(x))).filter(Boolean);
 
 /** Role tag in plain words with its hover (RP-02). Also used by the Workspace line and the Start dialog. */
-export function RoleTag({ repo }) {
+function RoleTag({ repo }) {
   const role = ROLE_TEXT[roleKey(repo)];
   return html`<span class="rp-tag mono ws-role-tag" title=${role.hover} tabIndex="0">${role.label}</span>`;
 }
@@ -85,7 +85,7 @@ function RepoCard({ repo, integration, busyKey, locked, onSetup, onCommit, onRol
         title=${locked ? LOCK_REASON : 'Removes it from this project; no file is deleted.'} aria-label=${'Remove ' + repo.name} onClick=${() => onRemove(repo)}>${busyKey === 'rm:' + repo.name ? 'Removing…' : 'Remove'}</button>`}</div>
     ${repo.reason ? html`<div class="rp-purpose wsd-reason">${repo.reason}</div>` : null}
     <dl class="ws-kv">
-      <dt>Folder</dt><dd class="mono" title=${repo.path || repo.folder}>${txt(repo.path || repo.folder)}</dd>
+      <dt>Folder</dt><dd class="mono" title=${maskHome(repo.path || repo.folder)}>${maskHome(txt(repo.path || repo.folder))}</dd>
       <dt>Current branch</dt><dd class="mono">${txt(repo.current_branch)}${repo.upstream ? html` <span class="dim">· upstream ${repo.upstream}</span>` : null}</dd>
       ${editing ? html`<dt>Starts from</dt><dd class="mono">${base ? `${base}${repo.base_sha ? ` (${shortSha(repo.base_sha)})` : ''}` : 'the current branch'}</dd>` : null}
       <dt>The loop will</dt><dd class="wsd-plain">${editing
@@ -187,7 +187,7 @@ function WorkspaceDialog() {
     ${locked ? html`<div class="nl-box nl-warn" role="note">A loop or a job is running: the repository list and the commits are locked until it stops.</div>` : null}
     <dl class="ws-kv wsd-top">
       <dt>Integration branch</dt><dd class="mono">${integration ? `PR to ${integration}` : 'not detected: the PR targets each repository\'s base branch'}</dd>
-      <dt>Plan folder</dt><dd class="mono" title=${data.plan_folder || ''}>${data.plan_folder ? midPath(data.plan_folder, 72) : '—'}</dd>
+      <dt>Plan folder</dt><dd class="mono" title=${maskHome(data.plan_folder || '')}>${data.plan_folder ? midPath(maskHome(data.plan_folder), 72) : '—'}</dd>
     </dl>
     ${repos.length ? html`<ul class="ws-repos wsd-list-repos" aria-label="Repositories of the project">${repos.map((repo) => html`<${RepoCard} key=${repo.name} repo=${repo} integration=${integration}
       busyKey=${busyKey} locked=${locked} onSetup=${openSetup} onCommit=${commitSetup} onRole=${setRole} onRemove=${removeRepository} />`)}</ul>`

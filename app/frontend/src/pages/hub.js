@@ -1,30 +1,35 @@
-/* Hub (/): recent projects, open a folder (the system folder window), create a project from scratch,
-   forget a project, reset its specs (GET .../reset-specs/preview, then POST .../reset-specs; deletes the loop worktree too), app diagnostics (GET /api/app/info), test notification and shut down the app. */
+/* Hub (/): the v2 projects page inside the shell (components/shell.js): a table of the projects (name + masked path, status, verified, cost,
+   opened), a system strip with the diagnostics summary, open a folder (the system folder window), create a project from scratch,
+   forget a project, reset its specs (GET .../reset-specs/preview, then POST .../reset-specs; deletes the loop worktree too), app diagnostics
+   (GET /api/app/info), test notification and shut down the app. Every value comes from the API; every displayed path goes through maskHome. */
 import { $ } from '../util/dom.js';
 import { html, render, useState, useRef } from '../util/preact.js';
-import { DASH, list, txt, fmtRelative } from '../util/format.js';
+import { DASH, list, txt, fmtRelative, maskHome } from '../util/format.js';
 import { appApi, createPolling, showDisconnectedBanner } from '../api/api_client.js';
 import { toast } from '../components/toast.js';
 import { openDialog } from '../components/dialog.js';
 import { pickFolderNativeFirst } from '../components/folder_browser.js';
 import { Conformance, conformanceDefault } from '../components/conformance.js';
-import { openWhyOnFirstVisit, WhyButton } from '../components/why_panel.js';
-import { SettingsButton } from '../components/settings_dialog.js';
+import { openWhyOnFirstVisit, openWhy, WhyButton } from '../components/why_panel.js';
+import { currentRoute, onRoute, navigate } from './panel/router.js';
+import { SettingsPage } from './settings_page.js';
+import { checksOf, failText, maskIn, sendTestNotification } from './settings_system.js';
+import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects } from '../components/shell.js';
 
-const MODE = {
-  new: ['new project', '#8AA4FF'], no_specs: ['no .specs', '#8B9098'], planning: ['planning', '#A58BFF'],
-  ready_for_loop: ['ready for the loop', '#5CC8D6'], in_loop: ['in loop', '#F2B544'], done: ['done', '#5BD38A'],
+/** Status words of a project that has no loop (progress_summary.mode) and of a loop (progress_summary.loop_status). */
+const MODE_LABEL = {
+  new: 'New project', no_specs: 'No .specs', planning: 'Planning', ready_for_loop: 'Ready for the loop', in_loop: 'In loop', done: 'Done',
 };
 const NEXT_ACTION = {
   structure: 'initialize .specs', conformance: 'choose conformance', map: 'map the code', roadmap: 'generate the roadmap',
   approve: 'approve the roadmap', test_environment: 'describe the test environment', check: 'check the loop', start_loop: 'start the loop', follow: 'follow the loop',
 };
-const LOOP = {
-  running: ['running', '#F2B544', true], awaiting_user: ['waiting for you', '#F2B544', true], continue: ['between turns', '#8AA4FF'],
-  done: ['done', '#5BD38A'], error: ['error', '#F06A5E'], stopped: ['stopped', '#C9C4BE'], no_loop: ['no loop', '#8B9098'],
+const LOOP_LABEL = {
+  running: 'Running', awaiting_user: 'Needs you', continue: 'Between turns', done: 'Done', error: 'Error', stopped: 'Stopped',
 };
 const INVALID_NAME = /[\\/:*?"<>|]/;
 const INVALID_NAME_MSG = 'The name cannot contain \\ / : * ? " < > |';
+const capital = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 
 // store of the page: handlers mutate it and call draw() (Preact only touches what changed, so the focus stays)
 const hb = {
@@ -34,30 +39,35 @@ const hb = {
 let hubRoot = null;
 const draw = () => { if (hubRoot) render(html`<${Hub} />`, hubRoot); };
 const focusId = (id) => { const el = document.getElementById(id); if (el) el.focus(); };
+const closeMenus = () => { for (const menu of document.querySelectorAll('details.hub-menu[open]')) menu.open = false; };
 
 // ---------- projects ----------
 async function loadProjects() {
   const r = await appApi.get('projects', 10000);
   hb.projects = list(r && r.projects); hb.error = null;
+  setShellProjects(hb.projects);
   draw();
 }
-function Chip({ text, color, pulse }) {
-  return html`<span class="hub-chip" style=${{ color, borderColor: color + '55' }}><span class=${'dot' + (pulse ? ' pulse' : '')} style=${{ background: color }} /><span>${text}</span></span>`;
+
+/** What the Status cell says: { label, kind, title }. A running loop adds its turn (from GET overview). */
+function statusOf(p) {
+  const ps = p.progress_summary || {}, lp = hb.loops[p.id];
+  const turn = lp && lp.turn != null ? ` · T${lp.turn}` : '';
+  const feats = lp ? list(lp.feature).join(', ') : '';
+  if (p.folder_exists === false) return { label: 'Folder missing', kind: 'bad', title: 'The project folder is not on disk any more.' };
+  const loopStatus = lp && lp.question ? 'awaiting_user' : (lp && lp.status) || ps.loop_status;
+  if (LOOP_LABEL[loopStatus]) return { label: LOOP_LABEL[loopStatus] + (loopStatus === 'running' || loopStatus === 'awaiting_user' ? turn : ''), kind: dotKind(loopStatus), title: feats };
+  return { label: MODE_LABEL[ps.mode] || 'No loop', kind: dotKind(ps.mode === 'done' ? 'done' : ''), title: '' };
 }
-/** Running loop of a project (GET /api/app/overview): stage, feature, turn, cost and the question waiting for an answer. */
-function LiveLoop({ p, lp }) {
-  const q = lp.question, feats = list(lp.feature).join(', '), url = lp.url || p.url || `/p/${encodeURIComponent(p.id)}/`;
-  const opts = list(q && q.options);
-  return html`<div class="hub-live" role="group" aria-label=${'Running loop of ' + txt(p.name || p.id)}>
-    <div class="hub-live-top"><span class="dot pulse" aria-hidden="true"></span><strong>${lp.stage || 'loop running'}</strong>
-      ${feats ? html`<span class="mono hub-live-f" title=${feats}>${feats}</span>` : null}</div>
-    <div class="hub-live-meta mono"><span>${'turn ' + (lp.turn != null ? lp.turn : DASH)}</span><span>${typeof lp.cost_usd === 'number' ? '$' + lp.cost_usd.toFixed(2) : DASH}</span>
-      ${list(lp.repos).length > 1 ? list(lp.repos).map((r) => html`<span key=${r} class="hub-live-r">${r}</span>`) : null}</div>
-    ${q ? html`<div class="hub-ask"><div class="hub-ask-t"><strong>Waiting for you</strong><span class="dim">${q.since ? ' · ' + fmtRelative(q.since) : ''}</span></div>
-      <div class="hub-ask-q">${txt(q.reason)}</div>
-      ${opts.length ? html`<ul class="hub-ask-o" aria-label="Options">${opts.map((o, i) => html`<li key=${i}>${String(o)}</li>`)}</ul>` : null}
-      <a class="btn btn-primary btn-sm hub-ask-a" href=${url}>Answer in the panel</a></div>` : null}
-  </div>`;
+
+/** The question a running loop is waiting on (GET /api/app/overview): the answer happens in the panel. */
+function AskBlock({ p, lp }) {
+  const q = lp.question, url = lp.url || p.url || `/p/${encodeURIComponent(p.id)}/`, opts = list(q && q.options);
+  return html`<div class="hub-ask" role="group" aria-label=${'Question waiting in ' + txt(p.name || p.id)}>
+    <div class="hub-ask-t"><strong>Waiting for you</strong><span class="dim">${q.since ? ' · ' + fmtRelative(q.since) : ''}</span></div>
+    <div class="hub-ask-q">${txt(q.reason)}</div>
+    ${opts.length ? html`<ul class="hub-ask-o" aria-label="Options">${opts.map((o, i) => html`<li key=${i}>${String(o)}</li>`)}</ul>` : null}
+    <a class="btn btn-primary btn-sm hub-ask-a" href=${url}>Answer in the panel</a></div>`;
 }
 /** What the reset does to the loop worktree(s), read BEFORE confirming (GET .../reset-specs/preview). Text only: no options. */
 function ResetWorktreeNotice({ preview }) {
@@ -67,39 +77,54 @@ function ResetWorktreeNotice({ preview }) {
   }
   if (!preview.worktrees.length) return null;
   return html`<span class="reset-worktree" role="note">${preview.worktrees.map((w) => html`<span class="reset-worktree-item" key=${w.path}>
-      A loop worktree exists at <span class="mono">${txt(w.path)}</span> (branch <span class="mono">${txt(w.branch)}</span>${preview.worktrees.length > 1 ? `, repo ${w.repo}` : ''}).
+      A loop worktree exists at <span class="mono" title=${maskHome(w.path)}>${maskHome(txt(w.path))}</span> (branch <span class="mono">${txt(w.branch)}</span>${preview.worktrees.length > 1 ? `, repo ${w.repo}` : ''}).
       ${typeof w.unpushed_commits === 'number' && w.unpushed_commits > 0 ? html` It has <strong>${w.unpushed_commits} commit${w.unpushed_commits === 1 ? '' : 's'} not pushed yet</strong>.` : null}
     </span>`)}
     <span class="reset-worktree-item">It will be deleted too, with its local branch. To keep its changes, finish the loop (Close loop) or push the branch before resetting; otherwise everything is deleted and cleaned.</span></span>`;
 }
-function ProjectCard({ p }) {
-  const ps = p.progress_summary || {};
-  const mode = MODE[ps.mode], loop = LOOP[ps.loop_status], c = ps.counts || {};
+
+function ProjectRow({ p }) {
+  const ps = p.progress_summary || {}, c = ps.counts || {}, lp = hb.loops[p.id];
   const url = p.url || `/p/${encodeURIComponent(p.id)}/`;
-  const counts = typeof c.total === 'number' && c.total > 0 ? `${c.verified != null ? c.verified : 0}/${c.total} verified${c.blocked ? ` · ${c.blocked} blocked` : ''}` : 'no features yet';
-  const askForget = () => { hb.forgetting = p.id; draw(); focusId('forget-no-' + p.id); };
-  const cancelForget = () => { hb.forgetting = null; draw(); focusId('forget-' + p.id); };
-  const askReset = () => { hb.resetting = p.id; hb.resetConfirm = ''; hb.resetPreview = { id: p.id, state: 'loading' }; draw(); focusId('reset-name-' + p.id); loadResetPreview(p); };
-  const cancelReset = () => { hb.resetting = null; hb.resetConfirm = ''; hb.resetPreview = null; draw(); focusId('reset-' + p.id); };
+  const st = statusOf(p);
+  const total = typeof c.total === 'number' ? c.total : 0, verified = c.verified != null ? c.verified : 0;
+  const pct = total > 0 ? Math.max(0, Math.min(100, (verified / total) * 100)) : 0;
+  const repo = maskHome(p.repo_path || '');
+  const closeMenu = (e) => { const menu = e.currentTarget.closest('details'); if (menu) menu.open = false; };
+  const askForget = (e) => { closeMenu(e); hb.forgetting = p.id; draw(); focusId('forget-no-' + p.id); };
+  const cancelForget = () => { hb.forgetting = null; draw(); focusId('menu-' + p.id); };
+  const askReset = (e) => { closeMenu(e); hb.resetting = p.id; hb.resetConfirm = ''; hb.resetPreview = { id: p.id, state: 'loading' }; draw(); focusId('reset-name-' + p.id); loadResetPreview(p); };
+  const cancelReset = () => { hb.resetting = null; hb.resetConfirm = ''; hb.resetPreview = null; draw(); focusId('menu-' + p.id); };
   const typedName = hb.resetConfirm.trim();
   const nameMatches = typedName === String(p.name || '').trim() && typedName !== '';
   const preview = hb.resetPreview && hb.resetPreview.id === p.id ? hb.resetPreview : { state: 'loading' };
   const worktrees = preview.state === 'ready' ? preview.worktrees : [];
-  return html`<li class="hub-project">
-    <div class="hub-project-top">
-      ${p.favorite ? html`<span class="hub-fav" title="favorite" aria-label="favorite">★</span>` : null}
-      <a class="hub-project-name" href=${url}>${txt(p.name || p.id)}</a>
-      ${loop ? html`<${Chip} text=${loop[0]} color=${loop[1]} pulse=${loop[2]} />` : null}
-      ${mode && !(loop && loop[0] === mode[0]) ? html`<${Chip} text=${mode[0]} color=${mode[1]} />` : null}
-      ${p.folder_exists === false ? html`<${Chip} text="folder missing" color="#F06A5E" />` : null}
+  const confirming = hb.resetting === p.id || hb.forgetting === p.id;
+  return html`<li class="hub-item">
+    <div class="hub-row" role="row">
+      <span role="cell" class="hub-cell hub-cell-name">
+        <span class="hub-name-line">${p.favorite ? html`<span class="hub-fav" title="favorite" aria-label="favorite">★</span>` : null}<a class="hub-name" href=${url}>${txt(p.name || p.id)}</a></span>
+        <span class="hub-path mono" title=${repo}>${repo || DASH}</span>
+      </span>
+      <span role="cell" class="hub-cell hub-cell-status" title=${[st.title, ps.next_action ? 'Next: ' + (NEXT_ACTION[ps.next_action] || ps.next_action) : ''].filter(Boolean).join(' · ') || null}>
+        <span class=${'sh-dot is-' + st.kind} aria-hidden="true"></span><span class="hub-status-text">${st.label}</span></span>
+      <span role="cell" class="hub-cell hub-cell-ver">${total > 0
+        ? html`<span class="hub-bar" role="img" aria-label=${`${verified} of ${total} features verified`}><span style=${{ width: pct + '%' }}></span></span><span class="mono hub-num">${verified}/${total}</span>`
+        : html`<span class="dim" title="no features yet">${DASH}</span>`}</span>
+      <span role="cell" class="hub-cell hub-cell-cost mono">${lp && typeof lp.cost_usd === 'number' ? '$' + lp.cost_usd.toFixed(2) : DASH}</span>
+      <span role="cell" class="hub-cell hub-cell-opened dim">${capital(fmtRelative(p.last_opened_at))}</span>
+      <span role="cell" class="hub-cell hub-cell-menu">
+        <details class="hub-menu">
+          <summary id=${'menu-' + p.id} aria-label=${'Actions for ' + txt(p.name || p.id)} title="Actions"><${Icon} name="dots" /></summary>
+          <div class="hub-menu-pop">
+            <a href=${url}>Open panel</a>
+            <button type="button" id=${'reset-' + p.id} onClick=${askReset} title="Move the plan and loop state to .specs/.trash, delete the loop worktree and its local loop branch, and start from zero">Reset specs</button>
+            <button type="button" id=${'forget-' + p.id} class="is-danger" onClick=${askForget}>Forget</button>
+          </div>
+        </details>
+      </span>
     </div>
-    <div class="hub-project-path mono" title=${p.repo_path || ''}>${txt(p.repo_path)}</div>
-    <div class="hub-project-meta">
-      <span><span class="hub-k">next action </span><strong>${NEXT_ACTION[ps.next_action] || txt(ps.next_action)}</strong></span>
-      <span class="mono dim">${counts}</span>
-      <span class="dim">${'opened ' + fmtRelative(p.last_opened_at)}</span>
-    </div>
-    ${hb.loops[p.id] ? html`<${LiveLoop} p=${p} lp=${hb.loops[p.id]} />` : null}
+    ${lp && lp.question ? html`<${AskBlock} p=${p} lp=${lp} />` : null}
     ${hb.resetting === p.id
       ? html`<form class="confirm-inline confirm-reset" role="group" aria-label="Confirm resetting the specs" onSubmit=${(e) => { e.preventDefault(); if (nameMatches && !hb.busy[p.id]) resetSpecs(p); }}>
           <span id=${'reset-help-' + p.id}>Moves the plan, roadmap, flows, features and loop state to .specs/.trash/ (${worktrees.length ? 'the spec files are kept there' : 'nothing is deleted'}).<br />
@@ -118,29 +143,38 @@ function ProjectCard({ p }) {
           <button type="button" class="btn btn-danger btn-sm" id=${'forget-yes-' + p.id} disabled=${!!hb.busy[p.id]} onClick=${() => forget(p)}>Yes, forget</button>
           <button type="button" class="btn btn-sm" id=${'forget-no-' + p.id} onClick=${cancelForget}>Cancel</button>
         </div>`
-      : html`<div class="hub-project-actions">
-          <a class="btn btn-primary btn-sm" href=${url}>Open panel</a>
-          <button type="button" class="btn btn-ghost btn-sm" id=${'reset-' + p.id} onClick=${askReset} title="Move the plan and loop state to .specs/.trash, delete the loop worktree and its local loop branch, and start from zero">Reset specs</button>
-          <button type="button" class="btn btn-ghost btn-sm" id=${'forget-' + p.id} onClick=${askForget}>Forget</button>
-        </div>`}
+      : null}
   </li>`;
 }
-/** Content of #hub-list. */
-function ProjectList() {
-  if (hb.projects == null) return html`<div class="empty-note">${hb.error ? 'Could not read the projects: ' + hb.error : 'loading projects…'}</div>`;
-  if (!hb.projects.length) {
-    return html`<div class="hub-empty"><div class="hub-empty-t">No projects yet</div>
+
+const COLUMNS = ['Name', 'Status', 'Verified', 'Cost', 'Opened'];
+/** Content of #hub-list: the table (loading skeleton, error, empty and filled). */
+function ProjectTable() {
+  let body;
+  if (hb.projects == null) {
+    body = hb.error
+      ? html`<div class="hub-state hub-state-error" role="alert"><div class="hub-state-t">Could not read the projects</div>
+          <div class="muted">${maskIn(hb.error)}</div><button type="button" class="btn btn-sm" id="hub-retry" onClick=${() => loadProjects().catch((e) => { hb.error = e.message; draw(); })}>Try again</button></div>`
+      : html`<div class="hub-skel" aria-hidden="true">${[0, 1, 2].map((i) => html`<div class="hub-skel-row" key=${i}><span></span><span></span><span></span></div>`)}</div>
+          <span class="sr-only" role="status">Loading projects…</span>`;
+  } else if (!hb.projects.length) {
+    body = html`<div class="hub-state"><div class="hub-state-t">No projects yet</div>
       <div class="muted">Open the folder of an existing project (with or without .specs) or create one from scratch. The app remembers the projects you open.</div></div>`;
+  } else {
+    const ord = [...hb.projects].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || String(b.last_opened_at || '').localeCompare(String(a.last_opened_at || '')));
+    body = html`<ul class="hub-rows" role="rowgroup">${ord.map((p) => html`<${ProjectRow} key=${p.id} p=${p} />`)}</ul>`;
   }
-  const ord = [...hb.projects].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || String(b.last_opened_at || '').localeCompare(String(a.last_opened_at || '')));
-  return html`<ul class="hub-projects">${ord.map((p) => html`<${ProjectCard} key=${p.id} p=${p} />`)}</ul>`;
+  return html`<div class="hub-table" role="table" aria-label="Projects">
+    <div class="hub-row hub-head" role="row">${COLUMNS.map((name, i) => html`<span key=${name} role="columnheader" class=${'hub-cell hub-cell-' + ['name', 'status', 'ver', 'cost', 'opened'][i]}>${name}</span>`)}<span class="hub-cell hub-cell-menu" aria-hidden="true"></span></div>
+    <div id="hub-list">${body}</div>
+  </div>`;
 }
-/** GET overview: every running loop of every project. A back end without it leaves the cards as they were. */
+/** GET overview: every running loop of every project. A back end without it leaves the table as it was. */
 async function loadOverview() {
   try {
     const r = await appApi.get('overview', 10000);
     hb.loops = Object.fromEntries(list(r && r.loops).filter((l) => l && l.project_id).map((l) => [l.project_id, l]));
-  } catch (_) { /* no overview route: no live block */ }
+  } catch (_) { /* no overview route: no live data */ }
 }
 async function loadResetPreview(p) {
   let next;
@@ -158,11 +192,11 @@ async function resetSpecs(p) {
     const n = list(r && r.moved).length;
     const removed = list(r && r.worktrees_removed).length, failed = list(r && r.worktree_failures);
     hb.resetting = null; hb.resetConfirm = ''; hb.resetPreview = null;
-    toast((n ? `Specs reset: ${n} item${n === 1 ? '' : 's'} moved to ${r.trash}.` : 'Nothing to reset: the specs were already clean.')
+    toast((n ? `Specs reset: ${n} item${n === 1 ? '' : 's'} moved to ${maskHome(r.trash)}.` : 'Nothing to reset: the specs were already clean.')
       + (removed ? ` Loop worktree${removed === 1 ? '' : 's'} deleted.` : ''), 'ok');
-    if (failed.length) toast('Not everything was deleted: ' + failed.map((f) => `${f.repo}: ${f.error}`).join('; '), 'err');
+    if (failed.length) toast('Not everything was deleted: ' + failed.map((f) => `${f.repo}: ${maskIn(f.error)}`).join('; '), 'err');
     draw();
-    focusId('reset-' + p.id);
+    focusId('menu-' + p.id);
     loadProjects().catch(() => {});
   } catch (e) { toast('Specs not reset: ' + e.message, 'err'); }
   finally { delete hb.busy[p.id]; draw(); }
@@ -172,6 +206,7 @@ async function forget(p) {
   try {
     await appApi.post('projects/' + encodeURIComponent(p.id) + '/forget', {});
     hb.projects = hb.projects.filter((x) => x.id !== p.id); hb.forgetting = null;
+    setShellProjects(hb.projects);
     toast(`${p.name || p.id} left the list (the files stay where they were).`, 'ok');
   } catch (e) { toast('Not forgotten: ' + e.message, 'err'); }
   finally { delete hb.busy[p.id]; draw(); }
@@ -185,9 +220,9 @@ function goToProject(r) {
 }
 async function openPath(path) {
   if (!path) return;
-  setOpening({ text: 'opening ' + path + '…' });
+  setOpening({ text: 'opening ' + maskHome(path) + '…' });
   try { goToProject(await appApi.post('projects/open', { path }, 60000)); }
-  catch (e) { setOpening({ error: e.status === 400 ? `Not opened: ${e.message}. Check that the path is a folder.` : 'Not opened: ' + e.message }); }
+  catch (e) { setOpening({ error: e.status === 400 ? `Not opened: ${maskIn(e.message)}. Check that the path is a folder.` : 'Not opened: ' + maskIn(e.message) }); }
 }
 async function openFolder() {
   if (hb.opening && hb.opening.native) return;
@@ -239,13 +274,13 @@ function CreateProjectForm({ handle }) {
     if (!n || INVALID_NAME.test(n)) { setSubmitError(n ? INVALID_NAME_MSG : 'Give the project a name.'); nameRef.current.focus(); return; }
     d.busy(true);
     try { const r = await appApi.post('projects/create', { parent_path: p, name: n, init_git: !!git, conformance: conf }, 60000); d.close(); toast('Project created.', 'ok'); goToProject(r); }
-    catch (e) { setSubmitError('Not created: ' + e.message); d.busy(false); }
+    catch (e) { setSubmitError('Not created: ' + maskIn(e.message)); d.busy(false); }
   };
   return html`
     <p class="dlg-text">Creates the project folder, the template .specs and (if checked) git with an initial commit. Refuses if the folder already exists with content.</p>
     <div class="dlg-field"><label class="nl-label" for="cr-parent">Parent folder</label>
       <div class="fb-bar">
-        <input type="text" id="cr-parent" class="dlg-input mono" autocomplete="off" spellcheck="false" placeholder=${'C:\\Users\\you\\projects'} ref=${parentRef}
+        <input type="text" id="cr-parent" class="dlg-input mono" autocomplete="off" spellcheck="false" placeholder="~/projects" ref=${parentRef}
           value=${parent} onInput=${(e) => editParent(e.currentTarget.value)} />
         <button type="button" class="btn btn-sm" onClick=${choose}>Choose…</button>
       </div>
@@ -255,7 +290,7 @@ function CreateProjectForm({ handle }) {
         value=${name} onInput=${(e) => editName(e.currentTarget.value)} />
       <div class="nl-err" role="alert">${error}</div>
     </div>
-    <div class="hint mono" aria-live="polite">${p && n ? 'Will create: ' + p.replace(/[\\/]+$/, '') + sep + n : ''}</div>
+    <div class="hint mono" aria-live="polite">${p && n ? 'Will create: ' + maskHome(p.replace(/[\\/]+$/, '')) + sep + n : ''}</div>
     <label class="nl-check" for="cr-git"><input type="checkbox" id="cr-git" checked=${git} onChange=${(e) => setGit(e.currentTarget.checked)} /><span>Initialize git (git init + initial commit)</span></label>
     <${Conformance} allowLater=${true} onChange=${setConf} />`;
 }
@@ -271,52 +306,24 @@ function createDialog() {
   });
 }
 
-// ---------- diagnostics ----------
-function DiagRow({ label, ok, detail }) {
-  const state = ok === true ? ['ok', 'ok'] : ok === false ? ['missing', 'bad'] : [DASH, 'na'];
-  return html`<div class=${'diag-item ' + state[1]}><span class="diag-ic" aria-hidden="true">${ok === true ? '✓' : ok === false ? '✗' : '·'}</span>
-    <span class="diag-k">${label}</span><span class="sr-only">${': ' + state[0] + '. '}</span><span class="diag-v mono" title=${detail || ''}>${detail || ''}</span></div>`;
-}
-const row = (label, ok, detail, key = label) => html`<${DiagRow} key=${key} label=${label} ok=${ok} detail=${detail} />`;
-const bool = (v) => (typeof v === 'boolean' ? v : v == null ? null : !!v);
-function enabledChannels(v) {
-  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' || (x && x.enabled !== false)).map((x) => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
-  if (v && typeof v === 'object') return Object.entries(v).filter(([, on]) => on).map(([k]) => k);
-  return [];
-}
-/** One row per configured claude command: role, found or "not found (skipped)", auth method (API key = pay per token), e-mail, org, plan. */
-function claudeCommandRow(command, index) {
-  const auth = command.auth || {};
-  const who = [auth.email, auth.org, auth.plan].filter(Boolean).join(' · ');
-  const method = auth.method === 'API key' ? '⚠ API key (pay per token)' : auth.method;
-  const detail = command.found ? [command.name, method, who, auth.error ? 'auth: ' + auth.error : ''].filter(Boolean).join(' · ') : command.name + ' · not found (skipped)';
-  return row('claude command (' + (command.role === 'main' ? 'main' : 'fallback') + ')', command.found ? true : command.role === 'main' ? false : null, detail, 'claude-command-' + index);
-}
-const KNOWN_INFO = new Set(['skill_dir', 'guard', 'claude', 'notify_channels', 'data_dir', 'version', 'seconds_until_shutdown', 'problems', 'ok', 'pid', 'url']);
-/** Content of #hub-diag. */
-function Diagnostics({ r, error }) {
-  if (!r) return html`<span class="hint">${error ? 'Diagnostics unavailable: ' + error : 'reading diagnostics…'}</span>`;
-  const guard = r.guard || {}, claude = r.claude || {};
-  const skillDir = r.skill_dir;
-  const guardOk = bool(guard.blocks_git_push != null ? guard.blocks_git_push : guard.found);
-  const channels = enabledChannels(r.notify_channels);
-  const rest = Object.entries(r).filter(([k, v]) => !KNOWN_INFO.has(k) && (v == null || typeof v !== 'object'));
-  const shutdownIn = r.seconds_until_shutdown;
-  return html`
-    <div class="diag-grid">
-      ${row('/orchestrator skill', skillDir ? true : null, skillDir ? String(skillDir) : '')}
-      ${row('guard blocking git push', guardOk, guard.path ? String(guard.path) : '')}
-      ${row('claude on PATH', bool(claude.on_path), claude.binary_configured ? String(claude.binary_configured) : '')}
-      ${list(r.claude_commands).map(claudeCommandRow)}
-      ${row('notification channels', channels.length ? true : null, channels.length ? channels.join(', ') : 'none configured')}
-      ${r.data_dir ? row('data folder', null, String(r.data_dir)) : null}
-      ${list(r.problems).map((p, i) => row('problem', false, txt(p), 'problem-' + i))}
-    </div>
-    <div class="diag-foot">
-      <span class="dim mono">${[r.version ? 'version ' + r.version : '', typeof shutdownIn === 'number' ? `shuts down by itself in ${Math.round(shutdownIn / 60)} min without use` : ''].filter(Boolean).join(' · ')}</span>
-      ${rest.length ? html`<details class="diag-more"><summary>more details</summary>
-        <div class="diag-grid">${rest.map(([k, v]) => row(k, typeof v === 'boolean' ? v : null, typeof v === 'boolean' ? '' : txt(v)))}</div></details>` : null}
-    </div>`;
+// ---------- diagnostics (the checks list lives in settings_system.js; "Details" opens Settings -> System) ----------
+/** The system strip: "N checks passed", every failing check as danger text, Details, the app version. */
+function SystemStrip() {
+  const r = hb.info;
+  const checks = r ? checksOf(r) : [];
+  const passed = checks.filter((c) => c.ok === true).length;
+  const failing = checks.filter((c) => c.ok === false);
+  const version = r && r.version ? (/^v/i.test(String(r.version)) ? String(r.version) : 'v' + r.version) : '';
+  return html`<section class="hub-system" id="hub-diag" aria-label="System">
+    <span class="hub-system-t">System</span>
+    ${r ? html`<span class="muted">${passed} check${passed === 1 ? '' : 's'} passed</span>
+        ${failing.map((c) => html`<span class="hub-fail" key=${c.key}><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l6 11H2z" /><path d="M8 7v3" /><path d="M8 12h.01" /></svg>${failText(c)}</span>`)}`
+      : html`<span class="muted">${hb.infoError ? 'Diagnostics unavailable: ' + maskIn(hb.infoError) : 'Reading diagnostics…'}</span>`}
+    <span class="sh-spacer"></span>
+    <button type="button" class="hub-link" id="hub-test" disabled=${hb.testing} onClick=${testNotification}>${hb.testing ? 'Sending…' : 'Test notification'}</button>
+    <button type="button" class="hub-link" id="hub-details" onClick=${openDetails}>Details</button>
+    ${version ? html`<span class="mono dim hub-version">${version}</span>` : null}
+  </section>`;
 }
 async function loadInfo() {
   try { hb.info = await appApi.get('info', 15000); hb.infoError = null; }
@@ -325,13 +332,9 @@ async function loadInfo() {
 }
 async function testNotification() {
   hb.testing = true; draw();
-  try {
-    const r = await appApi.post('notify/test', {}, 90000);
-    const results = r.results && typeof r.results === 'object' ? Object.entries(r.results).map(([k, v]) => `${k}: ${v}`).join(' · ') : '';
-    toast('Test notification sent' + (results ? ': ' + results.slice(0, 160) : '.'), 'ok');
-  } catch (e) { toast('The test notification failed: ' + e.message, 'err'); }
-  finally { hb.testing = false; draw(); }
+  try { await sendTestNotification(); } finally { hb.testing = false; draw(); }
 }
+const openDetails = () => navigate('/settings/system');
 const askShutdown = () => { hb.confirmShutdown = true; draw(); focusId('shut-no'); };
 const cancelShutdown = () => { hb.confirmShutdown = false; draw(); focusId('shut-open'); };
 /** Content of #hub-shutdown. */
@@ -354,53 +357,55 @@ async function shutDown() {
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
+/** The Claude account of the main command (diagnostics), for the sidebar chip: e-mail or the command name, and the sign-in when known. */
+function hubAccount() {
+  const main = list(hb.info && hb.info.claude_commands).find((c) => c.role === 'main' && c.found) || list(hb.info && hb.info.claude_commands).find((c) => c.found);
+  if (!main) return null;
+  const auth = main.auth || {};
+  const base = String(main.name || '').split(/[\\/]/).pop().replace(/\.(cmd|bat|exe|py)$/i, '');
+  const method = auth.method && auth.method !== '?' ? auth.method : '';
+  return { name: auth.email || base, sub: [auth.plan, method].filter(Boolean).join(' · ') || 'Claude command' };
+}
+
 /** The whole hub page (#hub). The offline banner is driven by showDisconnectedBanner(); its props never change, so Preact leaves it alone. */
 export function Hub() {
-  return html`<div id="hub" class="hub">
-    <div id="banner-offline" class="banner banner-offline" role="alert" hidden>
-      <span class="dot dot-red" />
-      <strong>app disconnected</strong>
-      <span id="banner-offline-detail" />
+  const splash = useSplash(hb.projects != null || !!hb.error);
+  return html`<div id="hub" class="hub shell">
+    <${Sidebar} page="hub" project=${null} account=${hubAccount()} activity=${null}
+      commands=${[{ label: 'New project', hint: 'create a project from scratch', run: createDialog }, { label: 'Open folder', hint: 'open the folder of a project', run: openFolder }]} />
+    <div class="shell-col" id="shell-col">
+      <div id="banner-offline" class="banner banner-offline" role="alert" hidden>
+        <span class="dot dot-red" />
+        <strong>App disconnected</strong>
+        <span id="banner-offline-detail" />
+      </div>
+      <${ShellHeader} cls="hub-header" crumbs=${[{ label: 'Projects' }]}
+        end=${(compact) => compact
+          ? html`<div class="header-actions" id="hub-actions"><button type="button" class="btn btn-primary" id="hub-open" onClick=${openFolder}>Open folder</button>
+              ${hb.confirmShutdown ? html`<div id="hub-shutdown"><${Shutdown} /></div>` : null}</div>
+            <${OverflowMenu}>
+              <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
+              ${hb.confirmShutdown ? null : html`<div id="hub-shutdown"><${Shutdown} /></div>`}
+              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agents Maestro?</button>
+            <//>`
+          : html`<div class="header-actions" id="hub-actions">
+            <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
+            <button type="button" class="btn btn-primary" id="hub-open" onClick=${openFolder}>Open folder</button>
+            <div id="hub-shutdown"><${Shutdown} /></div>
+          </div><div class="header-actions"><${WhyButton} /></div>`} />
+
+      ${currentRoute().name === 'settings' ? html`<${SettingsPage} />` : html`<main class="hub-main" id="hub-main">
+        <div class="hub-inner">
+          <section class="hub-start" aria-labelledby="hub-title">
+            <h1 id="hub-title" class="hub-h1">Projects</h1>
+            <p class="hub-lead">Open a folder (new, existing, or a loop stopped midway). Maestro runs the spec-driven loop of the <span class="mono">/orchestrator</span> skill and keeps every step in files you can read.</p>
+            <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
+          </section>
+          <${ProjectTable} />
+          <${SystemStrip} />
+        </div>
+      </main>`}
     </div>
-    <header class="header hub-header">
-      <div class="brand">
-        <div class="logo" aria-hidden="true">M</div>
-        <div>
-          <div class="brand-name">Claude Maestro</div>
-          <div class="brand-sub mono">projects</div>
-        </div>
-      </div>
-      <div class="spacer" />
-      <${SettingsButton} />
-      <${WhyButton} />
-    </header>
-
-    <main class="hub-main">
-      <section class="hub-start" aria-labelledby="hub-title">
-        <h1 id="hub-title" class="hub-h1">Projects</h1>
-        <p class="muted hub-lead"><strong>Claude Maestro</strong> runs and follows the loop of the <span class="mono">/orchestrator</span> skill on your machine. Open the folder of a project (new, existing or with a loop stopped midway) or create one from scratch. The project panel then shows where it stands and what the next step is.</p>
-        <div class="hub-buttons">
-          <button type="button" class="btn btn-primary hub-big" id="hub-open" onClick=${openFolder}>Open folder</button>
-          <button type="button" class="btn hub-big" id="hub-create" onClick=${createDialog}>Create project from scratch</button>
-        </div>
-        <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
-      </section>
-
-      <section class="hub-recent" aria-labelledby="hub-recent-t">
-        <div class="sec-head"><h2 class="sec-title" id="hub-recent-t">Recent <span class="dim-mono" id="hub-total">${hb.projects && hb.projects.length ? String(hb.projects.length) : ''}</span></h2></div>
-        <div id="hub-list"><${ProjectList} /></div>
-      </section>
-    </main>
-
-    <footer class="hub-footer" aria-label="App diagnostics">
-      <div class="hub-footer-t">
-        <span class="small-label">Diagnostics</span>
-        <button type="button" class="btn btn-sm" id="hub-test" disabled=${hb.testing} onClick=${testNotification}>${hb.testing ? 'sending…' : 'Test notification'}</button>
-        <span class="spacer" />
-        <div id="hub-shutdown"><${Shutdown} /></div>
-      </div>
-      <div id="hub-diag"><${Diagnostics} r=${hb.info} error=${hb.infoError} /></div>
-    </footer>
 
     <div id="closed" class="closed" hidden=${!hb.closed}>
       <div class="closed-card" role="alert">
@@ -408,19 +413,24 @@ export function Hub() {
         <div class="muted">The server was shut down. You can close this tab. Loops already started keep running.</div>
       </div>
     </div>
+    ${splash ? html`<${Splash} text=${hb.error ? 'Waiting for the app…' : 'Loading projects…'} />` : null}
   </div>`;
 }
 
 export function startHub(root) {
   hubRoot = root;
   root.replaceChildren();
+  onRoute(() => draw());
   document.title = 'projects · Claude Maestro';
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (document.querySelector('.sh-sw') || document.querySelector('dialog[open]')) return; // the switcher and the dialogs own Esc
+    if (document.querySelector('details.hub-menu[open]')) { const menu = document.querySelector('details.hub-menu[open] summary'); closeMenus(); if (menu) menu.focus(); return; }
     if (hb.confirmShutdown) cancelShutdown();
-    else if (hb.resetting) { const id = hb.resetting; hb.resetting = null; hb.resetConfirm = ''; draw(); focusId('reset-' + id); }
-    else if (hb.forgetting) { const id = hb.forgetting; hb.forgetting = null; draw(); focusId('forget-' + id); }
+    else if (hb.resetting) { const id = hb.resetting; hb.resetting = null; hb.resetConfirm = ''; draw(); focusId('menu-' + id); }
+    else if (hb.forgetting) { const id = hb.forgetting; hb.forgetting = null; draw(); focusId('menu-' + id); }
   });
+  document.addEventListener('pointerdown', (e) => { for (const menu of document.querySelectorAll('details.hub-menu[open]')) if (!menu.contains(e.target)) menu.open = false; });
   draw();
   hubPolling = createPolling({
     intervalMs: 5000,

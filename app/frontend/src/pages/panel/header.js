@@ -1,34 +1,24 @@
-/* Panel header. Loop mode = the navbar: left project + repo chip, status indicator (click opens the status dialog), compact cost and
-   progress meters, then the actions in this order: PR, Start loop (Pause while running), Back to planning, Finish, Shut down app; help
-   is added by app.js. Planning mode uses the same frame (WS-01): the Planning pill on the left next to the project block, a Workspace button (dialog, WS-03), Pause, Shut down.
+/* Panel header (loop and planning): quiet. Breadcrumb (app.js), ONE status pill (click opens the status dialog), the primary action (Pause after the
+   turn while running, else Start loop), the "..." menu with the rest (PR, Back to planning, Finish, Workspace, Copy repo path, Shut down app, Why) and the
+   theme toggle. Cost, verified count, repo and problem counts are NOT here: the Loop page and the sidebar own them (spec 09, dedupe).
    Shutting down belongs to the app: the button calls POST /api/app/shutdown (the project shutdown is a no-op).
    The header frame lives in the Panel (app.js); each dynamic part is a small component here, each action its own component. */
 import { $ } from '../../util/dom.js';
 import { html } from '../../util/preact.js';
-import { DASH, isNum, txt, firstLine, httpUrl } from '../../util/format.js';
+import { isNum, firstLine, httpUrl, maskHome } from '../../util/format.js';
 import { appApi } from '../../api/api_client.js';
 import { toast } from '../../components/toast.js';
 import { copyText } from '../../components/copy.js';
-import { NavbarStatus, NavbarMeter, navbarStatusKey, METER_ATTENTION_PCT } from '../../components/navbar_status.js';
-import { ctx, ui, STATUS, status, loop, pauseRequested, projectName } from './context.js';
-import { renderAll, requestRender, schedulePoll, stopPanel } from '../project_panel.js';
-import { costCapPause, costNumbers, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
+import { NavbarStatus, NAVBAR_STATUS, navbarStatusKey } from '../../components/navbar_status.js';
+import { ctx, ui, status, loop, pauseRequested, projectName } from './context.js';
+import { renderAll, schedulePoll, stopPanel } from '../project_panel.js';
+import { costCapPause, openNewLoop, openStatusDialog, statusHasDialog } from './alert.js';
 import { openReopenPlanning } from './reopen_planning.js';
 import { openFinishDialog } from './wrap_up.js';
 import { openWorkspaceDialog } from './workspace_dialog.js';
-import { SettingsButton } from '../../components/settings_dialog.js';
 
 const meta = () => (ctx.state && ctx.state.meta) || {};
-const PAUSED_STATUS = { label: 'Paused', c: '#F2B544', bg: '#2A2416', line: '#4A3D1C' }; // context.js STATUS has no `paused` yet; used by the planning pill and the title
-const statusInfo = () => (ctx.state && ctx.state.planning_required ? STATUS.planning : STATUS[status()] || (status() === 'paused' ? PAUSED_STATUS : STATUS.no_loop));
 const turnNow = () => { const t = loop().turn; return isNum(t) ? t : null; };
-const folderName = (p) => String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
-
-/** Content of #brand-sub: project · branch. */
-export function BrandSub() {
-  const state = ctx.state;
-  return `${txt(projectName())} · ${txt((state && state.branch) || meta().branch)}`;
-}
 
 /** Repo folder the panel works on and, when a loop worktree exists, that folder + the branch (both from /state). */
 export function repoInfo() {
@@ -39,93 +29,24 @@ export function repoInfo() {
   return { repo, worktree: work && repo && !same(work, repo) ? work : '', branch: state.branch || meta().branch || '' };
 }
 
-/** Planning header, line under the brand: "repo <path> [copy]" and, with a loop worktree, "worktree <path> · branch". */
-export function RepoLine() {
-  const r = repoInfo();
-  if (!r.repo) return null;
-  return html`<div class="repo-line mono" id="repo-line">
-    <span class="repo-item"><span class="repo-tag">repo</span><span class="repo-path" title=${r.repo}>${folderName(r.repo)}</span>
-      <button type="button" class="repo-copy" title=${'copy the repo path: ' + r.repo} aria-label="copy the repo path" onClick=${() => copyText(r.repo, 'Repo path copied.')}>copy</button></span>
-    ${r.worktree ? html`<span class="repo-item"><span class="repo-tag">worktree</span><span class="repo-path" title=${r.worktree}>${folderName(r.worktree)}</span>
-      <button type="button" class="repo-copy" title=${'copy the worktree path: ' + r.worktree} aria-label="copy the worktree path" onClick=${() => copyText(r.worktree, 'Worktree path copied.')}>copy</button></span>` : null}
-    ${r.worktree && r.branch ? html`<span class="repo-item"><span class="repo-tag">branch</span><span class="repo-path" title=${r.branch}>${r.branch}</span></span>` : null}
-  </div>`;
+/** Status of the header pill: a cost-cap pause counts as paused; planning mode has its own key (one vocabulary: components/navbar_status.js). */
+function statusKey() {
+  if (ctx.state && ctx.state.planning_required) return 'planning';
+  return costCapPause() ? 'paused' : navbarStatusKey(status());
 }
 
-/** Navbar repo chip (NAV-02): short name (the worktree folder when the loop works in one, else the repo folder); hover = full path + branch; copy = full path. */
-export function RepoChip() {
+/** The ONE status pill of the header (click opens the status dialog when it has something to show). */
+export function HeaderStatus() {
+  const key = statusKey(), l = loop(), clickable = statusHasDialog();
+  const detail = key === 'awaiting_user' && !clickable ? 'Answer it in the LOOP panel.' : ['paused', 'error', 'awaiting_user', 'stopped'].includes(key) && l.reason ? firstLine(l.reason) : '';
+  return html`<${NavbarStatus} statusKey=${key} turn=${key === 'planning' ? null : turnNow()} detail=${detail} onClick=${clickable ? openStatusDialog : null} />`;
+}
+
+/** "Copy repo path" (overflow menu): the label shows the masked path, the clipboard gets the full one. */
+function CopyPathAction() {
   const r = repoInfo(), path = r.worktree || r.repo;
   if (!path) return null;
-  const title = r.branch ? `${path}\nbranch: ${r.branch}` : path;
-  return html`<span class="nb-repo mono" id="repo-chip" title=${title}>
-    <span class="nb-repo-name">${folderName(path)}</span>
-    <button type="button" class="nb-repo-copy" title=${'copy the full path: ' + path} aria-label="copy the full path" onClick=${() => copyText(path, 'Path copied.')}>copy</button>
-  </span>`;
-}
-
-/** Container flags of the planning header: #status-pill colors and the #brand-sub title (repo path). */
-export function headerModel() {
-  const state = ctx.state, st = statusInfo();
-  return {
-    pillStyle: { background: st.bg, borderColor: st.line },
-    repo: (state && state.project_ref && state.project_ref.repo_path) || (state && state.repo) || '',
-  };
-}
-
-/** Content of #status-pill (planning header): dot + label (the pill colors are set on the container). */
-export function StatusPill() {
-  const st = statusInfo(), turn = turnNow();
-  return html`
-    <span class=${'dot' + (st.pulse ? ' pulse' : '')} id="status-dot" style=${{ background: st.c }}></span>
-    <span class="mono" id="status-text" style=${{ color: st.c }}>${st.label + (turn != null ? ` · turn ${turn}` : '')}</span>`;
-}
-
-// ---------- navbar: status and meters ----------
-/** Navbar status indicator: a cost-cap pause (or the old error with that reason) is `paused`; attention states open the status dialog. */
-export function NavbarLoopStatus() {
-  const key = costCapPause() ? 'paused' : navbarStatusKey(status()), l = loop();
-  const clickable = statusHasDialog();
-  const detail = key === 'awaiting_user' && !clickable ? 'Answer it in the LOOP panel.' : ['paused', 'error', 'awaiting_user', 'stopped'].includes(key) && l.reason ? firstLine(l.reason) : '';
-  return html`<${NavbarStatus} statusKey=${key} turn=${turnNow()} detail=${detail} onClick=${clickable ? openStatusDialog : null} />`;
-}
-
-/** Cost meter `spent / cap` of the current run (COST-04): attention color from 80 % of the cap, red once the cap is passed. */
-const planned = { cap: null, loading: false, wasPlanning: null };
-/** Before a run exists /state only carries the default cap: the planned one is `settings.budget_loop` of GET loop/settings, read once
-    and read again when the project leaves planning (the ROADMAP header may have changed). */
-function plannedCap() {
-  const planning = !!(ctx.state && ctx.state.planning_required);
-  const leftPlanning = planned.wasPlanning === true && !planning;
-  planned.wasPlanning = planning;
-  if (leftPlanning) planned.cap = null;
-  if (planned.cap === null && !planned.loading && ctx.api) {
-    planned.loading = true;
-    ctx.api.get('loop/settings', 15000)
-      .then((data) => { const value = data && data.settings && data.settings.budget_loop; planned.cap = isNum(value) ? value : undefined; })
-      .catch(() => { planned.cap = undefined; })
-      .finally(() => { planned.loading = false; requestRender(); });
-  }
-  return isNum(planned.cap) ? planned.cap : null;
-}
-function CostMeter() {
-  const noRun = status() === 'no_loop' && !isNum(meta().cost_usd);
-  const planCap = noRun ? plannedCap() : null;
-  const { spent, cap: stateCap } = costNumbers();
-  const cap = noRun ? (isNum(planCap) ? planCap : stateCap) : stateCap;
-  if (!isNum(spent) && !isNum(cap)) return null;
-  const pct = isNum(spent) && isNum(cap) && cap > 0 ? (spent / cap) * 100 : 0;
-  const title = isNum(cap) ? `Spent US$ ${isNum(spent) ? spent.toFixed(2) : DASH} of the US$ ${cap.toFixed(2)} limit of this run.` : 'Spent in this run.';
-  return html`<${NavbarMeter} label="cost" value=${spent} max=${cap} unit="$" attention=${pct >= METER_ATTENTION_PCT} danger=${pct >= 100} title=${title} />`;
-}
-/** Progress meter: verified features of the roadmap. */
-function ProgressMeter() {
-  const c = (ctx.state && ctx.state.counts) || {};
-  if (!isNum(c.total) || !c.total) return null;
-  return html`<${NavbarMeter} label="verified" value=${c.verified || 0} max=${c.total} title=${`${c.verified || 0} of ${c.total} features verified`} />`;
-}
-/** Content of #limits (navbar): compact cost and progress meters. */
-export function Meters() {
-  return html`<${CostMeter} /><${ProgressMeter} />`;
+  return html`<button type="button" class="btn btn-ghost" id="btn-copy-path" title=${'copy the full path: ' + maskHome(path)} onClick=${() => copyText(path, 'Path copied.')}>Copy repo path</button>`;
 }
 
 // ---------- actions, one component each ----------
@@ -144,7 +65,7 @@ function PauseButton() {
   if (status() !== 'running') return null;
   return pauseRequested()
     ? html`<button type="button" class="btn btn-pending" disabled id="btn-pause">Pausing after the turn…</button>`
-    : html`<button type="button" class="btn" id="btn-pause" disabled=${!!ui.busy.pause} onClick=${doPause}>Pause after the turn</button>`;
+    : html`<button type="button" class="btn btn-primary btn-icon" id="btn-pause" disabled=${!!ui.busy.pause} onClick=${doPause}><svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.6" height="9" fill="currentColor" /><rect x="7.4" y="1.5" width="2.6" height="9" fill="currentColor" /></svg>Pause after the turn</button>`;
 }
 function StartLoopButton() {
   if (status() === 'running') return null;
@@ -191,11 +112,18 @@ function askShutdown() {
   const b = $('btn-shutdown-no'); if (b) b.focus();
 }
 
-/** Content of #header-actions. mode 'loop' = the navbar order (NAV-04); 'planning' = as before. */
-export function HeaderActions({ mode = 'loop' }) {
+/** Primary action of the header, always in the bar (wide and compact): Pause while running, else Start loop (loop mode) / Pause (planning).
+    The shutdown confirmation also stays in the bar (it is a popover under the header, not a menu entry). */
+export function PrimaryAction({ mode = 'loop' }) {
+  const confirm = ui.confirmShutdown ? html`<${ShutdownControl} />` : null;
+  return mode === 'planning' ? html`<${PauseButton} />${confirm}` : html`<${PauseButton} /><${StartLoopButton} />${confirm}`;
+}
+/** Everything else, as the real components (same ids and handlers), for the "⋯" menu. */
+export function OverflowActions({ mode = 'loop' }) {
+  const shutdown = ui.confirmShutdown ? null : html`<${ShutdownControl} />`;
   return mode === 'planning'
-    ? html`<${PrChip} /><${WorkspaceButton} /><${PauseButton} /><${SettingsButton} /><${ShutdownControl} />`
-    : html`<${PrChip} /><${PauseButton} /><${StartLoopButton} /><${BackToPlanningButton} /><${FinishButton} /><${SettingsButton} /><${ShutdownControl} />`;
+    ? html`<${PrChip} /><${WorkspaceButton} /><${CopyPathAction} />${shutdown}`
+    : html`<${PrChip} /><${BackToPlanningButton} /><${FinishButton} /><${CopyPathAction} />${shutdown}`;
 }
 
 export function cancelShutdown() {
@@ -209,8 +137,8 @@ export function updateTitle() {
   const state = ctx.state;
   if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Claude Maestro'; return; }
   if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Claude Maestro'; return; }
-  const st = statusInfo(), v = loop().turn;
-  document.title = `${ctx.offline ? 'disconnected · ' : ''}${st.label}${isNum(v) ? ' · turn ' + v : ''} · ${projectName() || 'project'}`;
+  const label = NAVBAR_STATUS[statusKey()].label, v = loop().turn;
+  document.title = `${ctx.offline ? 'disconnected · ' : ''}${label}${isNum(v) ? ' · turn ' + v : ''} · ${projectName() || 'project'}`;
 }
 
 async function doPause() {

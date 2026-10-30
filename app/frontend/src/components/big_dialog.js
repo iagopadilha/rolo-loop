@@ -27,7 +27,7 @@ function BigDialogFrame({ titleId, badge, badgeColor, title, renderBody, chat, o
  * openBigDialog({ badge, badgeColor, title, body, chat, onClose }) -> { close(), rerender() }
  * body: () => vnode. chat: null | { title, placeholder, scope, greeting, suggestions, onUse?(text) }.
  */
-export function openBigDialog({ badge, badgeColor = '#7fb2ff', title, body, chat = null, onClose }) {
+export function openBigDialog({ badge, badgeColor = 'var(--info)', title, body, chat = null, onClose }) {
   dialogCounter += 1;
   const titleId = 'bd-title-' + dialogCounter;
   const opener = document.activeElement;

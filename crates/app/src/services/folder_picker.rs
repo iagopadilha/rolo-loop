@@ -14,6 +14,9 @@ pub const LISTED_FOLDERS_LIMIT: usize = 500;
 pub const CANCELLED_REASON: &str = "cancelled";
 pub const INITIAL_FOLDER_VARIABLE: &str = "HARNESS_DIALOG_INITIAL_DIR";
 /// Fixed PowerShell code of the native dialog (never built from user input; the initial folder travels in an environment variable).
+/// It shows the modern Windows folder picker (IFileOpenDialog with FOS_PICKFOLDERS: the Explorer window with the folder tree, address bar and
+/// "New folder"); if that COM dialog cannot be created it falls back to the classic FolderBrowserDialog. Without a valid initial folder, Windows
+/// opens its own default location.
 const FOLDER_DIALOG_CODE: &str = r#"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 try {
@@ -24,14 +27,87 @@ try {
     $owner.StartPosition = 'Manual'
     $owner.Location = New-Object System.Drawing.Point(-32000, -32000)
     $owner.Show()
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = 'Choose the project folder'
-    $dialog.ShowNewFolderButton = $true
     $initial = $env:HARNESS_DIALOG_INITIAL_DIR
-    if ($initial -and (Test-Path -LiteralPath $initial -PathType Container)) { $dialog.SelectedPath = $initial }
-    $result = $dialog.ShowDialog($owner)
+    if (-not ($initial -and (Test-Path -LiteralPath $initial -PathType Container))) { $initial = '' }
+    $picked = $null; $answered = $false
+    try {
+        Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+[ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class MaestroFileOpenDialog {}
+[ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMaestroShellItem {
+    void BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv);
+    void GetParent(out IMaestroShellItem ppsi);
+    void GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+    void GetAttributes(uint mask, out uint attr);
+    void Compare(IMaestroShellItem psi, uint hint, out int order);
+}
+[ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMaestroFileDialog {
+    [PreserveSig] int Show(IntPtr parent);
+    void SetFileTypes(uint count, IntPtr types);
+    void SetFileTypeIndex(uint index);
+    void GetFileTypeIndex(out uint index);
+    void Advise(IntPtr events, out uint cookie);
+    void Unadvise(uint cookie);
+    void SetOptions(uint options);
+    void GetOptions(out uint options);
+    void SetDefaultFolder(IMaestroShellItem item);
+    void SetFolder(IMaestroShellItem item);
+    void GetFolder(out IMaestroShellItem item);
+    void GetCurrentSelection(out IMaestroShellItem item);
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name);
+    void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+    void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+    void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+    void GetResult(out IMaestroShellItem item);
+    void AddPlace(IMaestroShellItem item, int placement);
+    void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string extension);
+    void Close(int hr);
+    void SetClientGuid(ref Guid guid);
+    void ClearClientData();
+    void SetFilter(IntPtr filter);
+}
+public static class MaestroFolderPicker {
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    static extern void SHCreateItemFromParsingName(string path, IntPtr bindContext, ref Guid riid, out IMaestroShellItem item);
+    /// <summary>The chosen folder, "" when the user cancelled.</summary>
+    public static string Pick(IntPtr owner, string initial, string title) {
+        IMaestroFileDialog dialog = (IMaestroFileDialog)new MaestroFileOpenDialog();
+        uint options; dialog.GetOptions(out options);
+        dialog.SetOptions(options | 0x20 | 0x40 | 0x800); // FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST
+        dialog.SetTitle(title);
+        if (!string.IsNullOrEmpty(initial)) {
+            Guid shellItem = new Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
+            IMaestroShellItem folder; SHCreateItemFromParsingName(initial, IntPtr.Zero, ref shellItem, out folder);
+            dialog.SetFolder(folder);
+        }
+        int hr = dialog.Show(owner);
+        if (hr == unchecked((int)0x800704C7)) return ""; // ERROR_CANCELLED
+        if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+        IMaestroShellItem result; dialog.GetResult(out result);
+        string path; result.GetDisplayName(0x80058000, out path); // SIGDN_FILESYSPATH
+        return path;
+    }
+}
+'@
+        $picked = [MaestroFolderPicker]::Pick($owner.Handle, $initial, 'Choose the project folder')
+        $answered = $true
+    } catch {
+        $answered = $false
+    }
+    if (-not $answered) {
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = 'Choose the project folder'
+        $dialog.ShowNewFolderButton = $true
+        if ($initial) { $dialog.SelectedPath = $initial }
+        $result = $dialog.ShowDialog($owner)
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $picked = $dialog.SelectedPath } else { $picked = '' }
+    }
     $owner.Close()
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output ('PATH:' + $dialog.SelectedPath) } else { Write-Output 'PATH:' }
+    Write-Output ('PATH:' + $picked)
 } catch {
     Write-Output ('NO_DIALOG:' + $_.Exception.GetType().Name + ': ' + $_.Exception.Message.Substring(0, [Math]::Min(200, $_.Exception.Message.Length)))
     exit 3

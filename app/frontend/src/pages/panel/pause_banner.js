@@ -1,39 +1,49 @@
-/* Pause banner of the LOOP zone: one line and ONE action. It shows while a feature is in quarantine or the loop waits for the
-   user. The decision (try again or skip) is never taken here: deciding needs context, and the context lives in the pause dialog.
-   A loop that waits for an answer without any quarantine keeps the existing answer UI (the Alert band at the top of the page). */
+/* The ONE inline notice of the LOOP page: a calm row (dot, one sentence, one action) for "needs you" (a feature in quarantine or a question),
+   "paused" and "done". The decision (try again or skip) is never taken here: deciding needs context, and the context lives in the pause dialog
+   or the status dialog. The wrap-up of a finished loop with a worktree (WrapUp) keeps its own view and replaces the "done" row. */
 import { html } from '../../util/preact.js';
-import { list, firstLine, DASH } from '../../util/format.js';
+import { list, firstLine, clip, DASH } from '../../util/format.js';
+import { StatusDot } from '../../components/shell.js';
 import { ctx, status, loop } from './context.js';
 import { pipe } from './pipeline_model.js';
 import { openPauseDialog } from './dialogs/index.js';
-import { openStatusDialog } from './alert.js';
+import { costCapPause, openStatusDialog, statusHasDialog } from './alert.js';
 import { FeatureLabel } from './feature_label.js';
 
 const REASON_CLIP = 140;
-const clip = (text, max) => { const flat = String(text == null ? '' : text).replace(/\s+/g, ' ').trim(); return flat.length > max ? flat.slice(0, max - 1) + '…' : flat; };
 
-/** True when the banner has something to say. */
-export function pauseBannerVisible() {
-  return !!ctx.state && (list(ctx.state.quarantine).length > 0 || status() === 'awaiting_user');
+/** The row itself: tone 'wait' | 'idle' | 'ok' picks the dot, `action` = { label, onClick } or null. */
+export function Notice({ tone = 'idle', children, action }) {
+  return html`<div class="lp-notice" role="status"><${StatusDot} kind=${tone} /><div class="lp-notice-text">${children}</div>
+    ${action ? html`<button type="button" class="btn btn-sm" onClick=${action.onClick}>${action.label}</button>` : null}</div>`;
 }
 
-/** Opens the question dialog (the same one the "waiting for you" chip opens); it used to flip a flag nobody read and scroll to an element that does not exist. */
-const showAnswer = openStatusDialog;
+/** True when the notice has something to say. */
+function pauseBannerVisible() {
+  return !!ctx.state && (list(ctx.state.quarantine).length > 0 || ['awaiting_user', 'paused', 'done'].includes(status()) || costCapPause());
+}
 
-export function PauseBanner() {
+export function PauseBanner({ wrapUp = false }) {
   if (!pauseBannerVisible()) return null;
   const quarantined = list(ctx.state.quarantine), first = quarantined[0], awaiting = status() === 'awaiting_user';
   const paused = awaiting || !!(pipe.data && pipe.data.paused);
-  if (!first) {
-    return html`<div class="z-pause" role="status">
-      <span class="z-pause-kick mono">NEEDS YOU</span>
-      <div class="z-pause-text"><span>${clip(firstLine(loop().reason), REASON_CLIP)}</span><span class="z-pause-dim"> · loop paused</span></div>
-      <button type="button" class="z-pause-btn" onClick=${showAnswer}>Answer</button></div>`;
+  const dialog = statusHasDialog() ? openStatusDialog : null;
+  if (first) {
+    const more = quarantined.length - 1;
+    return html`<${Notice} tone="wait" action=${{ label: 'Understand and resolve', onClick: () => openPauseDialog(first.id) }}>
+      <strong>Needs you.</strong> <${FeatureLabel} slug=${first.id} className="lp-notice-slug" /> is in quarantine<span class="lp-notice-dim">${' · ' + (clip(first.reason, REASON_CLIP) || DASH)}${paused ? ' · loop paused' : ''}${more > 0 ? ` · +${more} more` : ''}</span><//>`;
   }
-  const more = quarantined.length - 1;
-  return html`<div class="z-pause" role="status">
-    <span class="z-pause-kick mono">NEEDS YOU</span>
-    <div class="z-pause-text"><${FeatureLabel} slug=${first.id} className="z-pause-slug" /> in quarantine<span class="z-pause-dim">${' · ' + (clip(first.reason, REASON_CLIP) || DASH)}${paused ? ' · loop paused' : ''}${more > 0 ? ` · +${more} more` : ''}</span></div>
-    <button type="button" class="z-pause-btn" onClick=${() => openPauseDialog(first.id)}>Understand and resolve</button>
-  </div>`;
+  if (awaiting) {
+    return html`<${Notice} tone="wait" action=${dialog && { label: 'Answer', onClick: dialog }}>
+      <strong>Needs you.</strong><span class="lp-notice-dim">${' ' + clip(firstLine(loop().reason), REASON_CLIP)}</span><//>`;
+  }
+  if (status() === 'paused' || costCapPause()) {
+    return html`<${Notice} tone="idle" action=${dialog && { label: 'See why', onClick: dialog }}>
+      <strong>Paused.</strong><span class="lp-notice-dim">${loop().reason ? ' ' + clip(firstLine(loop().reason), REASON_CLIP) : ' The loop continues when you start it again.'}</span><//>`;
+  }
+  if (status() === 'done' && !wrapUp) {
+    return html`<${Notice} tone="ok" action=${dialog && { label: 'Summary', onClick: dialog }}>
+      <strong>Done.</strong><span class="lp-notice-dim"> The loop finished.</span><//>`;
+  }
+  return null;
 }

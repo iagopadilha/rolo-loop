@@ -1,93 +1,86 @@
-/* LOOP zone (amber, main area): everything here depends on the selected turn. From top to bottom: the wrap-up (loop done or stopped
-   with a worktree), the Claude account chip (always visible), the pause banner, the turn
-   strip, the header of the selected turn, the tabs (Pipeline | Decision & events | Files | Errors) and a row with the tab
-   content plus the inspector. The zone scrolls vertically, so the pipeline gets height when the user scrolls down. */
-import { html } from '../../util/preact.js';
-import { isNum, cost, dur, firstLine } from '../../util/format.js';
-import { inlineNodes } from '../../components/markdown.js';
+/* LOOP page (route #/loop, the default; main#loop-zone). Everything here depends on the selected turn, which the timeline axis ticks pick
+   (loop_timeline.js; the Graph and List views get the same ticks in a row above the view). From top to bottom: the wrap-up (loop done or
+   stopped with a worktree), the inline notice (needs you / paused / done), the page header (title "Turn N <step>", ONE summary line - the
+   only place with verified count, cost and running agents -, the quiet facts line of that turn, the view switch Timeline | Graph | List and the
+   inspector toggle) and a row with the view plus the inspector. The page scrolls vertically inside itself. */
+import { html, useLayoutEffect } from '../../util/preact.js';
+import { isNum, cost, dur, list } from '../../util/format.js';
 import { renderAll } from '../project_panel.js';
-import { pipe, turnsList, curN, emptyReason } from './pipeline_model.js';
-import { errorCountAt } from './problems.js';
+import { ctx } from './context.js';
+import { pipe, turnsList, curN, liveN, selectTurn, emptyReason, loopSummary } from './pipeline_model.js';
 import { PipelineView } from './pipeline_view.js';
-import { TurnLog, TurnFiles, TurnErrors } from './turn_tabs.js';
-import { openDepsDialog } from './dialogs/index.js';
 import { PauseBanner } from './pause_banner.js';
-import { TurnStrip, stepsInTurn } from './turn_strip.js';
 import { Inspector } from './inspector.js';
-import { TabBar } from './global_zone.js';
 import { WrapUp, wrapUpVisible } from './wrap_up.js';
-import { ClaudeAccountChip } from './claude_account_chip.js';
-import { ClaudeBadge, describeClaude } from './claude_badge.js';
+import { TurnPicker } from './loop_timeline.js';
+import { Icon } from '../../components/shell.js';
 
-const TURN_STATUS_LABEL = { done: 'DONE', error: 'ERROR', running: 'RUNNING', awaiting_user: 'WAITING FOR YOU', continue: 'CONTINUING' };
-const FALLBACK_DOT = 'var(--line4)';
-const DECISION_CLIP = 260;
+const VIEWS = [['timeline', 'Timeline'], ['diagram', 'Graph'], ['list', 'List']];
+const INSPECTOR_COLLAPSE_BELOW_PX = 960; // the content column (next to the sidebar) is too narrow for the 300 px inspector beside the view
 
-/** `claude`, `cc`...: the command of the turn without its folder and extension ('—' for turns logged before it was recorded). */
-function commandName(path) {
-  const name = String(path || '').split(/[\\/]/).pop().replace(/\.(cmd|bat|exe|py)$/i, '');
-  return name || '—';
+/** Number of steps of a turn: `changes` when the model gives a number, else the events it has. */
+function stepsInTurn(turn) {
+  if (isNum(turn.changes)) return turn.changes;
+  return Array.isArray(turn.events) ? turn.events.length : null;
 }
 
-function pickTab(tab) { pipe.tab = tab; renderAll(); }
 function pickView(view) { pipe.view = view; renderAll(); }
+const columnWidth = () => { const col = document.getElementById('shell-col'); return col ? col.clientWidth : Infinity; };
+const inspectorCollapsed = () => columnWidth() < INSPECTOR_COLLAPSE_BELOW_PX;
+/** The inspector button: toggles the column (wide) or the overlay / bottom sheet (when the column is too narrow or on a phone). */
+function toggleInspector() { if (inspectorCollapsed()) pipe.over = !pipe.over; else pipe.insp = !pipe.insp; renderAll(); }
+let wasCollapsed = null;
+if (typeof window !== 'undefined') { // crossing the threshold changes what the inspector button means: redraw once
+  window.addEventListener('resize', () => { const now = inspectorCollapsed(); if (wasCollapsed !== null && now !== wasCollapsed) { pipe.over = false; renderAll(); } wasCollapsed = now; });
+}
 
-/** "LOOP > Turn N", the title with status badge, the decision of the orchestrator and the three figures of the turn. */
+/** The page header: "Turn N <step name>", the summary line (verified, cost, agents running) and the facts of the shown turn. */
 function TurnHeader({ turn }) {
   if (!turn) {
-    return html`<div class="z-turn-head"><div class="z-turn-head-main"><div class="z-crumb mono">LOOP</div>
-      <div class="z-turn-title">${pipe.loading ? 'Reading the turns…' : 'No turn yet'}</div>
-      <div class="z-turn-decision">The turns appear here when the loop runs its first turn.</div></div></div>`;
+    return html`<div class="lp-title-block"><h1 class="lp-title">${pipe.loading ? 'Reading the turns…' : 'No turn yet'}</h1>
+      <div class="lp-summary">The turns appear here when the loop runs its first turn.</div></div>`;
   }
-  const color = turn.dot || FALLBACK_DOT, steps = stepsInTurn(turn);
-  const decision = turn.decision ? firstLine(turn.decision) : '';
-  return html`<div class="z-turn-head">
-    <div class="z-turn-head-main">
-      <div class="z-crumb mono">LOOP › <span class="z-crumb-turn">${'Turn ' + turn.n}</span></div>
-      <div class="z-turn-title"><span>${`Turn ${turn.n}${turn.label ? ' · ' + turn.label : ''}`}</span>
-        <span class="z-status mono" style=${{ color, borderColor: color }}>${TURN_STATUS_LABEL[turn.status] || String(turn.status || '').toUpperCase()}</span></div>
-      ${decision ? html`<div class="z-turn-decision" title=${String(turn.decision)}>${inlineNodes(decision.length > DECISION_CLIP ? decision.slice(0, DECISION_CLIP - 1) + '…' : decision)}</div>` : null}
-    </div>
-    <div class="z-figures mono">
-      <div><div class="z-figure-k">DURATION</div><div>${isNum(turn.duration_s) ? dur(turn.duration_s) : '—'}</div></div>
-      <div><div class="z-figure-k">COST</div><div>${isNum(turn.cost_usd) ? cost(turn.cost_usd) : '—'}</div></div>
-      <div><div class="z-figure-k">STEPS IN TURN</div><div>${steps == null ? '—' : steps}</div></div>
-      <div title=${(describeClaude(turn) || {}).title || turn.claude_account || ''}><div class="z-figure-k">CLAUDE</div><div>${describeClaude(turn) ? html`<${ClaudeBadge} source=${turn} />` : commandName(turn.claude)}</div>
-        ${(describeClaude(turn) || {}).words ? html`<div class="z-figure-k">${describeClaude(turn).words}</div>` : (turn.claude_account ? html`<div class="z-figure-k">${turn.claude_account}</div>` : null)}</div>
-    </div>
+  const sum = loopSummary(turn.n), live = turn.n === liveN();
+  const meta = ctx.state && ctx.state.meta, spent = live && meta && isNum(meta.cost_usd) ? meta.cost_usd : sum.spent, max = meta && isNum(meta.max_cost_usd) ? meta.max_cost_usd : null;
+  const agents = live ? Math.max(sum.running, list(ctx.state && ctx.state.agents).filter((a) => a.state === 'running' && a.role !== 'orchestrator' && a.id !== 'orch').length) : sum.running;
+  const steps = stepsInTurn(turn);
+  const facts = [isNum(turn.duration_s) ? 'took ' + dur(turn.duration_s) : '', isNum(turn.cost_usd) ? cost(turn.cost_usd) : '', steps == null ? '' : `${steps} step${steps === 1 ? '' : 's'}`].filter(Boolean);
+  return html`<div class="lp-title-block">
+    <h1 class="lp-title"><span>${'Turn ' + turn.n}</span>${turn.label ? html` <span class="lp-step">${turn.label}</span>` : null}</h1>
+    <div class="lp-summary" aria-live="polite">${`${sum.verified} of ${sum.total} verified · ${cost(spent)}${max != null ? ' of ' + cost(max) : ''} · ${agents} ${agents === 1 ? 'agent' : 'agents'} running`}</div>
+    <div class="lp-facts" aria-label=${'Facts of turn ' + turn.n}>${facts.length ? `This turn ${facts.join(' · ')}` : 'No figures recorded for this turn.'}</div>
   </div>`;
 }
 
-/** Content of the selected loop tab (the pipeline agent owns each view). */
-function TabContent() {
+/** Content of the page: the selected view of the pipeline (the pipeline agent owns each view). */
+function ViewContent() {
   const unavailable = emptyReason();
-  if (unavailable && !pipe.data) return html`<div class="z-note" role="alert">${unavailable}</div>`;
-  if (pipe.tab === 'log') return html`<${TurnLog} />`;
-  if (pipe.tab === 'files') return html`<${TurnFiles} />`;
-  if (pipe.tab === 'errors') return html`<${TurnErrors} />`;
+  if (unavailable && !pipe.data) return html`<div class="lp-empty" role="alert">${unavailable}</div>`;
   return html`<${PipelineView} />`;
 }
 
-/** The whole <main>. `on` = the loop panel shows; before that (and in planning mode) only the composer frame stays in the DOM. */
-export function LoopZone({ on, planning }) {
-  const turn = on ? turnsList().find((item) => item.n === curN()) || null : null;
-  const failed = on && turn ? errorCountAt(turn.n) : 0; // real errors of the turn; guard blocks are never counted as problems
-  const tab = ['pipeline', 'log', 'files', 'errors'].includes(pipe.tab) ? pipe.tab : 'pipeline';
-  const tabs = [['pipeline', 'Pipeline'], ['log', 'Decision & events'], ['files', 'Files'], ['errors', failed ? `Errors (${failed})` : 'Errors']];
-  return html`<main class="z-loop loop" id="loop-zone" aria-label="Loop" hidden=${planning}>
-    ${on && wrapUpVisible() ? html`<${WrapUp} />` : null}
-    ${on ? html`<${ClaudeAccountChip} /><${PauseBanner} /><${TurnStrip} />
-      <div class="z-loop-head"><${TurnHeader} turn=${turn} />
-        <div class="z-loop-tabs">
-          <${TabBar} tabs=${tabs} current=${tab} label="Loop views" className="z-ltabs" onPick=${pickTab} />
-          <span class="z-spacer"></span>
-          <button type="button" class="z-btn-global z-btn-inline" title="the dependency diagram of the whole roadmap" onClick=${openDepsDialog}>⤢ dependencies</button>
-          ${tab === 'pipeline' ? html`<div class="z-toggle" role="group" aria-label="Pipeline view">${[['diagram', 'Diagram'], ['list', 'List']].map(([view, label]) => html`<button key=${view} type="button"
-            class=${'z-toggle-btn mono' + (pipe.view === view ? ' is-on' : '')} aria-pressed=${String(pipe.view === view)} onClick=${() => pickView(view)}>${label}</button>`)}</div>` : null}
-        </div></div>` : null}
+/** The whole <main>. */
+export function LoopPage() {
+  const turn = turnsList().find((item) => item.n === curN()) || null;
+  const view = VIEWS.some(([key]) => key === pipe.view) ? pipe.view : 'timeline';
+  const collapsed = inspectorCollapsed(), inspectorOn = collapsed ? pipe.over : pipe.insp, wrap = wrapUpVisible();
+  if (wasCollapsed === null) wasCollapsed = collapsed;
+  useLayoutEffect(() => { const app = document.getElementById('app'); if (app) app.classList.toggle('is-inspector-collapsed', collapsed); });
+  return html`<main class="loop" id="loop-zone" aria-label="Loop">
+    ${wrap ? html`<${WrapUp} />` : null}
+    <${PauseBanner} wrapUp=${wrap} />
+    <div class="lp-head"><${TurnHeader} turn=${turn} />
+      <div class="lp-tools">
+        ${pipe.sel != null ? html`<button type="button" class="btn btn-sm btn-ghost" title="back to the latest turn (live)" onClick=${() => selectTurn(null)}>Back to latest</button>` : null}
+        <div class="sh-seg" role="group" aria-label="Pipeline view">${VIEWS.map(([key, label]) => html`<button key=${key} type="button"
+          class=${'sh-seg-btn is-text' + (view === key ? ' is-on' : '')} aria-pressed=${String(view === key)} onClick=${() => pickView(key)}>${label}</button>`)}</div>
+        <button type="button" class=${'lp-icon-btn' + (inspectorOn ? ' is-on' : '')} aria-pressed=${String(!!inspectorOn)} aria-label="Show or hide the inspector" title="Show or hide the inspector" onClick=${toggleInspector}>
+          <${Icon} name="panel" /></button>
+      </div></div>
+    ${view === 'timeline' ? null : html`<div class="lp-turns"><${TurnPicker} /></div>`}
     <div class="z-row">
-      <div class="z-content" role="tabpanel">${on ? html`<${TabContent} />` : null}</div>
-      <${Inspector} on=${on} />
+      <div class="z-content"><${ViewContent} /></div>
+      <${Inspector} on=${true} />
     </div>
   </main>`;
 }

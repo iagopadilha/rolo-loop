@@ -17,6 +17,7 @@ import { FeatureLabel } from './feature_label.js';
 import { ctx } from './context.js';
 import { ClaudeBadge, WhoSpawnsToggle } from './claude_badge.js';
 import { clampCameraTo, fitCameraTo, sameCamera } from './camera_clamp.js';
+import { LoopTimeline } from './loop_timeline.js';
 
 // ---------- geometry (px). Kept in JS because the SVG edges need the same coordinates as the nodes ----------
 const GEOMETRY = { ORCH_W: 150, ORCH_H: 64, LANE_X: 190, LANE_PAD: 12, NODE_W: 136, NODE_H: 50, STEP_GAP: 166, LANE_H: 92, LANE_TOP: 32, WAVE_H: 26, LANE_GAP: 10, WAVE_GAP: 8 };
@@ -324,9 +325,9 @@ function ListMode({ graph }) {
 export function PipelineView() {
   const [, bump] = useReducer((count) => count + 1, 0);
   const viewportRef = useRef(null);
-  const reason = emptyReason(), turn = curN(), isList = pipe.view === 'list';
+  const reason = emptyReason(), turn = curN(), isList = pipe.view === 'list', isTimeline = pipe.view === 'timeline';
   const graph = !reason && turn != null ? buildGraph(turn) : null;
-  const hasLanes = !!graph && graph.lanes.length > 0, showsCanvas = hasLanes && !isList;
+  const hasLanes = !!graph && graph.lanes.length > 0, showsCanvas = hasLanes && !isList && !isTimeline;
   view.content = hasLanes ? graph.bounds : null;
   if (showsCanvas && view.viewport) view.camera = clampCamera(view.camera); // content moved (turn picked, feature dragged): keep it in view
 
@@ -353,6 +354,7 @@ export function PipelineView() {
     return html`<div class="pl-empty">${reason}${pipe.err && !pipe.loading ? html` <button type="button" class="pl-tool-text" onClick=${() => loadPipeline(true)}>Retry</button>` : null}</div>`;
   }
   if (!graph) return html`<div class="pl-empty">No turn to show.</div>`;
+  if (isTimeline) return html`<${LoopTimeline} />`;
   if (!hasLanes) {
     return html`<div class="pl-empty-wrap"><div class="pl-empty">No feature dispatched yet in turn ${turn}.</div><${Teaser} graph=${graph} /></div>`;
   }

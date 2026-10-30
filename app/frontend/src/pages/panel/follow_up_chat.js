@@ -8,7 +8,7 @@ import { toast } from '../../components/toast.js';
 import { ctx } from './context.js';
 import { renderAll, schedulePoll } from '../project_panel.js';
 
-export const FOLLOW_UP_EXPLANATION = 'A new round of work on the SAME worktree and branch as the loop, before Finish: you ask for fixes or new things, the AI appends a new stage at the end of the ROADMAP, you review it and then run it.';
+const FOLLOW_UP_EXPLANATION = 'A new round of work on the SAME worktree and branch as the loop, before Finish: you ask for fixes or new things, the AI appends a new stage at the end of the ROADMAP, you review it and then run it.';
 
 /** "Changed: +added, ~edited, -removed" or "No change" for an assistant message. */
 function changeLine(changed) {
@@ -33,7 +33,7 @@ function Message({ message }) {
 }
 
 /** The stage appended to ROADMAP.md: name plus each feature with status, dependencies and paths. */
-export function AddedStage({ stage }) {
+function AddedStage({ stage }) {
   if (!stage) return null;
   if (typeof stage === 'string') return html`<div class="wu-stage"><div class="pl-eyebrow">ADDED TO THE ROADMAP</div><pre class="wu-stage-text">${stage}</pre></div>`;
   const features = list(stage.features);

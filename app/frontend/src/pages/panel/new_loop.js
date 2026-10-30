@@ -12,7 +12,7 @@ import { reloadProgress } from './progress_trail.js';
 import { watchWorkspace } from './workspace.js';
 import { openStartLoopDialog } from './start_loop_dialog.js';
 
-export const START_WAIT_MS = 40000;
+const START_WAIT_MS = 40000;
 export const nl = { starting: null, approving: false, apprErr: null, onRunning: null };
 export const APPROVAL_NOTICE = 'The approval covers today\'s features and stages. If you later change features or stages in ROADMAP.md, the approval stops being valid and you need to approve again.';
 

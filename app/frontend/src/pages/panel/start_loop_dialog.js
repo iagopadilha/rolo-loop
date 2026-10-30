@@ -36,7 +36,7 @@ function settingText(key, value) {
 }
 
 /** The rows of "Decided in planning": value + note. A missing key shows the default "(default)"; an invalid one the default and what the ROADMAP says. */
-export function decidedRows(info) {
+function decidedRows(info) {
   const problems = list(info && info.problems), settings = (info && info.settings) || {}, defaults = (info && info.defaults) || {};
   const missing = list(info && info.missing);  // the back end fills `settings` with the defaults: `missing` names the keys the ROADMAP header does not carry
   return SETTING_ROWS.map(([key, label]) => {

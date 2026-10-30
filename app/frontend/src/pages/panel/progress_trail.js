@@ -4,7 +4,7 @@
    In planning mode (state.planning_required) the roadmap and flows are written in the planning chat and the approval
    goes through the planning checklist: the trail points there instead of the one-shot roadmap dialog. */
 import { html, useState, useEffect } from '../../util/preact.js';
-import { dur, list, txt } from '../../util/format.js';
+import { dur, list, txt, maskHome } from '../../util/format.js';
 import { followJob } from '../../api/api_client.js';
 import { toast } from '../../components/toast.js';
 import { openDialog, confirmDialog } from '../../components/dialog.js';
@@ -15,7 +15,7 @@ import { ctx, status, approval } from './context.js';
 import { renderAll, schedulePoll } from '../project_panel.js';
 import { openNewLoop } from './alert.js';
 import { approveRoadmap, APPROVAL_NOTICE, nlExpand } from './new_loop.js';
-import { openProjectFile, loadTree } from './files.js';
+import { openProjectFile, reloadPlanFiles } from './plan_files_dialog.js';
 import { planningRequired, approvePlan } from './planning.js';
 import { repoConfirmContent, RepoManager } from '../repo_manager.js';
 import { SubprojectsPanel, loadSubprojects, onSubprojectsChanged } from './subprojects.js';
@@ -74,7 +74,7 @@ function follow(id, type) {
   a.promise.then((r) => {
     toast(r.state === 'ok' ? `${jobName(type)}: done.` : `${jobName(type)}: failed${r.error ? ' (' + r.error + ')' : ''}.`, r.state === 'ok' ? 'ok' : 'err');
   }).catch((e) => { keepJob({ id, state: 'error', error: e.message }); })
-    .finally(() => { tr.following.delete(id); renderAll(); loadRoadmap(); reloadProgress(); schedulePoll(300); loadTree(true); });
+    .finally(() => { tr.following.delete(id); renderAll(); loadRoadmap(); reloadProgress(); schedulePoll(300); reloadPlanFiles(); });
   return a.promise;
 }
 const TYPE_SUBPROJECTS = /^subprojects$/i;
@@ -119,7 +119,7 @@ export async function initializeStructure() {
       { text: 'Cancel' },
       { text: 'Initialize', cls: 'btn-primary', onClick: async (d) => {
         d.busy(true);
-        try { await ctx.api.post('structure/initialize', { conformance: field.value() }); toast('Structure created.', 'ok'); d.close(); reloadProgress(); loadTree(true); schedulePoll(300); }
+        try { await ctx.api.post('structure/initialize', { conformance: field.value() }); toast('Structure created.', 'ok'); d.close(); reloadProgress(); reloadPlanFiles(); schedulePoll(300); }
         catch (e) { toast('Not initialized: ' + e.message, 'err'); d.busy(false); }
       } },
     ],
@@ -321,9 +321,9 @@ const ACTION_BUTTONS = {
 ACTION_BUTTONS.start_loop = ACTION_BUTTONS.check;
 /** Buttons that replace the single-project ones in a monorepo (`subprojects`, `conformance`, `map`): empty until the table is mounted. */
 const MONOREPO_ACTION_BUTTONS = {};
-export function registerMonorepoActionButton(action, builder) { MONOREPO_ACTION_BUTTONS[action] = builder; }
+function registerMonorepoActionButton(action, builder) { MONOREPO_ACTION_BUTTONS[action] = builder; }
 /** Monorepo: the three steps are answered by the subprojects table, shown in a dialog from the trail button. */
-function openSubprojectsDialog() {
+export function openSubprojectsDialog() {
   openDialog({ title: 'Subprojects', width: 1040, content: html`<${SubprojectsPanel} />`, actions: [{ text: 'Close' }] });
 }
 const subprojectsButton = (text) => () => mainButton(text, openSubprojectsDialog);
@@ -362,7 +362,7 @@ const READ_ONLY_MARK = { ok: '✓', optional: '◌', pending: '○' };
 function SubprojectLines({ subprojects }) {
   if (!list(subprojects).length) return null;
   return html`<ul class="tr-ro-subs" aria-label="Subprojects">${subprojects.map((sub) => html`<li key=${sub.path} class="tr-ro-sub">
-    <span class="tr-ro-sub-name mono" title=${sub.path}>${sub.path}</span>
+    <span class="tr-ro-sub-name mono" title=${maskHome(sub.path)}>${sub.path}</span>
     <span class="tr-ro-sub-meta">${[txt(sub.stack), sub.conformance ? String(sub.conformance) : 'no Conformance', sub.map_files > 0 ? 'map: yes' : 'map: no'].join(' · ')}</span>
   </li>`)}</ul>`;
 }
@@ -410,5 +410,20 @@ export function ProgressTrail({ vertical = false, readOnly = vertical } = {}) {
     ${vertical && monorepoMode() ? html`<div class="tr-subprojects"><${SubprojectsPanel} /></div>` : null}
     ${vertical ? null : html`<button type="button" id="tr-toggle" class="tr-toggle" aria-expanded=${String(tr.trailOpen)} title=${tr.trailOpen ? 'Collapse the trail to one line' : 'Show the trail descriptions and notes'}
       onClick=${toggleTrail}>${tr.trailOpen ? '▴' : '▾'}</button>`}
+  </div>`;
+}
+
+/** Entry points of the two dialogs that no longer live in the (read-only) project status: shown in the toolbar of the Features page.
+    Roadmap = same condition the old "AI roadmap" button used (not planning, structure created); Subprojects = confirmed monorepo only. */
+export function PlanActions() {
+  const pr = ctx.progress;
+  const structure = list(pr && pr.steps).find((e) => e.id === 'structure');
+  const roadmap = !planningRequired() && !!(structure && structure.ok);
+  const monorepo = monorepoMode(pr);
+  const running = tr.jobs.some((j) => j.state === 'running' && TYPE_ROADMAP.test(j.type || ''));
+  if (!roadmap && !monorepo) return null;
+  return html`<div class="pg-actions" role="group" aria-label="Plan actions">
+    ${roadmap ? html`<button type="button" id="btn-open-roadmap" class="btn btn-sm" onClick=${openRoadmapDialog} title="Generate or refine the roadmap with Claude. Does not start the loop.">${running ? 'AI roadmap (working…)' : 'AI roadmap'}</button>` : null}
+    ${monorepo ? html`<button type="button" id="btn-open-subprojects" class="btn btn-sm" onClick=${openSubprojectsDialog}>${'Subprojects (' + list(pr.subprojects).length + ')'}</button>` : null}
   </div>`;
 }

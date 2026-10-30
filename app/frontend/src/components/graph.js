@@ -1,18 +1,17 @@
 /* Graph engineering: feature graph in plain SVG (columns per stage; inside a stage, sub-columns by
-   dependency), dependency edges colored by the status of the feature being waited on, and the feature state
-   machine with the count in each node. Keyboard: Tab reaches every node; Enter/Space opens the feature.
+   dependency) and dependency edges colored by the status of the feature being waited on. Keyboard: Tab reaches every node; Enter/Space opens the feature.
    Markup in Preact; pan/zoom/fit stay imperative (transform on g.gf-vp, ResizeObserver on div.gf). */
 import { html, useState, useEffect, useLayoutEffect, useRef, useMemo } from '../util/preact.js';
 
+// theme tokens (styles/v2/tokens.css): never append hex alpha to these, derive tints with color-mix
 export const STATUS_COLOR = {
-  pending: '#7D838C', speccing: '#8AA4FF', specced: '#A58BFF', approved: '#5CC8D6',
-  building: '#F2B544', verified: '#5BD38A', blocked: '#F06A5E',
+  pending: 'var(--line4)', speccing: 'var(--info)', specced: 'var(--violet)', approved: 'var(--cyan)',
+  building: 'var(--warn)', verified: 'var(--ok)', blocked: 'var(--danger)',
 };
-export const STATUS_BG = {
-  pending: '#1E2024', speccing: '#1A1F2B', specced: '#201B2C', approved: '#16252A',
-  building: '#2A2416', verified: '#15251C', blocked: '#2A1716',
-};
-const color = (s) => STATUS_COLOR[s] || '#7D838C';
+const tint = (token) => `color-mix(in srgb, ${token} 10%, var(--card))`;
+const STATUS_BG = Object.fromEntries(Object.entries(STATUS_COLOR).map(([status, token]) => [status, tint(token)]));
+const NEUTRAL = 'var(--line4)';
+const color = (s) => STATUS_COLOR[s] || NEUTRAL;
 const G = { NW: 184, NH: 66, GX: 46, GY: 14, STAGE_GAP: 30, PAD: 18, HEAD: 34 };
 const MIN_SCALE = 0.2, MAX_SCALE = 2.5, PORT_STEP = 9;
 
@@ -27,7 +26,7 @@ function dirsOf(f) {
 }
 
 /** Computes positions. Returns { nodes:[{f,x,y}], edges:[{from,to}], headers:[{x,w,title}], w, h }. */
-export function computeGraphLayout(features, stages) {
+function computeGraphLayout(features, stages) {
   const fs = Array.isArray(features) ? features : [];
   const byId = Object.fromEntries(fs.map((f) => [f.id, f]));
   const titles = {};
@@ -87,7 +86,7 @@ function curve(x1, y1, x2, y2) {
   return `M${x1} ${y1} C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}`;
 }
 
-const ARROWS = { green: '#5BD38A', amber: '#F2B544', red: '#F06A5E', grey: '#4A4F57' };
+const ARROWS = { green: 'var(--ok)', amber: 'var(--warn)', red: 'var(--danger)', grey: 'var(--line4)' };
 const walk = (start, map) => { const out = new Set(), stack = [start]; while (stack.length) { const n = stack.pop(); for (const m of map[n] || []) if (!out.has(m)) { out.add(m); stack.push(m); } } return out; };
 const graphSig = (fs, stages) => JSON.stringify([fs.map((f) => [f.id, f.name, f.status, f.stage, f.kind, f.deps, f.depends_on, f.dep_dirs]), stages]);
 /** Pan/zoom state of one graph (kept outside the component so a remount keeps the user's view). */
@@ -139,12 +138,12 @@ function GraphNode({ n, cls, pressed, onSelect, setHover }) {
       onClick=${pick} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }}
       onMouseEnter=${enter} onMouseLeave=${leave} onFocus=${enter} onBlur=${leave}>
     <title>${n.tip}</title>
-    <rect class="gf-box" width=${G.NW} height=${G.NH} rx="8" fill=${STATUS_BG[f.status] || '#15171A'} stroke=${n.c} />
+    <rect class="gf-box" width=${G.NW} height=${G.NH} rx="8" fill=${STATUS_BG[f.status] || 'var(--card)'} stroke=${n.c} />
     <rect class="gf-bar" width="4" height=${G.NH - 12} x="6" y="6" rx="2" fill=${n.c} />
     <text class="gf-title" x="16" y="20">${clip(f.name || f.id, titleChars)}</text>
     <text class="gf-status" x=${G.NW - 8} y="20" text-anchor="end" fill=${n.c}>${statusText}</text>
     <text class="gf-sub" x="16" y="38">${clip(f.name && f.name !== f.id ? f.id : (f.kind ? 'kind ' + f.kind : ''), SUB_CHARS)}</text>
-    <text class="gf-line" x="16" y="55" fill=${f.status === 'blocked' ? '#F06A5E' : n.waiting.length ? '#F2B544' : '#8B9098'}>${clip(n.line2 + (n.dirs.length ? ` · ${n.dirs.length} folder(s)` : ''), LINE_CHARS)}</text>
+    <text class="gf-line" x="16" y="55" fill=${f.status === 'blocked' ? 'var(--danger)' : n.waiting.length ? 'var(--warn)' : 'var(--fg2)'}>${clip(n.line2 + (n.dirs.length ? ` · ${n.dirs.length} folder(s)` : ''), LINE_CHARS)}</text>
   </g>`;
 }
 
@@ -152,7 +151,7 @@ function GraphNode({ n, cls, pressed, onSelect, setHover }) {
  * Content of div.gf (svg + empty note). host = ref to div.gf (drag class, ResizeObserver); view = newGraphView();
  * ctl (optional object) receives { zoom(factor, cx, cy), fit(), scale() } for the zoom buttons outside.
  */
-export function GraphContent({ host, view, ctl, features, stages, selected = null, status = null, onSelect }) {
+function GraphContent({ host, view, ctl, features, stages, selected = null, status = null, onSelect }) {
   const st = view;
   const svgRef = useRef(null), vpRef = useRef(null);
   const [hover, setHover] = useState(null);
@@ -258,56 +257,4 @@ export function FeatureGraph(props) {
   const host = useRef(null), own = useRef(null);
   if (!props.view && !own.current) own.current = newGraphView();
   return html`<div class="gf" ref=${host}><${GraphContent} ...${props} host=${host} view=${props.view || own.current} /></div>`;
-}
-
-const MACHINE = [
-  { id: 'pending', title: 'pending', hint: 'in the roadmap, not started yet' },
-  { id: 'speccing', title: 'speccing', hint: 'spec-writer writing the spec' },
-  { id: 'specced', title: 'specced', hint: 'spec ready, at the spec-reviewer gate' },
-  { id: 'approved', title: 'approved', hint: 'spec approved, waiting for the executor' },
-  { id: 'building', title: 'building', hint: 'executor implementing / verifier checking' },
-  { id: 'verified', title: 'verified', hint: 'passed verification' },
-];
-// fixed geometry of the machine (computed once)
-const SM = (() => {
-  const NW = 104, NH = 46, GX = 26, X0 = 10, Y0 = 10, YB = 92;
-  const W = X0 * 2 + MACHINE.length * NW + (MACHINE.length - 1) * GX, H = YB + NH + 10;
-  const xOf = (i) => X0 + i * (NW + GX);
-  const xBlocked = xOf(2) + NW / 2 + (NW + GX) / 2 - NW / 2;
-  const edges = MACHINE.slice(0, -1).map((_, i) => `M${xOf(i) + NW} ${Y0 + NH / 2} L${xOf(i + 1) - 3} ${Y0 + NH / 2}`);
-  const fails = [1, 2, 4].map((i) => `M${xOf(i) + NW / 2} ${Y0 + NH} C${xOf(i) + NW / 2} ${YB - 10},${xBlocked + NW / 2} ${Y0 + NH + 10},${xBlocked + NW / 2} ${YB - 3}`);
-  const all = [...MACHINE.map((m, i) => ({ ...m, x: xOf(i), y: Y0 })), { id: 'blocked', title: 'blocked', hint: 'got stuck: goes to quarantine', x: xBlocked, y: YB }];
-  return { NW, NH, YB, W, H, xBlocked, edges, fails, all };
-})();
-
-/** Content of div.me: the state machine (svg) and the total. chosen = highlighted status; onPick(next) gets the toggled value. */
-export function MachineContent({ counts, chosen = null, onPick }) {
-  const c = counts || {}, { NW, NH } = SM;
-  return html`<svg class="me-svg" viewBox=${`0 0 ${SM.W} ${SM.H}`} role="group" aria-label="Feature state machine with the count in each state">
-      <defs>
-        <marker id="me-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#4A4F57" /></marker>
-        <marker id="me-arrow-r" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L8 4 L0 8 z" fill="#F06A5E" /></marker>
-      </defs>
-      ${SM.edges.map((d) => html`<path key=${d} class="me-edge" d=${d} marker-end="url(#me-arrow)" />`)}
-      ${SM.fails.map((d) => html`<path key=${d} class="me-edge fail" d=${d} marker-end="url(#me-arrow-r)" />`)}
-      ${SM.all.map((m) => {
-        const col = color(m.id), v = c[m.id], on = chosen === m.id;
-        const pick = () => { if (onPick) onPick(on ? null : m.id); };
-        return html`<g key=${m.id} class=${'me-node' + (on ? ' on' : '')} role="button" tabindex="0" aria-pressed=${on ? 'true' : 'false'}
-            aria-label=${`${m.title}: ${typeof v === 'number' ? v : 'no data'} feature(s). ${m.hint}`}
-            onClick=${pick} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }}>
-          <title>${`${m.title}: ${m.hint}`}</title>
-          <rect x=${m.x} y=${m.y} width=${NW} height=${NH} rx="8" fill=${STATUS_BG[m.id]} stroke=${col} />
-          <text class="me-t" x=${m.x + NW / 2} y=${m.y + 15} text-anchor="middle">${m.title}</text>
-          <text class="me-num" x=${m.x + NW / 2} y=${m.y + 33} text-anchor="middle" fill=${col}>${typeof v === 'number' ? String(v) : '—'}</text>
-        </g>`;
-      })}
-      <text class="me-legend" x=${SM.xBlocked + NW + 14} y=${SM.YB + 20}>failed at the gate, in the build or in verification</text>
-    </svg>
-    <span class="me-total mono">${typeof c.total === 'number' ? `${c.total} in total` : null}</span>`;
-}
-
-/** Feature state machine (div.me). Clicking a node highlights the features in that status. */
-export function StateMachine(props) {
-  return html`<div class="me"><${MachineContent} ...${props} /></div>`;
 }

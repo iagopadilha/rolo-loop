@@ -1,17 +1,20 @@
-/* Inspector (right column of the LOOP zone, 300 px): "NOW · T<last>" (the orchestrator and the agents running right now: always
-   the live loop) and "SELECTED · STATE AT T<N>" (the node picked in the pipeline, as it was at the selected turn). It only
-   summarizes: talking to an agent (its history and the chat) happens in the agent dialog, deciding a pause in the pause dialog. */
+/* Inspector (right column of the LOOP page, 300 px, quiet): "Selected" (the feature or node picked in the pipeline, as it was at the selected turn)
+   and "Now - turn <last>" (the orchestrator and the agents running right now: always the live loop). It only summarizes: talking to an agent
+   (its history and the chat) happens in the agent dialog, deciding a pause in the pause dialog. */
 import { html } from '../../util/preact.js';
 import { Markdown, inlineNodes } from '../../components/markdown.js';
-import { txt, list } from '../../util/format.js';
-import { ctx, ui, pal, STATUS, ROLE_DESC, status, loop, agentById } from './context.js';
+import { txt, list, clip, DASH } from '../../util/format.js';
+import { ctx, ui, ROLE_DESC, status, loop, agentById } from './context.js';
 import { renderAll } from '../project_panel.js';
-import { steps, turnsList, liveN, curN, selectTurn, selectNode, stateAt, activeNode, turnAt, STEP_COLOR } from './pipeline_model.js';
+import { steps, turnsList, liveN, curN, selectTurn, selectNode, stateAt, activeNode, turnAt, loopStatusAt, featuresWithWaves, featureName, workedTurns, defaultStepOf, selectedFeature, selectFeature, pipe } from './pipeline_model.js';
+import { stateWord, turnRangeText, stepWord } from './loop_timeline.js';
 import { ClaudeBadge } from './claude_badge.js';
-import { openAgentDialog, openPauseDialog, openFeatureDialog } from './dialogs/index.js';
+import { openAgentDialog, openPauseDialog } from './dialogs/index.js';
 import { FeatureLabel } from './feature_label.js';
+import { navigate } from './router.js';
+import { StatusDot, dotKind } from '../../components/shell.js';
+import { NAVBAR_STATUS, navbarStatusKey } from '../../components/navbar_status.js';
 
-const NEUTRAL_COLOR = '#6b727c';
 const ORCHESTRATOR_ID = 'orch';
 
 /** Reads the full log of an agent into ui.agentLog (the chat of that agent and the feature history open it). */
@@ -33,33 +36,30 @@ function stepIndexOfRole(role) {
 }
 const firstFeature = (feature) => String(feature || '').split(',')[0].trim();
 const isQuarantined = (slug) => list(ctx.state && ctx.state.quarantine).some((q) => q.id === slug);
-const clipText = (text, max) => { const flat = String(text == null ? '' : text).replace(/\s+/g, ' ').trim(); return flat.length > max ? flat.slice(0, max - 1) + '…' : flat; };
-const ORCHESTRATOR_CHIPS = String(ROLE_DESC.orchestrator || '').split(' · ').filter(Boolean);
-const NOTE_CLIP = 320;
+const NOTE_CLIP = 240;
 
 /** A read-only data field (label + recorded text, a few lines at most): not a chat. The full text and the chat live in the dialog. */
 function OutputField({ label, empty = 'No decision recorded for this turn.', children }) {
   const has = children != null && children !== false;
-  return html`<div class="z-field"><div class="z-field-k mono">${label}</div>
-    <div class=${'z-field-text' + (has ? '' : ' z-none')}>${has ? children : empty}</div></div>`;
+  return html`<div class="in-field"><div class="in-k">${label}</div>
+    <div class=${'in-text' + (has ? '' : ' is-none')}>${has ? children : empty}</div></div>`;
 }
 
-function KeyValue({ k, children }) {
-  return html`<span class="z-kv-k mono">${k}</span><span class="z-kv-v mono">${children}</span>`;
-}
+function KeyValue({ k, children }) { return html`<dt>${k}</dt><dd>${children}</dd>`; }
+const Heading = ({ children }) => html`<h3 class="in-h">${children}</h3>`;
+/** Name on the left (status dot + text), state in words on the right: the head of every node of the inspector. */
+const NodeHead = ({ name, state, tone }) => html`<div class="in-head"><span class="in-name"><${StatusDot} kind=${dotKind(tone || state)} />${name}</span><span class="in-state">${state}</span></div>`;
 
 // ---------- NOW ----------
 function OrchestratorCard() {
-  const orch = agentById(ORCHESTRATOR_ID), info = STATUS[status()] || STATUS.no_loop;
+  const orch = agentById(ORCHESTRATOR_ID), info = NAVBAR_STATUS[navbarStatusKey(status())];
   const stateText = orch ? txt(orch.state) : info.label.toLowerCase();
-  const [color] = orch ? pal(orch.state) : [info.c];
   const note = orch ? (orch.decision || orch.summary || (orch.last_action && orch.last_action.text)) : null;
   const waiting = status() === 'awaiting_user' ? loop().reason : null;
-  const text = clipText(note || waiting, NOTE_CLIP);
-  return html`<button type="button" class="z-orch" title="select the orchestrator" onClick=${() => { selectTurn(null); selectNode({ orch: true }); }}>
-    <span class="z-orch-top"><span class="z-orch-name mono"><span class="z-dot" style=${{ background: color }}></span>orchestrator</span><span class="z-orch-state mono" style=${{ color }}>${stateText}</span></span>
-    <span class="z-chips">${ORCHESTRATOR_CHIPS.map((chip) => html`<span class="z-chip mono" key=${chip}>${chip}</span>`)}</span>
-    ${text ? html`<span class="z-orch-note">${inlineNodes(text)}</span>` : null}
+  const text = clip(note || waiting, NOTE_CLIP);
+  return html`<button type="button" class="in-card" title="select the orchestrator" onClick=${() => { selectTurn(null); selectNode({ orch: true }); }}>
+    <${NodeHead} name="orchestrator" state=${stateText} tone=${orch ? orch.state : status()} />
+    ${text ? html`<span class="in-note">${inlineNodes(text)}</span>` : null}
   </button>`;
 }
 
@@ -70,62 +70,91 @@ function RunningList() {
     const step = stepIndexOfRole(agent.role), feature = firstFeature(agent.feature);
     if (step >= 0 && feature) { selectNode({ f: feature, s: step }); openAgentDialog({ feature, step }); } else selectNode({ orch: true });
   };
-  return html`<div class="z-label">${'RUNNING · ' + running.length}</div>
-    <div class="z-running">${running.length ? running.map((agent) => html`<button type="button" class="z-run" key=${agent.id} onClick=${() => pick(agent)}>
-        <span class="z-dot z-dot-run"></span><span class="z-run-text"><span class="z-run-agent mono">${txt(agent.role)}</span><span class="z-run-feature">${firstFeature(agent.feature) ? html`<${FeatureLabel} slug=${firstFeature(agent.feature)} stacked=${true} />` : txt(agent.feature)}</span></span></button>`)
-      : html`<div class="z-none">No agent running. Waiting for your decision.</div>`}</div>`;
+  return html`<${Heading}>${'Running · ' + running.length}<//>
+    <div class="in-list">${running.length ? running.map((agent) => html`<button type="button" class="in-row" key=${agent.id} onClick=${() => pick(agent)}>
+        <${StatusDot} kind="live" /><span class="in-row-text"><span class="in-row-main">${txt(agent.role)}</span><span class="in-row-sub">${firstFeature(agent.feature) ? html`<${FeatureLabel} slug=${firstFeature(agent.feature)} stacked=${true} />` : txt(agent.feature)}</span></span></button>`)
+      : html`<div class="in-none">No agent running.</div>`}</div>`;
 }
 
 // ---------- SELECTED ----------
 function OrchestratorSelected({ turnNumber }) {
   const turn = turnsList().find((item) => item.n === turnNumber) || null, quarantined = list(ctx.state && ctx.state.quarantine)[0];
-  const [color] = turn ? [turn.dot || NEUTRAL_COLOR] : [NEUTRAL_COLOR];
-  return html`<div class="z-sel-head"><span class="z-sel-name mono"><span class="z-dot" style=${{ background: color }}></span>orchestrator</span><span class="z-sel-state mono" style=${{ color }}>${turn ? txt(turn.status) : '—'}</span></div>
-    <div class="z-sel-role">${ROLE_DESC.orchestrator}</div>
-    <div class="z-kv-grid"><${KeyValue} k="TURN">${turn ? `${turn.n} · ${txt(turn.label)}` : '—'}<//>
-      <${KeyValue} k="CALLS">${steps().map((step) => step.agent).join(', ') || '—'}<//>
-      <${KeyValue} k="RAN WITH">${turn && turn.claude ? html`<${ClaudeBadge} source=${turn} />` : '—'}<//></div>
-    <${OutputField} label=${'DECISION · T' + turnNumber}>${turn && turn.decision ? html`<div class="md-doc"><${Markdown} source=${String(turn.decision)} /></div>` : null}<//>
-    ${quarantined ? html`<button type="button" class="z-btn-wide z-btn-amber" onClick=${() => openPauseDialog(quarantined.id)}>Understand and resolve</button>` : null}`;
+  return html`<${NodeHead} name="orchestrator" state=${turn ? txt(turn.status) : DASH} tone=${turn && turn.status} />
+    <div class="in-sub">${ROLE_DESC.orchestrator}</div>
+    <dl class="insp-dl"><${KeyValue} k="Turn">${turn ? `${turn.n} · ${txt(turn.label)}` : DASH}<//>
+      <${KeyValue} k="Calls">${steps().map((step) => step.agent).join(', ') || DASH}<//>
+      <${KeyValue} k="Ran with">${turn && turn.claude ? html`<${ClaudeBadge} source=${turn} />` : DASH}<//></dl>
+    <${OutputField} label=${'Decision · turn ' + turnNumber}>${turn && turn.decision ? html`<div class="md-doc"><${Markdown} source=${String(turn.decision)} /></div>` : null}<//>
+    ${quarantined ? html`<div class="insp-actions"><button type="button" class="btn btn-primary" onClick=${() => openPauseDialog(quarantined.id)}>Understand and resolve</button></div>` : null}`;
 }
 
-function StepSelected({ node, turnNumber }) {
-  const stepList = steps(), step = stepList[node.s];
-  if (!step) return html`<div class="z-none">This step does not exist.</div>`;
-  const cells = (turnNumber != null && stateAt(turnNumber)[node.f]) || [], cell = cells[node.s] || { st: 'PENDING', runs: [] };
+/** "Open feature": goes to the feature page (#/feature/<slug>). */
+const openFeaturePage = (slug) => navigate('/feature/' + encodeURIComponent(slug));
+
+/** Details of one step of the selected feature at the shown turn: who ran it, the runs, the last output. */
+function StepDetails({ slug, index, turnNumber }) {
+  const stepList = steps(), step = stepList[index];
+  if (!step) return null;
+  const cells = (turnNumber != null && stateAt(turnNumber)[slug]) || [], cell = cells[index] || { st: 'PENDING', runs: [] };
   const runs = list(cell.runs), lastRun = runs[runs.length - 1] || null;
-  const color = STEP_COLOR[cell.st] || NEUTRAL_COLOR;
-  const calledBy = node.s === 0 ? 'orchestrator' : stepList[node.s - 1].agent, calls = node.s + 1 < stepList.length ? stepList[node.s + 1].agent : '—';
-  return html`<div class="z-sel-head"><span class="z-sel-name mono"><span class="z-dot" style=${{ background: color }}></span>${step.agent}</span><span class="z-sel-state mono" style=${{ color }}>${cell.st}</span></div>
-    <div class="z-sel-role">${txt(step.role)}</div>
-    <div class="z-kv-grid"><${KeyValue} k="FEATURE"><${FeatureLabel} slug=${node.f} stacked=${true} block=${true} /><//><${KeyValue} k="CALLED BY"><span class="z-link">${calledBy}</span><//>
-      <${KeyValue} k="CALLS"><span class="z-link">${calls}</span><//><${KeyValue} k="RUNS">${runs.length}<//>
-      ${lastRun && turnAt(lastRun.turn) && turnAt(lastRun.turn).claude ? html`<${KeyValue} k="RAN WITH"><${ClaudeBadge} source=${turnAt(lastRun.turn)} inherited /><//>` : null}</div>
-    <${OutputField} label=${lastRun ? 'LAST OUTPUT · T' + lastRun.turn : 'LAST OUTPUT'} empty="Not run in this state yet.">${lastRun && lastRun.out ? inlineNodes(String(lastRun.out)) : null}<//>
-    ${isQuarantined(node.f) ? html`<button type="button" class="z-btn-wide z-btn-amber" onClick=${() => openPauseDialog(node.f)}>Understand and resolve</button>` : null}
-    <button type="button" class="z-btn-wide" onClick=${() => openAgentDialog({ feature: node.f, step: node.s })}>Open history and ask the agent</button>
-    <button type="button" class="z-btn-wide" onClick=${() => openFeatureDialog({ feature: node.f })}>Open feature view</button>`;
+  const calledBy = index === 0 ? 'orchestrator' : stepList[index - 1].agent, calls = index + 1 < stepList.length ? stepList[index + 1].agent : DASH;
+  return html`<section class="in-sec" aria-label="Selected agent">
+    <${Heading}>${'Agent · turn ' + (turnNumber == null ? DASH : turnNumber)}<//>
+    <${NodeHead} name=${(lastRun && lastRun.agent) || step.agent} state=${cell.st.toLowerCase()} tone=${cell.st} />
+    <div class="in-sub">${txt(step.role)}</div>
+    <dl class="insp-dl"><${KeyValue} k="Called by">${calledBy}<//><${KeyValue} k="Calls">${calls}<//><${KeyValue} k="Runs">${runs.length}<//>
+      ${lastRun && turnAt(lastRun.turn) && turnAt(lastRun.turn).claude ? html`<${KeyValue} k="Ran with"><${ClaudeBadge} source=${turnAt(lastRun.turn)} inherited /><//>` : null}</dl>
+    <${OutputField} label=${lastRun ? 'Last output · turn ' + lastRun.turn : 'Last output'} empty="Not run in this state yet.">${lastRun && lastRun.out ? inlineNodes(String(lastRun.out)) : null}<//>
+  </section>`;
+}
+
+const GLYPH = { DONE: '✓', FAIL: '!', BLOCKED: '!' };
+/** The selected feature (spec L-04): name, state, turns, depends on, the steps with small check dots, the two buttons. */
+function FeatureSelected({ slug }) {
+  const at = curN(), cells = stateAt(at)[slug] || null, status = loopStatusAt(slug, at), worked = workedTurns(at)[slug] || [];
+  const feature = featuresWithWaves().find((item) => item.id === slug), deps = feature ? feature.deps.filter((dep) => !String(dep).startsWith('dir:')) : [];
+  const node = activeNode(), focus = node && !node.orch && node.f === slug ? node.s : defaultStepOf(slug, at);
+  const stepList = steps();
+  return html`<section class="in-sec" aria-label="Selected feature">
+    <div class="in-name-lg">${featureName(slug)}</div>
+    <div class="in-sub">${stateWord(status)} · <span class="mono">${slug}</span></div>
+    <dl class="insp-dl"><dt>Turns</dt><dd>${turnRangeText(worked) || 'not dispatched yet'}</dd>
+      <dt>After</dt><dd>${deps.length ? deps.map((dep, i) => html`<span key=${dep}>${i ? ', ' : ''}<button type="button" class="insp-dep" onClick=${() => selectFeature(dep)}>${featureName(dep)}</button></span>`) : DASH}</dd></dl>
+    <ol class="insp-steps" aria-label="Steps">${stepList.map((step, index) => {
+      const cell = cells ? cells[index] : null, st = cell ? cell.st : 'PENDING', runs = cell ? list(cell.runs) : [], lastRun = runs[runs.length - 1] || null;
+      const state = st === 'DONE' ? 'done' : st === 'RUNNING' ? 'run' : st === 'FAIL' || st === 'BLOCKED' ? 'bad' : 'todo';
+      return html`<li key=${index}><button type="button" class=${'insp-step-row is-' + state + (focus === index ? ' is-focus' : '')} disabled=${!cells} aria-pressed=${String(focus === index)}
+        title=${`${stepWord(index)} · ${st}`} onClick=${() => selectNode({ f: slug, s: index })}>
+        <span class="insp-dot" aria-hidden="true">${GLYPH[st] || ''}</span><span class="insp-step-name">${stepWord(index)}</span><span class="insp-step-agent">${(lastRun && lastRun.agent) || step.agent}</span></button></li>`;
+    })}</ol>
+    <div class="insp-actions">
+      ${isQuarantined(slug) ? html`<button type="button" class="btn" onClick=${() => openPauseDialog(slug)}>Understand and resolve</button>` : null}
+      <button type="button" class="btn btn-primary" onClick=${() => openAgentDialog({ feature: slug, step: Math.max(0, focus) })}>Ask the agent</button>
+      <button type="button" class="btn" onClick=${() => openFeaturePage(slug)}>Open feature</button>
+    </div>
+  </section>
+  ${cells && focus >= 0 ? html`<${StepDetails} slug=${slug} index=${focus} turnNumber=${at} />` : null}`;
 }
 
 function SelectedCard() {
-  const node = activeNode(), turnNumber = curN();
-  return html`<section class="z-card" aria-label="Selected node">
-    <div class="z-label">${'SELECTED · STATE AT T' + (turnNumber == null ? '—' : turnNumber)}</div>
-    ${!node ? html`<div class="z-none">Click a node of the pipeline to see its state at this turn.</div>`
-      : node.orch ? html`<${OrchestratorSelected} turnNumber=${turnNumber} />` : html`<${StepSelected} node=${node} turnNumber=${turnNumber} />`}
-  </section>`;
+  const node = activeNode(), turnNumber = curN(), slug = selectedFeature();
+  if (node && node.orch) return html`<section class="in-sec" aria-label="Selected node"><${Heading}>${'Selected · turn ' + (turnNumber == null ? DASH : turnNumber)}<//><${OrchestratorSelected} turnNumber=${turnNumber} /></section>`;
+  if (slug) return html`<${FeatureSelected} slug=${slug} />`;
+  return html`<section class="in-sec" aria-label="Selected node"><${Heading}>Selected<//><div class="in-none">Pick a feature on the timeline to inspect it at this turn.</div></section>`;
 }
 
 /** The whole inspector. `on` = the loop panel shows (state arrived and the project is not in planning mode). */
 export function Inspector({ on }) {
   const latest = liveN();
-  return html`<aside class="right z-inspector" id="inspector" aria-label="Inspector">
-    <div class="insp-body z-insp-body" id="insp-body">
-      ${!on ? null : html`<section class="z-card" aria-label="Loop now">
-          <div class="z-label">${'NOW · T' + (latest == null ? '—' : latest)}</div>
+  const close = () => { pipe.over = false; renderAll(); };
+  return html`<aside class=${'insp' + (pipe.insp ? ' is-open' : '') + (pipe.over ? ' is-over' : '')} id="inspector" aria-label="Inspector">
+    <button type="button" class="insp-close" aria-label="Close the inspector" onClick=${close}>×</button>
+    <div class="insp-body" id="insp-body">
+      ${!on ? null : html`<${SelectedCard} />
+        <section class="in-sec" aria-label="Loop now">
+          <${Heading}>${'Now · turn ' + (latest == null ? DASH : latest)}<//>
           <${OrchestratorCard} /><${RunningList} />
-        </section>
-        <${SelectedCard} />`}
+        </section>`}
     </div>
   </aside>`;
 }

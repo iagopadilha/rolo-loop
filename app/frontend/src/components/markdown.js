@@ -63,7 +63,7 @@ function stripComments(text) {
 }
 
 /** Block: returns a list of vnodes. `options.headingId(text)` may generate ids for the headings. */
-export function markdownNodes(source, options = {}) {
+function markdownNodes(source, options = {}) {
   const lines = stripComments(String(source == null ? '' : source).replace(/\r/g, '')).split('\n');
   const out = [];
   let i = 0;

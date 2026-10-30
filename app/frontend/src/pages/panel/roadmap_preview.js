@@ -3,30 +3,10 @@
    Its pan/zoom view lives here (module level), apart from the loop panel's. */
 import { html, useState, useEffect } from '../../util/preact.js';
 import { ctx } from './context.js';
-import { computeGraphLayout, FeatureGraph, newGraphView } from '../../components/graph.js';
+import { FeatureGraph, newGraphView } from '../../components/graph.js';
 import { list } from '../../util/format.js';
 
-const NW = 184, NH = 66; // node size of computeGraphLayout
 const stageNumber = (s) => { const n = Number(s); return s !== '' && s != null && Number.isFinite(n) ? n : null; };
-
-/** Roadmap endpoint payload -> the shape computeGraphLayout reads (id, status, stage as number, deps as slugs). */
-export function previewModel(data) {
-  const fs = list(data && data.features).map((f) => ({
-    id: f.slug, status: f.status || 'pending', stage: stageNumber(f.stage), kind: f.kind,
-    deps: String(f.deps || '').split(',').map((d) => d.trim()).filter((d) => d && !d.startsWith('dir:')),
-    regression: !!f.regression && f.regression !== 'no',
-  }));
-  const stages = list(data && data.stages).map((s) => ({ n: stageNumber(s.n), title: s.title }));
-  if (!fs.length) return null;
-  const L = computeGraphLayout(fs, stages);
-  const pos = Object.fromEntries(L.nodes.map((n) => [n.f.id, n]));
-  const edges = L.edges.map((a) => {
-    const p1 = pos[a.from], p2 = pos[a.to];
-    const x1 = p1.x + NW, y1 = p1.y + NH / 2, x2 = p2.x - 4, y2 = p2.y + NH / 2, dx = Math.max(40, Math.abs(x2 - x1) / 2);
-    return { ...a, d: `M${x1} ${y1} C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}` };
-  });
-  return { L, edges };
-}
 
 // kept across re-renders and tab switches of the planning screen: view = pan/zoom, ctl = reached by the zoom buttons
 const rmView = newGraphView(), rmCtl = {};

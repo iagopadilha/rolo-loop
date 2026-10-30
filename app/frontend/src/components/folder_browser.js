@@ -3,11 +3,11 @@
 import { html, useState, useEffect, useRef } from '../util/preact.js';
 import { appApi } from '../api/api_client.js';
 import { openDialog } from './dialog.js';
+import { maskHome, baseName } from '../util/format.js';
 
 const NATIVE_DIALOG_TIMEOUT_MS = 310000; // the back end waits up to 300 s for the system window
 const NATIVE_CANCELLED_REASON = 'cancelled'; // folder_picker_service.CANCELLED_REASON
 
-const baseName = (p) => String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(p || '');
 function join(base, name) {
   if (!base) return name;
   const sep = base.includes('\\') || /^[A-Za-z]:/.test(base) ? '\\' : '/';
@@ -40,7 +40,7 @@ function normalizeListing(r, requested) {
 }
 
 /** Content of the folder dialog. onValue(path) runs whenever the path the main button would use changes. */
-export function FolderBrowser({ initial = '', explanation = '', onValue }) {
+function FolderBrowser({ initial = '', explanation = '', onValue }) {
   const [L, setL] = useState(null);
   const [field, setField] = useState('');
   const [filter, setFilter] = useState('');
@@ -54,7 +54,7 @@ export function FolderBrowser({ initial = '', explanation = '', onValue }) {
       const r = await appApi.get('system/folders?path=' + encodeURIComponent(path || ''), 15000);
       if (mine !== seq.current) return;
       const next = normalizeListing(r, path);
-      setL(next); setField(next.current); setFilter('');
+      setL(next); setField(maskHome(next.current)); setFilter('');
       const marks = [next.currentHasSpecs ? 'has .specs (a loop project)' : '', next.currentHasGit ? 'is a git repository' : ''].filter(Boolean).join(' · ');
       setState((marks ? 'This folder ' + marks + '.' : '') + (next.truncated ? ' The list was truncated; filter or paste a path.' : ''));
     } catch (e) {
@@ -63,7 +63,8 @@ export function FolderBrowser({ initial = '', explanation = '', onValue }) {
     }
   }
   useEffect(() => { go(initial); return () => { seq.current += 1; }; }, []);
-  const value = field.trim() || (L ? L.current : '');
+  const realOf = (text) => (L && text === maskHome(L.current) ? L.current : text); // the field shows the home masked; untouched = the real path
+  const value = realOf(field.trim()) || (L ? L.current : '');
   useEffect(() => { if (onValue) onValue(value); }, [value]);
 
   const f = filter.trim().toLowerCase();
@@ -73,20 +74,20 @@ export function FolderBrowser({ initial = '', explanation = '', onValue }) {
     ${explanation ? html`<p class="dlg-text">${explanation}</p>` : null}
     <div class="fb-bar">
       <button type="button" class="btn btn-sm btn-ghost" title="parent folder" disabled=${L ? !L.current : null} onClick=${() => go(L ? L.parent || '' : '')}>↑ Up</button>
-      <input type="text" class="fb-field mono" id="fb-field" aria-label="Folder path (you can paste one)" placeholder=${'paste a path, e.g. C:\\Users\\you\\projects\\app'} autocomplete="off" spellcheck="false"
+      <input type="text" class="fb-field mono" id="fb-field" aria-label="Folder path (you can paste one)" placeholder="paste a path, e.g. ~/projects/app" autocomplete="off" spellcheck="false"
         value=${field} onInput=${(e) => setField(e.currentTarget.value)}
-        onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); go(e.currentTarget.value.trim()); } }} />
-      <button type="button" class="btn btn-sm" onClick=${() => go(field.trim())}>Go</button>
+        onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); go(realOf(e.currentTarget.value.trim())); } }} />
+      <button type="button" class="btn btn-sm" onClick=${() => go(realOf(field.trim()))}>Go</button>
     </div>
-    <div class="fb-shortcuts">${(L ? L.shortcuts : []).map((a) => html`<button key=${a.path} type="button" class="btn btn-sm btn-ghost" title=${a.path} onClick=${() => go(a.path)}>${a.name}</button>`)}</div>
+    <div class="fb-shortcuts">${(L ? L.shortcuts : []).map((a) => html`<button key=${a.path} type="button" class="btn btn-sm btn-ghost" title=${maskHome(a.path)} onClick=${() => go(a.path)}>${maskHome(a.name)}</button>`)}</div>
     <div class="fb-bar">
       <input type="search" class="fb-filter" placeholder="filter…" aria-label="Filter subfolders" autocomplete="off" value=${filter} onInput=${(e) => setFilter(e.currentTarget.value)} />
       <span class="fb-legend"><span class="fb-tag specs">.specs</span> already has a loop · <span class="fb-tag git">git</span> repository</span>
     </div>
     <div class="fb-list" role="list" aria-label="Subfolders">
       ${!L ? null : vis.length
-        ? vis.map((x) => html`<div key=${x.path} role="listitem"><button type="button" class="fb-item" title=${x.path} onClick=${() => go(x.path)}>
-            <span class="fb-ic" aria-hidden="true">▸</span><span class="fb-name">${x.name}</span>
+        ? vis.map((x) => html`<div key=${x.path} role="listitem"><button type="button" class="fb-item" title=${maskHome(x.path)} onClick=${() => go(x.path)}>
+            <span class="fb-ic" aria-hidden="true">▸</span><span class="fb-name">${maskHome(x.name)}</span>
             ${x.hasSpecs ? html`<span class="fb-tag specs">.specs</span>` : null}${x.hasGit ? html`<span class="fb-tag git">git</span>` : null}
           </button></div>`)
         : html`<div class="fb-empty">${f ? 'no subfolder with that name' : 'no subfolders'}</div>`}

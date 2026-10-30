@@ -4,7 +4,7 @@ import { html, render } from '../util/preact.js';
 let items = [], seq = 0;
 
 /** Content of #toasts: one line per live notice. */
-export function Toasts({ items: list = items }) {
+function Toasts({ items: list = items }) {
   return list.map((t) => html`<div key=${t.id} class=${'toast ' + (t.kind || '')} role=${t.kind === 'err' ? 'alert' : 'status'}>${t.msg}</div>`);
 }
 

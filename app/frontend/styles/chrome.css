@@ -1,21 +1,8 @@
 /* Compact top of the panel: thin trail line (planning) and the workspace zone (planning). The alert and new-loop zones are retired (navbar + dialogs).
    Expanded zones scroll with the page (#app), never inside. Loaded last. Tokens only. */
-.chrome-zones{flex:none;display:block;}
+.chrome-zones{flex:none;}
 .chrome-zones[hidden]{display:none;}
-.chrome-bar{display:flex;align-items:center;gap:12px;width:calc(100% - 32px);height:34px;margin:4px 16px;padding:0 12px;box-sizing:border-box;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--text2);font:500 12px var(--sans);cursor:pointer;text-align:left;overflow:hidden;white-space:nowrap;}
-.chrome-bar:hover{border-color:var(--line4);}
-.chrome-caret{flex:none;color:var(--dim);font:600 11px var(--mono);}
-.chrome-status{flex:none;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text);}
-.chrome-awaiting_user,.chrome-error{background:var(--amber-bg);border-color:var(--amber);}
-.chrome-error{background:var(--red-bg);border-color:var(--red);}
-.chrome-awaiting_user .chrome-status{color:var(--amber);}
-.chrome-error .chrome-status{color:var(--red);}
-.chrome-reason{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
-.chrome-part{flex:none;color:var(--text2);}
-.chrome-part::before{content:"\00b7";margin-right:12px;color:var(--dim);}
-.chrome-hint{margin-left:auto;flex:none;font:400 10px var(--mono);color:var(--dim);}
-.chrome-zones:not(.is-open)>.alert-zone,.chrome-zones:not(.is-open)>.newloop-zone,.chrome-zones:not(.is-open)>.workspace-zone{display:none;}
-.chrome-zones.is-open>.alert-zone{padding-top:2px;}
+.chrome-zones:not(.is-open)>.workspace-zone{display:none;}
 
 /* trail: one thin line when compact */
 .trail:has(.tr-line.is-compact){padding:3px 16px;}

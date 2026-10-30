@@ -1,0 +1,75 @@
+/* v2 skin for dialogs, settings, planning, markdown, toasts and the remaining components (spec 06). Tokens only.
+   Loaded after the legacy sheets so it wins ties. Buttons/inputs are scoped to these surfaces so the shell/hub/loop sheets keep theirs. */
+
+/* ---------- dialog surface ---------- */
+.dlg{padding:0;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg);max-height:90vh;max-width:calc(100vw - 32px);
+  box-shadow:0 24px 64px var(--shadow);overflow:hidden;}
+.dlg[open]{display:flex;flex-direction:column;}
+.dlg::backdrop,.bd-dialog::backdrop{background:var(--scrim);}
+.dlg-head{padding:14px 18px;border-bottom:1px solid var(--line);flex:none;}
+.dlg-title{font-size:15px;font-weight:600;color:var(--fg);}
+.dlg-x{width:28px;height:28px;padding:0;border-radius:50%;display:inline-grid;place-items:center;color:var(--fg2);}
+.dlg-x:hover{background:var(--fill);color:var(--fg);}
+.dlg-body{padding:16px 18px;overflow:auto;overscroll-behavior:contain;flex:1 1 auto;min-height:0;}
+.dlg-foot{position:sticky;bottom:0;flex:none;background:var(--card);padding:12px 18px;border-top:1px solid var(--line);flex-wrap:wrap;}
+.dlg-foot[hidden]{display:none;}
+.dlg-text{color:var(--fg2);}
+.dlg-field label,.small-label,.nl-label{font:600 11px var(--sans);color:var(--fg2);letter-spacing:0;text-transform:none;}
+
+/* ---------- buttons (inside dialogs and the screens owned by this slice) ---------- */
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row,.toast) .btn{font:600 12px var(--sans);min-height:30px;padding:0 14px;border-radius:15px;
+  border:1px solid var(--line);background:transparent;color:var(--fg);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn:hover:not(:disabled){border-color:var(--line4);background:var(--fill);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-primary{background:var(--fg);border-color:var(--fg);color:var(--bg);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-primary:hover:not(:disabled){background:var(--fg);border-color:var(--fg);opacity:.85;}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-ghost{border-color:transparent;background:transparent;color:var(--fg2);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-ghost:hover:not(:disabled){background:var(--fill);color:var(--fg);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-danger{background:transparent;border-color:var(--red-line);color:var(--danger);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-danger:hover:not(:disabled){background:var(--red-bg);border-color:var(--danger);}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn-sm{min-height:26px;padding:0 11px;font-size:11px;}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) .btn:disabled{opacity:.5;}
+
+/* ---------- inputs ---------- */
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea),
+.dlg-input,.dlg-area{font:400 13px var(--sans);color:var(--fg);background:var(--side);border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:36px;box-sizing:border-box;}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) textarea,.dlg-area{padding:8px 12px;line-height:1.5;}
+:is(.dlg,.bd-dialog,#app[data-mode="planning"],.set-row,.mcp-row) :is(input,select,textarea):focus-visible,.dlg-input:focus-visible,.dlg-area:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+:is(.dlg,.bd-dialog) ::placeholder{color:var(--fg2);opacity:.8;}
+:is(.dlg,.bd-dialog) input[type=checkbox],:is(.dlg,.bd-dialog) input[type=radio]{accent-color:var(--accent);}
+
+/* ---------- chips / hints / boxes ---------- */
+.hint{color:var(--fg2);font-size:12px;line-height:1.5;}
+.chips span,.chip{border-radius:13px;border:1px solid var(--line);background:var(--fill);color:var(--fg2);}
+.nl-box,.nl-msg{border-radius:12px;}
+.nl-err{color:var(--danger);}
+.nl-bad{border-color:var(--red-line);background:var(--red-bg);color:var(--red-text);}
+
+
+/* ---------- toasts ---------- */
+.toasts{z-index:100;}
+.toast{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px var(--shadow);padding:10px 14px;}
+.toast.ok{border-color:var(--green-line);background:var(--card);border-left:3px solid var(--ok);}
+.toast.err{border-color:var(--red-line);background:var(--card);color:var(--fg);border-left:3px solid var(--danger);}
+
+/* ---------- markdown ---------- */
+.md-doc{color:var(--fg);}
+.md-h1,.md-h2{border-color:var(--line);}
+.md-h3{color:var(--accent);}
+.md-h4,.md-h5,.md-h6{color:var(--fg2);}
+.md-doc .md-pre{background:var(--side);border:1px solid var(--line);border-radius:10px;color:var(--fg);}
+.md-doc :not(pre)>code{background:var(--fill);border-radius:6px;padding:1px 5px;}
+.md-quote{border-left-color:var(--accent);color:var(--fg2);}
+.md-table-wrap{border:1px solid var(--line);border-radius:12px;}
+.md-table th{background:var(--side);color:var(--fg2);}
+.md-doc a{color:var(--accent);}
+
+/* ---------- tables in these screens ---------- */
+.md-table th{font:600 11px var(--sans);text-transform:none;letter-spacing:0;}
+
+/* ---------- narrow screens: dialogs get the width, footers wrap ---------- */
+@media (max-width:600px){
+  .dlg{width:calc(100vw - 16px) !important;max-width:calc(100vw - 16px);}
+  .dlg-head,.dlg-body,.dlg-foot{padding-left:14px;padding-right:14px;}
+}
+@media (prefers-reduced-motion:reduce){.toast{transition:none;animation:none;}}
+.sp-inst-step.done .sp-inst-n{color:var(--green);}

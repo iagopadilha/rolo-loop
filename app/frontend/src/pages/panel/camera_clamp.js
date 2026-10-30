@@ -1,22 +1,22 @@
 /* Keeps a pan/zoom camera from losing its content: shared by the pipeline diagram and the dependency (UML) dialog.
    A camera is { x, y, z } (translate in viewport px, then scale); content is the box { x0, y0, x1, y1 } in content px. */
 
-export const PAN_MARGIN = 80; // px of empty space the content may be panned away from a viewport edge (content bigger than the viewport)
+const PAN_MARGIN = 80; // px of empty space the content may be panned away from a viewport edge (content bigger than the viewport)
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 /** One axis, content [low, high] at zoom `zoom` in a viewport of `size` px: smaller than the viewport = centered,
     bigger = free to pan but each content edge stays at most PAN_MARGIN px inside the viewport edge. */
-export function clampAxis(position, low, high, zoom, size, margin = PAN_MARGIN) {
+function clampAxis(position, low, high, zoom, size, margin = PAN_MARGIN) {
   const extent = (high - low) * zoom;
   if (extent <= size) return (size - extent) / 2 - low * zoom;
   return clamp(position, size - margin - high * zoom, margin - low * zoom);
 }
 
-export const LOOSE_VISIBLE = 160; // px of content that must stay on screen on the loose (horizontal) axis
+const LOOSE_VISIBLE = 160; // px of content that must stay on screen on the loose (horizontal) axis
 
 /** Loose axis: the content moves freely (it is not re-centered), as long as LOOSE_VISIBLE px of it stay inside the viewport. */
-export function looseAxis(position, low, high, zoom, size, visible = LOOSE_VISIBLE) {
+function looseAxis(position, low, high, zoom, size, visible = LOOSE_VISIBLE) {
   const keep = Math.min(visible, (high - low) * zoom, size);
   return clamp(position, keep - high * zoom, size - keep - low * zoom);
 }

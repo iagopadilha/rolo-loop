@@ -7,27 +7,21 @@
 <meta name="monitor-token" content="__MONITOR_TOKEN__">
 <title>Claude Maestro</title>
 <link rel="icon" href="data:,">
+<script>/* theme before first paint: same rule as src/util/theme.js */
+(function(){var m='system';try{var v=localStorage.getItem('maestro.theme');if(v==='light'||v==='dark'||v==='system')m=v;}catch(e){}
+var d=m==='dark'||(m==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
+document.documentElement.setAttribute('data-theme',d?'dark':'light');})();</script>
 <link rel="stylesheet" href="/static/styles/base.css">
+<link rel="stylesheet" href="/static/styles/v2/tokens.css">
 <link rel="stylesheet" href="/static/styles/panel.css">
 <link rel="stylesheet" href="/static/styles/components.css">
 <link rel="stylesheet" href="/static/styles/newloop.css">
 <link rel="stylesheet" href="/static/styles/hub.css">
-<link rel="stylesheet" href="/static/styles/guard.css">
-<link rel="stylesheet" href="/static/styles/diagram.css">
-<link rel="stylesheet" href="/static/styles/composer.css">
-<link rel="stylesheet" href="/static/styles/roadmap.css">
 <link rel="stylesheet" href="/static/styles/ws.css">
-<link rel="stylesheet" href="/static/styles/inspector.css">
-<link rel="stylesheet" href="/static/styles/polish.css">
 <link rel="stylesheet" href="/static/styles/deps.css">
-<link rel="stylesheet" href="/static/styles/specs_view.css">
 <link rel="stylesheet" href="/static/styles/chrome.css">
 <link rel="stylesheet" href="/static/styles/ux_header.css">
 <link rel="stylesheet" href="/static/styles/navbar.css">
-<link rel="stylesheet" href="/static/styles/ux_history.css">
-<link rel="stylesheet" href="/static/styles/ux_errors.css">
-<link rel="stylesheet" href="/static/styles/ux_deps.css">
-<link rel="stylesheet" href="/static/styles/ux_specs.css">
 <link rel="stylesheet" href="/static/styles/zones.css">
 <link rel="stylesheet" href="/static/styles/pipeline.css">
 <link rel="stylesheet" href="/static/styles/big_dialog.css">
@@ -35,13 +29,19 @@
 <link rel="stylesheet" href="/static/styles/subprojects.css">
 <link rel="stylesheet" href="/static/styles/decisions.css">
 <link rel="stylesheet" href="/static/styles/wrap_up.css">
-<link rel="stylesheet" href="/static/styles/settings.css">
+<link rel="stylesheet" href="/static/styles/v2/shell.css">
+<link rel="stylesheet" href="/static/styles/v2/hub.css">
+<link rel="stylesheet" href="/static/styles/v2/dialogs.css">
+<link rel="stylesheet" href="/static/styles/v2/loop.css">
+<link rel="stylesheet" href="/static/styles/v2/feature.css">
+<link rel="stylesheet" href="/static/styles/v2/pages.css">
+<link rel="stylesheet" href="/static/styles/v2/settings.css">
 </head>
 <body>
 <div id="root"><noscript>This panel needs JavaScript.</noscript></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
-<!-- HUB (/) = Hub component (src/pages/hub.js); PANEL (/p/<id>/) = Panel component (src/pages/panel/app.js: global_zone.js + loop_zone.js) -->
+<!-- HUB (/) = Hub component (src/pages/hub.js); PANEL (/p/<id>/) = Panel component (src/pages/panel/app.js: one centre page per hash route, router.js) -->
 
 <script type="importmap">
 { "imports": {

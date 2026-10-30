@@ -7,8 +7,6 @@
 .wu-decisions{display:flex;align-items:center;}
 .wu-hint{margin:0;color:var(--muted);font-size:12px;line-height:1.5;}
 .wu-follow{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line2);padding-top:10px;min-width:0;}
-.wu-picks{display:flex;flex-direction:column;gap:4px;max-height:140px;overflow:auto;}
-.wu-pick{align-items:flex-start;font-size:12px;}
 .wu-follow-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .wu-stage{border:1px solid var(--line2);background:var(--panel);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-width:0;}
 .wu-stage-name{font-weight:600;font-size:13px;}

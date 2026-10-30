@@ -2,21 +2,20 @@
    Facts come from the pipeline model (events replayed per turn); the full transcript of a run is read on demand from
    `GET agent/<agent_id>/log`. The chat is about the latest run of the step; a step that never ran chats about the project. */
 import { html, useState, useEffect } from '../../../util/preact.js';
-import { list, txt } from '../../../util/format.js';
+import { list, txt, BADGE_INFO } from '../../../util/format.js';
 import { openBigDialog } from '../../../components/big_dialog.js';
 import { ctx } from '../context.js';
 import { stepRuns, steps, stateAt, curN, featureName, turnAt } from '../pipeline_model.js';
 import { FeatureLabel } from '../feature_label.js';
 import { ClaudeBadge } from '../claude_badge.js';
 
-const BADGE_COLOR = '#7fb2ff';
 const ORCHESTRATOR = 'orchestrator';
 const LOG_TIMEOUT_MS = 20000;
-const RUN_STATUS_COLOR = { DONE: '#3fb950', RUNNING: '#f5b82e', QUEUED: '#7fb2ff', FAIL: '#f85149', BLOCKED: '#f85149', PENDING: '#6b727c' };
-const LOG_TYPE_COLOR = { sys: '#8b929c', ai: '#e6e8eb', tool: '#7fb2ff', guard: '#f85149', user: '#f5b82e' };
+const RUN_STATUS_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--warn)', QUEUED: 'var(--info)', FAIL: 'var(--danger)', BLOCKED: 'var(--danger)', PENDING: 'var(--fg2)' };
+const LOG_TYPE_COLOR = { sys: 'var(--fg2)', ai: 'var(--fg)', tool: 'var(--info)', guard: 'var(--danger)', user: 'var(--warn)' };
 const NOT_RUN_MESSAGE = 'This step has not run yet: it is pending in the flow.';
 
-const statusColor = (status) => RUN_STATUS_COLOR[status] || '#8b929c';
+const statusColor = (status) => RUN_STATUS_COLOR[status] || 'var(--fg2)';
 /** Newest turn first; inside one turn the later run goes on top (stepRuns is chronological). */
 const newestFirst = (runs) => [...list(runs)].reverse().sort((first, second) => second.turn - first.turn);
 
@@ -33,7 +32,7 @@ function RunLog({ log }) {
   if (log.error) return html`<div class="bd-inline-error" role="alert">${'Log unavailable: ' + log.error}</div>`;
   if (!log.lines.length) return html`<div class="bd-dim-note">The log of this run is empty.</div>`;
   return html`<div class="bd-log">${log.lines.map((line, index) => html`<div key=${index} class="bd-log-line">
-      <span class="bd-log-type" style=${{ color: LOG_TYPE_COLOR[line.type] || '#8b929c' }}>${txt(line.type)}</span>
+      <span class="bd-log-type" style=${{ color: LOG_TYPE_COLOR[line.type] || 'var(--fg2)' }}>${txt(line.type)}</span>
       <span class="bd-log-text">${txt(line.text)}${line.result ? html`<span class="bd-log-result">${String(line.result)}</span>` : null}</span>
     </div>`)}${log.truncated ? html`<div class="bd-dim-note">log truncated by the server</div>` : null}</div>`;
 }
@@ -79,16 +78,16 @@ function AgentBody({ feature, step, focus }) {
   const calledBy = step === 0 ? ORCHESTRATOR : (definitions[step - 1] || {}).agent || ORCHESTRATOR;
   const handsOffTo = (definitions[step + 1] || {}).agent || ORCHESTRATOR;
   const facts = [
-    { label: 'STATUS', value: status, color: statusColor(status) },
-    { label: 'RUNS', value: String(runs.length), color: '#e6e8eb' },
-    { label: 'CALLED BY', value: calledBy, color: BADGE_COLOR },
-    { label: 'HANDS OFF TO', value: handsOffTo, color: BADGE_COLOR },
+    { label: 'Status', value: status, color: statusColor(status) },
+    { label: 'Runs', value: String(runs.length), color: 'var(--fg)' },
+    { label: 'Called by', value: calledBy, color: BADGE_INFO },
+    { label: 'Hands off to', value: handsOffTo, color: BADGE_INFO },
   ];
   return html`<div class="bd-agent">
     ${definition.role ? html`<div class="bd-agent-role">${definition.role}</div>` : null}
     <div class="bd-facts-grid">${facts.map((fact) => html`<div key=${fact.label} class="bd-fact">
       <div class="bd-label">${fact.label}</div><div class="bd-fact-value" style=${{ color: fact.color }}>${fact.value}</div></div>`)}</div>
-    <div class="bd-section-label">RUNS OF THIS AGENT IN THIS FEATURE</div>
+    <div class="bd-section-label">Runs of this agent in this feature</div>
     <div class="bd-runs">${runs.length ? runs.map((run, index) => html`<${RunCard} key=${(run.agent_id || 'run') + ':' + index} run=${run} focused=${!!focus && index === 0} />`)
       : html`<div class="bd-dim-note">${NOT_RUN_MESSAGE}</div>`}</div>
   </div>`;
@@ -104,7 +103,7 @@ export function openAgentDialog({ feature, step, focus = null }) {
     ? { type: 'agent', agent_id: newestRun.agent_id, turn: newestRun.turn }
     : { type: 'general', agent_id: null, turn: null };
   return openBigDialog({
-    badge: 'AGENT', badgeColor: BADGE_COLOR, title: html`${agentName} @ <${FeatureLabel} slug=${feature} />`,
+    badge: 'Agent', badgeColor: BADGE_INFO, title: html`${agentName} @ <${FeatureLabel} slug=${feature} />`,
     body: () => html`<${AgentBody} feature=${feature} step=${step} focus=${focus} />`,
     chat: {
       title: 'Ask ' + agentName, placeholder: 'Ask something about this run…', scope,

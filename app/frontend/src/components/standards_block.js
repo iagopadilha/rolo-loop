@@ -6,7 +6,7 @@
 import { html, useState, useEffect } from '../util/preact.js';
 import { toast } from './toast.js';
 
-export const STANDARDS_HINT = "Bind a slot to your company's skill; empty = generic defaults.";
+const STANDARDS_HINT = "Bind a slot to your company's skill; empty = generic defaults.";
 const DEFAULT_SLOTS = ['git', 'backend', 'frontend', 'app-map', 'observability'];
 const arrayOf = (value) => (Array.isArray(value) ? value : []);
 const clean = (values) => Object.fromEntries(Object.entries(values).map(([slot, value]) => [slot, String(value || '').trim()]).filter(([, value]) => value));

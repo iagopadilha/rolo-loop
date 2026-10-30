@@ -23,7 +23,7 @@ const apiOf = (store) => store.client || ctx.api;
 const errorText = (error) => (error && error.message) || 'request failed';
 
 /** True while something is still moving: the AI validation, the map queue (or its system map) or a map job of a row. */
-export function isSubprojectsBusy(data) {
+function isSubprojectsBusy(data) {
   if (!data) return false;
   const job = data.validation_job;
   if (job && job.state === 'running') return true;
@@ -108,7 +108,7 @@ const slashed = (path) => String(path || '').replace(/\\/g, '/').replace(/\/+$/,
 /** Root of the repo this table is about: the repo given by the dialog (secondary) or the project's own repo (state.project_ref.repo_path). */
 const repositoryRoot = (store) => slashed(store.rootPath || (!store.key && ctx.state && ((ctx.state.project_ref && ctx.state.project_ref.repo_path) || ctx.state.repo)) || '');
 /** '' = the root itself, null = outside the root (or root unknown). */
-export function relativeToRoot(picked, root) {
+function relativeToRoot(picked, root) {
   const folder = slashed(picked), base = slashed(root);
   if (!base) return null;
   if (folder.toLowerCase() === base.toLowerCase()) return '';

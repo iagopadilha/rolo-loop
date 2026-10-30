@@ -4,9 +4,9 @@
 const DEFAULT_TIMEOUT_MS = 8000;
 const WRITE_TIMEOUT_MS = 120000; // POST/PUT may spawn a subprocess (check, relaunch, folder dialog)
 export const POLLING_INTERVAL_MS = 2000;
-export const RECONNECT_INTERVAL_MS = 5000;
+const RECONNECT_INTERVAL_MS = 5000;
 
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(message, status, body) {
     super(message);
     this.name = 'ApiError';
@@ -16,7 +16,7 @@ export class ApiError extends Error {
 }
 
 /** Token injected into the page by the server; ignores the raw "__MONITOR_TOKEN__" placeholder. */
-export function getToken() {
+function getToken() {
   for (const m of document.querySelectorAll('meta[name="monitor-token"]')) {
     const c = m.getAttribute('content') || '';
     if (c && !c.startsWith('__')) return c;
@@ -25,7 +25,7 @@ export function getToken() {
 }
 
 /** 409 code:"planning_required" (the project is still in planning mode): one plain message for every caller. */
-export const PLANNING_REQUIRED_MESSAGE = 'This project is still being planned: finish the plan and approve the roadmap on the planning screen first.';
+const PLANNING_REQUIRED_MESSAGE = 'This project is still being planned: finish the plan and approve the roadmap on the planning screen first.';
 
 async function readJson(res) { try { return await res.json(); } catch (_) { return null; } }
 

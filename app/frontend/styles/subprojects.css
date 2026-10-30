@@ -52,7 +52,7 @@
 .sp-inst-step.current{color:var(--text);font-weight:600;}
 .sp-inst-step.current .sp-inst-n{border-color:var(--amber);color:var(--amber);}
 .sp-inst-step.done{color:var(--text2);}
-.sp-inst-step.done .sp-inst-n{border-color:var(--green-line);background:var(--green-bg);color:var(--green-soft);}
+.sp-inst-step.done .sp-inst-n{border-color:var(--green-line);background:var(--green-bg);}
 .sp-inst-d{margin:0;font-size:13px;line-height:1.5;color:var(--text2);}
 .sp-inst-body{display:flex;flex-direction:column;gap:10px;min-width:0;}
 .sp-inst-tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}

@@ -14,7 +14,7 @@ const CHAT_GIVE_UP_MS = 200000;
 // scope key (JSON of the scope) -> { thread, messages, pending, error, lastText, listeners }
 const conversations = new Map();
 
-function conversationFor(scopeKey) {
+export function conversationFor(scopeKey) {
   let conversation = conversations.get(scopeKey);
   if (!conversation) {
     conversation = { thread: null, messages: [], pending: null, error: null, lastText: null, listeners: new Set() };
@@ -27,7 +27,7 @@ const notifyListeners = (conversation) => conversation.listeners.forEach((listen
 
 /** Sends one question and waits for the answer. Lives at module level so it survives the dialog being closed meanwhile.
  *  `restoreText(text)` (optional) runs when the POST itself fails: it puts the text back into the input if the user typed nothing new. */
-async function sendQuestion(conversation, scope, text, isRetry, restoreText) {
+export async function sendQuestion(conversation, scope, text, isRetry, restoreText) {
   if (conversation.pending) return;
   conversation.error = null;
   conversation.lastText = text;
@@ -109,7 +109,7 @@ export function ChatColumn({ chat }) {
 
   return html`<aside class="bd-chat" aria-label="Chat">
     <div class="bd-chat-head">
-      <div class="bd-label">CHAT</div>
+      <div class="bd-label">Chat</div>
       <div class="bd-chat-title">${chat.title}</div>
     </div>
     <div class="bd-chat-list" role="log" aria-live="polite" ref=${listRef}>

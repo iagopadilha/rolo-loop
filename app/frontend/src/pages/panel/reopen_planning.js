@@ -3,7 +3,7 @@
    - POST planning/reopen {confirm_remove_worktrees} does it; 409 loop_running / needs_confirm are shown, never guessed.
    The back end decides everything; this dialog only shows it. */
 import { html } from '../../util/preact.js';
-import { list, txt } from '../../util/format.js';
+import { list, txt, maskHome } from '../../util/format.js';
 import { toast } from '../../components/toast.js';
 import { openDialog } from '../../components/dialog.js';
 import { ctx } from './context.js';
@@ -32,7 +32,7 @@ export function openReopenPlanning() {
       ${blocked() ? html`<div class="nl-box nl-warn" role="alert">The loop is running: stop the loop first.</div>` : null}
       ${trees().length ? html`<ul class="ws-dlg-list ro-list" aria-label="Worktrees that will be removed">${trees().map((w, i) => html`<li key=${i} class="ro-item">
         <b class="mono">${txt(w.repo)}</b>${w.branch ? html` <span class="mono dim">${w.branch}</span>` : null}
-        <div class="mono dim ro-path">${txt(w.path)}</div>
+        <div class="mono dim ro-path">${maskHome(txt(w.path))}</div>
         ${reasons(w).map((t, j) => html`<div key=${j} class="ws-dlg-warn ro-warn">${t}</div>`)}
         ${w.unpushed ? html`<div class="ro-warn dim">The branch is kept so the commits are not lost.</div>` : null}</li>`)}</ul>`
         : html`<div class="hint">No worktree exists: nothing will be removed.</div>`}

@@ -290,7 +290,17 @@ mod tests {
     #[test]
     fn a_bare_install_reports_what_is_missing_without_failing() {
         let dir = tempfile::tempdir().unwrap();
-        let app = App::for_tests(dir.path());
+        // A bare install: the repo root is the empty temp folder, so a `plugin/` folder (and a guard.exe built or copied into it) of the
+        // checkout the tests run from is never found. Without this the result depends on where `target/` lives.
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let env = cfg::Env::from_pairs([
+            ("LOOP_DATA_DIR", data.to_str().unwrap()),
+            ("LOOP_CLAUDE_HOME", data.to_str().unwrap()),
+            ("LOOP_TOOLKIT_SIBLING", "off"),
+            ("LOOP_REPO_ROOT", dir.path().to_str().unwrap()),
+        ]);
+        let app = App::new(&env, &crate::config::Overrides::default(), std::sync::Arc::new(crate::infrastructure::process_runner::SystemProcesses));
         let report = app.diagnostics().build_diagnostics(&[]);
         assert_eq!(report["toolkit"]["found"], false);
         assert_eq!(report["guard"]["found"], false);

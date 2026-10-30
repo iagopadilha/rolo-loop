@@ -1,5 +1,4 @@
 /* Copy to the clipboard, with a fallback (textarea + execCommand) and a toast. */
-import { html } from '../util/preact.js';
 import { toast } from './toast.js';
 
 export async function copyText(text, okMessage = 'Copied.') {
@@ -20,12 +19,3 @@ export async function copyText(text, okMessage = 'Copied.') {
   }
 }
 
-/** Button that copies `text` (children = label). */
-export function CopyButton({ text, okMessage, class: cls = 'btn btn-sm', children = 'Copy', ...rest }) {
-  return html`<button type="button" class=${cls} ...${rest} onClick=${() => copyText(text, okMessage)}>${children}</button>`;
-}
-
-/** <pre> block with a Copy button next to it. */
-export function CopyBlock({ text, label = 'Copy', cls = 'cmd' }) {
-  return html`<div class="cmd-row"><pre class=${cls}>${text}</pre><${CopyButton} text=${text}>${label}<//></div>`;
-}

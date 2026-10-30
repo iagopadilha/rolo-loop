@@ -1,27 +1,25 @@
-/* Dependencies dialog: UML component diagram of the whole roadmap (a global view, no chat).
-   «wave» packages group the features of a wave in a column; each «feature» box shows stage, wave and status at the selected
-   turn (dashed border = not dispatched yet); a dashed «use» arrow with an open head goes from the dependent feature to the
-   feature it depends on. Mouse wheel scrolls, Ctrl + wheel zooms at the cursor, dragging the background pans, dragging a
-   box moves the feature and dragging a «wave» tab moves the whole package. The camera is clamped so the diagram can never be
-   panned out of view (smaller than the viewport on an axis = centered there); the default view is fitted and centered, also
-   when the dialog is resized, until the user pans or zooms ("Fit" goes back to it). */
-import { html, useState, useEffect, useLayoutEffect, useRef } from '../../../util/preact.js';
-import { list } from '../../../util/format.js';
-import { openBigDialog } from '../../../components/big_dialog.js';
-import { featuresWithWaves, featureStatusAt, curN, FEATURE_COLOR } from '../pipeline_model.js';
-import { featureParts } from '../feature_label.js';
-import { clampCameraTo, fitCameraTo, sameCamera } from '../camera_clamp.js';
+/* Dependency diagram of the whole roadmap (the "Dependencies" view of the Features page).
+   Waves are columns; each feature is a small card (name, slug, state at the selected turn, how many features it needs); a dashed arrow
+   goes from a feature to the one it depends on. Wheel scrolls, Ctrl + wheel zooms at the cursor, dragging the background pans, dragging
+   a card moves the feature and dragging a wave label moves the whole column. The camera is clamped so the diagram can never be panned out of
+   view (smaller than the viewport on an axis = centered there); the default view is fitted and centered, also when the page is resized,
+   until the user pans or zooms ("Fit" goes back to it). */
+import { html, useState, useEffect, useLayoutEffect, useRef } from '../../util/preact.js';
+import { list } from '../../util/format.js';
+import { featuresWithWaves, featureStatusAt, curN } from './pipeline_model.js';
+import { featureParts } from './feature_label.js';
+import { State, EmptyState } from '../../components/page.js';
+import { clampCameraTo, fitCameraTo, sameCamera } from './camera_clamp.js';
 
-const BADGE_COLOR = '#7fb2ff';
-const NEUTRAL_COLOR = '#6b727c';
-const BOX_WIDTH = 250, BOX_HEIGHT = 136;
-const COLUMN_STEP = 310, ROW_STEP = 166; // distance between wave columns / feature rows
+const BOX_WIDTH = 230, BOX_HEIGHT = 82;
+const COLUMN_STEP = 290, ROW_STEP = 108; // distance between wave columns / feature rows
 const ORIGIN_X = 20, ORIGIN_Y = 44;
-const PACKAGE_MARGIN = 10, PACKAGE_TAB_HEIGHT = 15, PACKAGE_TAB_RISE = 26;
+const PACKAGE_MARGIN = 12, PACKAGE_TAB_HEIGHT = 18, PACKAGE_TAB_RISE = 28;
 const EDGE_CURVE = 30;
 const MIN_ZOOM = 0.3, MAX_ZOOM = 2.5, WHEEL_ZOOM_STEP = 1.1, BUTTON_ZOOM_STEP = 1.2, FIT_MAX_ZOOM = 1.2, FIT_PADDING = 48;
 const DRAG_THRESHOLD_PX = 3;
 const NOT_DISPATCHED = 'NOT DISPATCHED';
+const STATUS_KIND = { DONE: 'ok', RUNNING: 'live', QUARANTINE: 'bad', ATTENTION: 'wait', 'IN PROGRESS': 'wait' };
 
 const clampZoom = (zoom) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 
@@ -49,8 +47,7 @@ function buildLayout(features, offsets) {
   const edges = features.flatMap((feature) => list(feature.deps).filter((dependencyId) => positions[dependencyId]).map((dependencyId) => {
     const dependent = positions[feature.id], dependency = positions[dependencyId];
     const startX = dependent.x, startY = dependent.y + BOX_HEIGHT / 2, endX = dependency.x + BOX_WIDTH, endY = dependency.y + BOX_HEIGHT / 2;
-    return { key: feature.id + '>' + dependencyId, path: `M${startX},${startY} C${startX - EDGE_CURVE},${startY} ${endX + EDGE_CURVE},${endY} ${endX + 2},${endY}`,
-      labelX: (startX + endX) / 2, labelY: (startY + endY) / 2 - 6 };
+    return { key: feature.id + '>' + dependencyId, path: `M${startX},${startY} C${startX - EDGE_CURVE},${startY} ${endX + EDGE_CURVE},${endY} ${endX + 2},${endY}` };
   }));
   const bounds = packages.length
     ? { x0: Math.min(...packages.map((p) => p.left)), y0: Math.min(...packages.map((p) => p.top)),
@@ -59,7 +56,7 @@ function buildLayout(features, offsets) {
   return { positions, packages, edges, bounds };
 }
 
-function DepsBody() {
+export function DependencyDiagram() {
   const features = list(featuresWithWaves());
   const turn = curN();
   const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 });
@@ -159,47 +156,36 @@ function DepsBody() {
 
   const resetLayout = () => { setOffsets({}); fitCamera({}); };
 
-  if (!features.length) return html`<div class="bd-empty">No features in the roadmap yet.</div>`;
-  return html`<div class="bd-deps">
-    <p class="bd-deps-text">${turn != null ? html`State at <span class="bd-turn">${'T' + turn}</span>. ` : 'State at the latest turn. '}${'The dashed «use» arrow points to the feature it depends on. The wheel scrolls and Ctrl + wheel zooms. Drag a «feature» or a «wave» tab to rearrange.'}</p>
-    <div class="bd-deps-viewport" ref=${viewportRef} style=${{ cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown=${onViewportMouseDown}>
-      <div class="bd-deps-canvas" style=${{ transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.z})` }}>
+  if (!features.length) return html`<${EmptyState} text="No feature in the roadmap yet." />`;
+  return html`<div class="dd">
+    <p class="dd-text">${turn != null ? 'State at turn ' + turn + '. ' : 'State at the latest turn. '}Dashed arrows point to the feature it depends on. Drag a card or a wave label to rearrange.</p>
+    <div class="dd-viewport" ref=${viewportRef} style=${{ cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown=${onViewportMouseDown}>
+      <div class="dd-canvas" style=${{ transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.z})` }}>
         ${layout.packages.map((pack) => html`<div key=${pack.wave}>
-          <div class="bd-uml-package" style=${{ left: pack.left + 'px', top: pack.bodyTop + 'px', width: pack.width + 'px', height: pack.height + 'px' }}></div>
-          <div class="bd-uml-tab" data-uml=${'wave:' + pack.wave} title="Drag to move the whole package" style=${{ left: pack.left + 'px', top: pack.top + 'px', height: PACKAGE_TAB_HEIGHT + 'px' }}>${'«wave» ' + pack.wave}</div>
+          <div class="dd-package" style=${{ left: pack.left + 'px', top: pack.bodyTop + 'px', width: pack.width + 'px', height: pack.height + 'px' }}></div>
+          <div class="dd-tab" data-uml=${'wave:' + pack.wave} title="Drag to move the whole wave" style=${{ left: pack.left + 'px', top: pack.top + 'px', height: PACKAGE_TAB_HEIGHT + 'px' }}>${'Wave ' + pack.wave}</div>
         </div>`)}
-        <svg class="bd-uml-edges" width="1" height="1" aria-hidden="true">
-          <defs><marker id="bd-uml-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#8b929c" stroke-width="1.4"></path></marker></defs>
-          ${layout.edges.map((edge) => html`<g key=${edge.key}>
-            <path d=${edge.path} fill="none" stroke="#8b929c" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#bd-uml-open)"></path>
-            <text x=${edge.labelX} y=${edge.labelY} fill="#8b929c" font-size="10" font-family="IBM Plex Mono, monospace" text-anchor="middle">«use»</text>
-          </g>`)}
+        <svg class="dd-edges" width="1" height="1" aria-hidden="true">
+          <defs><marker id="dd-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="var(--fg2)" stroke-width="1.4"></path></marker></defs>
+          ${layout.edges.map((edge) => html`<path key=${edge.key} d=${edge.path} fill="none" stroke="var(--fg2)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#dd-open)"></path>`)}
         </svg>
         ${features.map((feature) => {
-          const status = featureStatusAt(feature.id, turn) || NOT_DISPATCHED, color = FEATURE_COLOR[status] || NEUTRAL_COLOR, position = layout.positions[feature.id];
+          const status = featureStatusAt(feature.id, turn) || NOT_DISPATCHED, position = layout.positions[feature.id];
           const dependencyCount = list(feature.deps).length, parts = featureParts(feature.id);
-          return html`<div key=${feature.id} class="bd-uml-feature" data-uml=${feature.id}
-            style=${{ left: position.x + 'px', top: position.y + 'px', width: BOX_WIDTH + 'px', height: BOX_HEIGHT + 'px', borderColor: color, borderStyle: status === NOT_DISPATCHED ? 'dashed' : 'solid' }}>
-            <div class="bd-uml-feature-head"><div class="bd-uml-stereotype">«feature»</div><div class="bd-uml-name" title=${parts.tip}>${parts.name}</div>${parts.same ? null : html`<div class="bd-uml-slug">${parts.slug}</div>`}</div>
-            <div class="bd-uml-attributes"><div>${'stage: ' + (feature.stage != null ? feature.stage : '—')}</div><div>${'wave: ' + (feature.wave != null ? feature.wave : '—')}</div>
-              <div>status: <span style=${{ color }}>${status.toLowerCase()}</span></div></div>
-            <div class="bd-uml-foot">${dependencyCount ? '+ depends on ' + dependencyCount : '+ no dependencies'}</div>
+          return html`<div key=${feature.id} class=${'dd-feature' + (status === NOT_DISPATCHED ? ' is-idle' : '')} data-uml=${feature.id} title=${parts.tip}
+            style=${{ left: position.x + 'px', top: position.y + 'px', width: BOX_WIDTH + 'px', height: BOX_HEIGHT + 'px' }}>
+            <div class="dd-name">${parts.name}</div>
+            <div class="dd-meta"><${State} kind=${STATUS_KIND[status] || 'idle'}>${status === NOT_DISPATCHED ? 'not started' : status.toLowerCase()}<//><span>${dependencyCount ? 'needs ' + dependencyCount : 'no dependencies'}</span></div>
           </div>`;
         })}
       </div>
-      <div class="bd-deps-toolbar" onMouseDown=${(event) => event.stopPropagation()}>
-        <span class="bd-deps-hints"><kbd>wheel</kbd>scroll<kbd>Ctrl + wheel</kbd>zoom<kbd>drag</kbd>move</span>
-        <button type="button" class="bd-icon-button" aria-label="Zoom out" onClick=${() => zoomAroundCenter(1 / BUTTON_ZOOM_STEP)}>−</button>
-        <span class="bd-zoom-value">${Math.round(camera.z * 100) + '%'}</span>
-        <button type="button" class="bd-icon-button" aria-label="Zoom in" onClick=${() => zoomAroundCenter(BUTTON_ZOOM_STEP)}>+</button>
-        <button type="button" class="bd-button bd-button-small" onClick=${() => fitCamera(offsets)}>Fit</button>
-        <button type="button" class="bd-button bd-button-small bd-button-quiet" onClick=${resetLayout}>Reset layout</button>
+      <div class="dd-toolbar" onMouseDown=${(event) => event.stopPropagation()}>
+        <button type="button" class="dd-btn" aria-label="Zoom out" onClick=${() => zoomAroundCenter(1 / BUTTON_ZOOM_STEP)}>−</button>
+        <span class="dd-zoom">${Math.round(camera.z * 100) + '%'}</span>
+        <button type="button" class="dd-btn" aria-label="Zoom in" onClick=${() => zoomAroundCenter(BUTTON_ZOOM_STEP)}>+</button>
+        <button type="button" class="dd-btn dd-btn-text" onClick=${() => fitCamera(offsets)}>Fit</button>
+        <button type="button" class="dd-btn dd-btn-text" onClick=${resetLayout}>Reset</button>
       </div>
     </div>
   </div>`;
-}
-
-/** Opens the dependency diagram of the whole roadmap (global view: no chat column). */
-export function openDepsDialog() {
-  return openBigDialog({ badge: 'GLOBAL', badgeColor: BADGE_COLOR, title: 'Feature dependencies', body: () => html`<${DepsBody} />`, chat: null });
 }

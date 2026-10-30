@@ -1,8 +1,5 @@
 /* Plain-language explanation of each file the loop keeps in .specs (static table; no value of any file is read here).
-   explainFile(path) -> { what, purpose, changes } or null. Used by the Files tab (list + reader) and by "Roadmap & specs". */
-
-import { html } from '../../util/preact.js';
-import { fmtRelative } from '../../util/format.js';
+   explainFile(path) -> { what, purpose, changes } or null. Used by the Files page reader. */
 
 const BY_NAME = {
   'PROJECT.md': ['The vision of the project.', 'Says what is being built, for whom, and the limits of the idea. Every agent reads it first.', 'You and the planning chat. Rarely, once the plan is approved.'],
@@ -38,31 +35,3 @@ export function explainFile(path) {
   const hit = BY_NAME[name] || BY_NAME[Object.keys(BY_NAME).find((k) => k.toLowerCase() === String(name).toLowerCase())];
   return hit ? toExplanation(hit) : null;
 }
-
-const STATUS_TEXT = {
-  pending: 'Waiting its turn: nothing was written yet.',
-  speccing: 'The AI is writing the specification.',
-  specced: 'The specification is written and waits for the review gate.',
-  approved: 'The specification passed the gate; it waits to be built.',
-  building: 'The AI is writing the code.',
-  verified: 'Built and checked: tests passed.',
-  blocked: 'Stopped: something needs your attention.',
-};
-export const statusMeaning = (status) => STATUS_TEXT[status] || 'Status not known by the panel.';
-
-export const KIND_TEXT = { back: 'back end', front: 'front end', generic: 'infra / script / docs' };
-
-/** The three short lines (what / for / who changes) of a file, with its last change when `file.modified_at` is known. */
-export function FileNote({ path, file }) {
-  const e = explainFile(path);
-  if (!e) return null;
-  return html`<div class="sv-note" role="note"><div><b>What it is</b> ${e.what}</div><div><b>What it is for</b> ${e.purpose}</div>
-    <div><b>Who changes it</b> ${e.changes}${file && file.modified_at ? html` <span class="dim-mono">· last change ${fmtRelative(file.modified_at)}</span>` : null}</div></div>`;
-}
-
-/** Files that live outside .specs (not in the tree) and are worth knowing; shown in the Files guide. */
-export const OUTSIDE_SPECS = [
-  ['docs/codebase/*.md', 'Map of the code (stack, architecture, conventions, structure, tests, integrations, risks). Written by the codebase mapper; the code wins if they disagree.'],
-  ['.env.test', 'Values used only by tests. SECRET: the panel never shows values, only the variable names.'],
-  ['CLAUDE.md', 'Instructions every Claude session reads at the start (rules and the codebase map index).'],
-];

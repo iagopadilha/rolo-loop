@@ -1,26 +1,25 @@
-/* Problems of the loop with ONE layout everywhere: "Errors" (what really went wrong: loop stops, failed turns, quarantines,
-   launch problems and the FAIL/BLOCKED steps of the agents) apart from "Guard blocks" (the guard stopped an agent from
-   breaking a rule: it worked, nothing to fix). The GLOBAL zone shows every turn; the LOOP zone shows only the selected turn.
-   Data: the error center (GET errors, store ui.errors of errors.js) and the turn events of the pipeline model. */
+/* Problems of the loop on the Errors page: "Errors" (what really went wrong: loop stops, failed turns, quarantines, launch problems and the
+   FAIL/BLOCKED steps of the agents) apart from "Guard blocks" (the guard stopped an agent from breaking a rule: it worked, nothing to fix).
+   The page shows every turn or only the selected one. Data: the error center (GET errors, store ui.errors of errors.js) and the turn events
+   of the pipeline model. Built from the page primitives (components/page.js); a row opens the error dialog. */
 import { html } from '../../util/preact.js';
-import { txt, list } from '../../util/format.js';
+import { txt, list, fmtRelative, ERROR_KIND_LABEL } from '../../util/format.js';
+import { List, Row, Section, State, EmptyState } from '../../components/page.js';
+import { StatusDot } from '../../components/shell.js';
 import { ui } from './context.js';
-import { renderAll } from '../project_panel.js';
 import { loadErrors } from './errors.js';
-import { steps, turnFailures, STEP_COLOR } from './pipeline_model.js';
+import { steps, turnFailures } from './pipeline_model.js';
 import { openErrorDialog, openAgentDialog } from './dialogs/index.js';
+import { formatTurnRanges } from './dialogs/error_dialog.js';
 import { FeatureLabel } from './feature_label.js';
 
-const SEVERITY_COLOR = { error: '#f06a5e', warning: '#f5b82e', info: '#6b727c' };
-const NEUTRAL_COLOR = '#6b727c';
-const KIND_LABEL = { loop: 'loop stopped', turn: 'turn', guard: 'guard', feature: 'feature', launch: 'launch', step: 'agent step' };
 const GUARD_NOTE = 'The guard stopped an agent from doing something the loop does not allow. It worked: nothing was changed. Many blocks of one rule mean an agent kept retrying.';
-
-const segment = { global: 'errors', turn: 'errors' }; // open segment per scope ('errors' | 'guard'), kept while the panel lives
+const COLS = 'minmax(0,1fr) 150px 110px 20px', COLS_NARROW = 'minmax(0,1fr) 20px';
+const DOT_OF_SEVERITY = { error: 'bad', warning: 'wait', info: 'idle' };
 
 const isGuard = (item) => item.kind === 'guard';
 /** Turns an error-center item happened in: `turns` when the server sends it, else the single `turn`. */
-export function itemTurns(item) {
+function itemTurns(item) {
   const turns = list(item.turns).filter((n) => Number.isFinite(n));
   return turns.length ? turns : Number.isFinite(item.turn) ? [item.turn] : [];
 }
@@ -32,9 +31,9 @@ function countInTurn(item, n) {
   return turns.length === 1 && turns[0] === n && Number.isFinite(item.count) ? item.count : null;
 }
 
-/** { errors, guard, loaded } for the whole loop (turn null) or for one turn: errors = error-center problems (+ the failed
-    agent steps of the turn), guard = guard items, newest-relevant first as the server sorts them. */
-export function problemsAt(turn) {
+/** { errors, guard, loaded } for the whole loop (turn null) or for one turn: errors = error-center problems (+ the failed agent steps of the
+    turn), guard = guard items, as the server sorts them. */
+function problemsAt(turn) {
   const store = ui.errors, items = list(store.data && store.data.items), loaded = !!store.data;
   const inTurn = (item) => turn == null || itemTurns(item).includes(turn);
   const errors = items.filter((item) => !isGuard(item) && inTurn(item)).map((item) => ({ source: 'center', item }));
@@ -42,57 +41,48 @@ export function problemsAt(turn) {
   const guard = items.filter((item) => isGuard(item) && inTurn(item)).map((item) => ({ source: 'center', item })); // the "older history" line has no turn
   return { errors, guard, loaded };
 }
-/** Count for a tab label: real errors only (guard blocks are never counted as problems). */
-export const errorCountAt = (turn) => problemsAt(turn).errors.length;
 
-function TurnChips({ item }) {
-  const turns = itemTurns(item);
-  if (!turns.length) return html`<span class="pb-chip mono">${KIND_LABEL[item.kind] || txt(item.kind)}</span>`;
-  const shown = turns.length > 3 ? [turns[0], '…', turns[turns.length - 1]] : turns;
-  return html`<span class="pb-chips">${shown.map((n, index) => html`<span class="pb-chip mono" key=${index}>${n === '…' ? '…' : 'T' + n}</span>`)}</span>`;
-}
+const Head = () => html`<span class="ls-h">Problem</span><span class="ls-h ls-opt">Where</span><span class="ls-h ls-opt ls-end">When</span><span></span>`;
 
 function CenterRow({ item, turn }) {
-  const color = SEVERITY_COLOR[item.severity] || NEUTRAL_COLOR, times = turn == null ? item.count : countInTurn(item, turn);
+  const times = turn == null ? item.count : countInTurn(item, turn), turns = itemTurns(item);
   const title = isGuard(item) && item.rule ? `${item.rule}${item.profile ? ' (' + item.profile + ')' : ''}` : txt(item.title);
-  return html`<button type="button" class="pb-row" onClick=${() => openErrorDialog(item)} title="open what happened and ask the AI">
-    <span class="pb-bar" style=${{ background: color }}></span>
-    <span class="pb-main"><span class="pb-top"><span class="pb-kind mono">${KIND_LABEL[item.kind] || txt(item.kind)}</span><${TurnChips} item=${item} /></span>
-      <span class="pb-title">${title}</span>
-      ${isGuard(item) && (item.rule === 'egress-host' || item.rule === 'egress-runtime') && item.detail ? html`<span class="pb-out mono" title=${item.detail}>${item.detail}</span>` : null}
-      ${isGuard(item) && list(item.attempts).length ? html`<span class="pb-attempt mono" title=${list(item.attempts).join('\n')}>${'tried: ' + list(item.attempts)[0]}</span>` : null}</span>
-    ${Number.isFinite(times) && times > 1 ? html`<span class="pb-times mono">${times + '×'}</span>` : null}
-  </button>`;
+  const where = turns.length ? formatTurnRanges(turns) : isGuard(item) && item.profile ? item.profile : ERROR_KIND_LABEL[item.kind] || txt(item.kind);
+  const sub = isGuard(item) ? (list(item.attempts).length ? 'tried: ' + list(item.attempts)[0] : item.detail) : ERROR_KIND_LABEL[item.kind] || '';
+  return html`<${Row} onOpen=${() => openErrorDialog(item)} title="Open what happened and ask the AI">
+    <span class="ls-main"><span class="ls-line"><${StatusDot} kind=${DOT_OF_SEVERITY[item.severity] || 'idle'} />
+      <span class="ls-title">${title}</span>${Number.isFinite(times) && times > 1 ? html`<span class="ls-sub">${times + '×'}</span>` : null}</span>
+      ${sub ? html`<span class="ls-sub" title=${sub}>${sub}</span>` : null}</span>
+    <span class="ls-meta ls-opt">${where}</span><span class="ls-meta ls-opt ls-end">${item.when ? fmtRelative(item.when) : '—'}</span><//>`;
 }
 
 function StepRow({ event }) {
   const agent = event.agent || (steps()[event.step] && steps()[event.step].agent) || 'agent';
-  return html`<button type="button" class="pb-row" onClick=${() => { if (event.feature && event.step >= 0) openAgentDialog({ feature: event.feature, step: event.step }); }} title="open the agent: its runs and the chat">
-    <span class="pb-bar" style=${{ background: STEP_COLOR[event.status] || STEP_COLOR.FAIL }}></span>
-    <span class="pb-main"><span class="pb-top"><span class="pb-kind mono">${KIND_LABEL.step}</span><span class="pb-status mono" style=${{ color: STEP_COLOR[event.status] || STEP_COLOR.FAIL }}>${event.status}</span></span>
-      <span class="pb-title"><span class="mono">${agent}</span>${event.feature ? html` @ <${FeatureLabel} slug=${event.feature} block=${true} />` : null}</span>
-      ${event.out ? html`<span class="pb-out">${event.out}</span>` : null}</span>
-  </button>`;
+  const open = event.feature && event.step >= 0 ? () => openAgentDialog({ feature: event.feature, step: event.step }) : null;
+  return html`<${Row} onOpen=${open} title="Open the agent: its runs and the chat">
+    <span class="ls-main"><span class="ls-line"><${StatusDot} kind="bad" />
+      <span class="ls-title">${agent}${event.feature ? html` · <${FeatureLabel} slug=${event.feature} />` : null}</span></span>
+      ${event.out ? html`<span class="ls-sub" title=${event.out}>${event.out}</span>` : null}</span>
+    <span class="ls-meta ls-opt">${ERROR_KIND_LABEL.step}</span><span class="ls-meta ls-opt ls-end"><${State} kind="bad">${String(event.status).toLowerCase()}<//></span><//>`;
 }
 
-/** The problems with the Errors | Guard blocks switch. `turn` = null for the whole loop (GLOBAL), a number for one turn (LOOP). */
+function Rows({ entries, turn, label }) {
+  return html`<${List} label=${label} cols=${COLS} narrow=${COLS_NARROW} head=${html`<${Head} />`}>
+    ${entries.map((entry, index) => entry.source === 'step' ? html`<${StepRow} key=${'s' + index} event=${entry.event} />` : html`<${CenterRow} key=${entry.item.id} item=${entry.item} turn=${turn} />`)}<//>`;
+}
+
+/** The problems of the whole loop (turn null) or of one turn. */
 export function ProblemsView({ turn = null }) {
-  const scope = turn == null ? 'global' : 'turn', store = ui.errors;
-  const { errors, guard, loaded } = problemsAt(turn);
-  if (!loaded) return html`<div class="empty-note">${store.loading || store.key === undefined ? 'Loading the errors…' : 'Errors unavailable: ' + (store.err || 'no response')}</div>`;
-  const open = segment[scope], pick = (key) => { segment[scope] = key; renderAll(); };
+  const store = ui.errors, { errors, guard, loaded } = problemsAt(turn);
+  if (!loaded) return html`<${EmptyState} text=${store.loading || store.key === undefined ? 'Loading the errors…' : 'Errors unavailable: ' + (store.err || 'no response')}
+    action=${store.loading ? null : { label: 'Try again', onClick: () => loadErrors(true) }} />`;
   const guardTimes = guard.reduce((sum, { item }) => sum + (turn == null ? (item.count || 0) : (countInTurn(item, turn) || 0)), 0);
-  return html`<div class="pb">
-    <div class="pb-seg" role="group" aria-label="Kind of problem">
-      <button type="button" class=${'pb-seg-btn' + (open === 'errors' ? ' is-on is-error' : '')} aria-pressed=${String(open === 'errors')} onClick=${() => pick('errors')}>${`Errors · ${errors.length}`}</button>
-      <button type="button" class=${'pb-seg-btn' + (open === 'guard' ? ' is-on is-guard' : '')} aria-pressed=${String(open === 'guard')} onClick=${() => pick('guard')}>${`Guard blocks · ${guardTimes || guard.length}`}</button>
-    </div>
-    <div class="pb-scope mono">${turn == null ? 'every turn of the loop' : 'only turn ' + turn}</div>
-    ${open === 'errors'
-      ? (errors.length ? errors.map((entry, index) => entry.source === 'step' ? html`<${StepRow} key=${'s' + index} event=${entry.event} />` : html`<${CenterRow} key=${entry.item.id} item=${entry.item} turn=${turn} />`)
-        : html`<div class="empty-note">${turn == null ? 'No errors. The loop only stops and notifies you for a real problem.' : 'No error in this turn.'}</div>`)
-      : html`<div class="pb-note">${GUARD_NOTE}</div>
-        ${guard.length ? guard.map(({ item }) => html`<${CenterRow} key=${item.id} item=${item} turn=${turn} />`) : html`<div class="empty-note">${turn == null ? 'No guard block.' : 'No guard block in this turn.'}</div>`}`}
-    ${turn == null ? html`<button type="button" class="btn btn-sm btn-ghost pb-refresh" onClick=${() => loadErrors(true)}>refresh</button>` : null}
+  return html`<div class="pg-stack">
+    <${Section} title="Errors" note=${errors.length ? String(errors.length) : null}>
+      ${errors.length ? html`<${Rows} entries=${errors} turn=${turn} label="Errors" />`
+        : html`<${EmptyState} text=${turn == null ? 'No errors. The loop only stops and notifies you for a real problem.' : 'No error in this turn.'} />`}
+    <//>
+    ${guard.length ? html`<${Section} title="Guard blocks" note=${`${guardTimes || guard.length} · not problems`}>
+      <p class="pg-note">${GUARD_NOTE}</p><${Rows} entries=${guard} turn=${turn} label="Guard blocks" /><//>` : null}
   </div>`;
 }

@@ -25,26 +25,3 @@ function addKids(el, kids) {
 /** Creates an SVG element: sv('path', {d, class}, ...children). */
 export const sv = (tag, props, ...kids) => { const el = document.createElementNS(SVGNS, tag); applyProps(el, props); addKids(el, kids); return el; };
 
-export function setStyle(el, k, v) { if (el.style[k] !== v) el.style[k] = v; }
-
-/** Binds arrows/Home/End to a role=tablist (roving focus between the role=tab elements). */
-export function bindTabKeys(tablist) {
-  tablist.addEventListener('keydown', (e) => {
-    const tabs = [...tablist.querySelectorAll('[role="tab"]:not([disabled]):not([hidden])')];
-    const i = tabs.indexOf(document.activeElement);
-    if (i < 0) return;
-    let j = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = (i + 1) % tabs.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = (i - 1 + tabs.length) % tabs.length;
-    else if (e.key === 'Home') j = 0;
-    else if (e.key === 'End') j = tabs.length - 1;
-    if (j == null) return;
-    e.preventDefault();
-    const id = tabs[j].id;
-    tabs[j].focus();
-    tabs[j].click();
-    // tabs that redraw on click: give the focus back by id
-    const fresh = id && document.getElementById(id);
-    if (fresh && fresh !== document.activeElement) fresh.focus();
-  });
-}

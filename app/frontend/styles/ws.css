@@ -1,10 +1,4 @@
-/* Workspace line (panel/workspace.js). Loaded after panel.css and roadmap.css. */
-.workspace-zone .ws-line .ws-head{display:flex;align-items:center;gap:10px;padding:6px 16px;min-height:38px;flex-wrap:wrap;}
-.workspace-zone .ws-line .ws-title{font:600 13px var(--sans);}
-.workspace-zone .ws-line .ws-sum{font-size:11px;color:var(--muted);}
-.workspace-zone .ws-line .ws-names{flex:0 1 auto;min-width:0;max-width:40ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text2);}
-.workspace-zone .ws-line .spacer{flex:1;}
-.ws-line .ws-chip.tone-warn{max-width:100%;}
+
 
 /* Workspace dialog (panel/workspace_dialog.js, WS-03) */
 .wsd{display:flex;flex-direction:column;gap:16px;}

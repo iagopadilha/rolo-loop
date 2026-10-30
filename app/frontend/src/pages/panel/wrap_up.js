@@ -2,7 +2,7 @@
    and the Finish dialog. The back end decides what is safe (GET wrap-up, POST wrap-up/finish); this module only shows it.
    Routes: GET wrap-up, POST wrap-up/finish {mode: safe|keep_worktree|remove_anyway, confirm_text?, accept_unreviewed?},
    GET follow-up, POST follow-up/send {text, decisions}, POST follow-up/run, GET decisions. */
-import { html, useState, useEffect, useCallback, useRef } from '../../util/preact.js';
+import { html, useState, useEffect, useCallback } from '../../util/preact.js';
 import { list, txt, cost, isNum, httpUrl } from '../../util/format.js';
 import { toast } from '../../components/toast.js';
 import { openDialog } from '../../components/dialog.js';

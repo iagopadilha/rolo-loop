@@ -5,7 +5,7 @@
    Unchecked = a single-repo project: only the primary repo and its copy list show. Never touches a folder on disk.
    Also the helpers that tell which repos a ROADMAP feature writes to (`paths=<repo>:<path>`), used by the roadmap review. */
 import { html, useState, useEffect, useRef } from '../util/preact.js';
-import { list, txt } from '../util/format.js';
+import { list, txt, maskHome } from '../util/format.js';
 import { appApi, requestJson } from '../api/api_client.js';
 import { toast } from '../components/toast.js';
 import { pickFolderNativeFirst } from '../components/folder_browser.js';
@@ -17,7 +17,7 @@ import { SubprojectsPanel, loadSubprojects } from './panel/subprojects.js';
 const READINESS_POLL_MS = 4000; // while a map job runs in some repo
 const WORKTREE_HELP = 'The loop never works in your folders. For each repository it creates its own separate folder (a git worktree) next to yours, on a new loop/<date> branch from the branch your folder is on now. Nothing is cloned or pushed.';
 const reposRoute =(id) => 'projects/' + encodeURIComponent(id) + '/repos';
-export const normPath = (p) => String(p == null ? '' : p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+const normPath = (p) => String(p == null ? '' : p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 const parentFolder = (p) => { const t = String(p || '').replace(/[\\/]+$/, ''); const k = Math.max(t.lastIndexOf('\\'), t.lastIndexOf('/')); return k > 0 ? t.slice(0, k) : ''; };
 const focusId = (id) => setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 0);
 const fmtSize = (n) => (typeof n === 'number' ? (n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B') : '');
@@ -43,7 +43,7 @@ export async function fetchCatalog() {
 
 // ---------- which repos a feature writes to ----------
 /** `paths=` text -> [{ repo, path }]; repo = '' when the entry has no prefix (= the primary repo). */
-export function parsePaths(text) {
+function parsePaths(text) {
   return String(text || '').split(',').map((s) => s.trim()).filter(Boolean).map((entry) => {
     const i = entry.indexOf(':');
     const drive = i === 1 && /^[A-Za-z]$/.test(entry[0]) && /[\\/]/.test(entry[2] || ''); // C:/x is a path, not a repo prefix
@@ -333,8 +333,8 @@ export function RepoManager({ projectId, locked = '', onChange }) {
           <button type="button" class="btn btn-sm btn-ghost" aria-expanded=${String(copyOpen === r.name)} aria-controls=${'rp-copy-' + r.name}
             onClick=${() => setCopyOpen(copyOpen === r.name ? null : r.name)}>${'Advanced: files and setup' + (isCopyConfigured(r) && list(r.copy).length ? ` (${r.copy.length})` : '')}</button>
         </div>
-        <div class="rp-path mono" title=${r.path}>${txt(r.path)}</div>
-        ${r.worktree_path ? html`<div class="rp-path rp-worktree mono" title=${r.worktree_path}>${'Worktree: ' + r.worktree_path}</div>` : null}
+        <div class="rp-path mono" title=${maskHome(r.path)}>${maskHome(txt(r.path))}</div>
+        ${r.worktree_path ? html`<div class="rp-path rp-worktree mono" title=${maskHome(r.worktree_path)}>${"Worktree: " + maskHome(r.worktree_path)}</div>` : null}
         ${data.multi && !r.primary && readyOf(r.name) ? html`<${RepoReadiness} projectId=${projectId} info=${readyOf(r.name)} repoPath=${r.path} locked=${lockMsg} onDone=${() => { load(); if (onChange) onChange(); }} />` : null}
         ${removing === r.name ? html`<div class="confirm-inline" role="group" aria-label=${'Confirm removing ' + r.name}>
           <span>Remove it from the project? No folder or worktree is deleted.</span>
@@ -352,7 +352,7 @@ export function RepoManager({ projectId, locked = '', onChange }) {
           <label class="rp-name mono" for=${'rp-cat-' + normPath(c.path)}>${c.name}</label>
           ${c.weak ? html`<span class="rp-tag mono" title="No docs/codebase in this repository: the catalog has little to say about it">not mapped</span>` : null}
         </div>
-        <div class="rp-path mono" title=${c.path}>${txt(c.path)}</div>
+        <div class="rp-path mono" title=${maskHome(c.path)}>${maskHome(txt(c.path))}</div>
         ${c.purpose ? html`<div class="rp-purpose">${c.purpose}</div>` : null}
       </li>`)}
     </ul>

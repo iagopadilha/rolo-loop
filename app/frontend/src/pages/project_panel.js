@@ -1,7 +1,6 @@
 /* Panel of ONE project (/p/<id>/): port of the loop monitor with URLs relative to the project (/p/<id>/api/...),
-   with a GLOBAL zone (trail, roadmap, dependencies, errors, .specs files) and a LOOP zone (turns, pipeline, inspector).
+   as one centre page chosen by the hash router (loop, features, feature, decisions, files, errors, settings).
    The whole page is one Preact tree (<Panel>, panel/app.js): handlers mutate ctx/ui and call renderAll(). */
-import { $, bindTabKeys } from '../util/dom.js';
 import { html, render } from '../util/preact.js';
 import { createProjectClient, createPolling } from '../api/api_client.js';
 import { toast } from '../components/toast.js';
@@ -12,7 +11,7 @@ import { updateTitle, cancelShutdown } from './panel/header.js';
 import { nlOnLoopRunning } from './panel/new_loop.js';
 import { fetchAgentLog } from './panel/inspector.js';
 import { loadErrors } from './panel/errors.js';
-import { initLayout } from './panel/layout.js';
+import { onRoute, setEscapeGuard } from './panel/router.js';
 import { maybeReloadPipeline } from './panel/pipeline_model.js';
 import { reloadProgress, maybeReloadProgress } from './panel/progress_trail.js';
 
@@ -82,10 +81,8 @@ export function startPanel(rootEl, projectId) {
   ctx.projectId = projectId;
   ctx.api = createProjectClient(projectId);
   renderAll();
-  // one-time setup on the DOM of the first render (the Panel never re-creates these elements)
-  const intentTabs = $('cp-seg'); // the tab strips of the zones are components that bind their own keys
-  if (intentTabs) bindTabKeys(intentTabs);
-  initLayout();
+  onRoute(() => renderAll()); // the hash router: a page change redraws the panel
+  setEscapeGuard(() => ui.confirmShutdown); // Esc cancels the shutdown question first, then goes back
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.confirmShutdown && !document.querySelector('dialog[open]')) cancelShutdown(); });
 
   polling = createPolling({

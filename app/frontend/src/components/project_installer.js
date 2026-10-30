@@ -2,10 +2,9 @@
    look as the monorepo installer (components/subprojects_installer.js: step indicator, rows, footer, CSS).
    The state and the API calls live in pages/panel/project_installer.js; nothing here talks to the server. */
 import { html, useState, useEffect } from '../util/preact.js';
-import { dur } from '../util/format.js';
-import { StepIndicator } from './subprojects_installer.js';
+import { dur, secondsBetween } from '../util/format.js';
 import { StandardsBlock } from './standards_block.js';
-import { Chip, useNow, MAP_DOCUMENT_TOTAL } from './subprojects_table.js';
+import { Chip, StepHeader, useNow, MAP_DOCUMENT_TOTAL } from './subprojects_table.js';
 
 const STEPS = [[1, 'Conformance'], [2, 'Map']];
 const OPTIONS = ['STANDARD', 'LEGACY'];
@@ -18,7 +17,6 @@ const STEP_SAFE = {
   2: 'Writes only docs/codebase. No code is touched.',
 };
 export const MAP_CONFIRM = 'Runs claude (Sonnet) on this repository. It writes only docs/codebase; it never touches the code. No spend cap.';
-const seconds = (from, to) => { const a = Date.parse(from), b = Date.parse(to); return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, (b - a) / 1000) : null; };
 const evidenceOf = (suggestion) => {
   const evidence = suggestion && suggestion.evidence;
   return (Array.isArray(evidence) ? evidence.join('; ') : String(evidence || '')) || 'Suggested from the code';
@@ -44,9 +42,9 @@ function ConformanceStep({ written, suggestion, choice, setChoice, locked }) {
 /** map = { state: 'idle'|'running'|'done'|'failed', startedAt, finishedAt, documents, error, hasCode } */
 function MapStep({ map, now, retry }) {
   let status;
-  if (map.state === 'running') status = html`<span class="sp-map-run" role="status"><span class="spinner sm" aria-hidden="true"></span><span>${`Mapping… ${map.startedAt ? dur(seconds(map.startedAt, new Date(now).toISOString()) || 0) : ''} · ${map.documents} of ${MAP_DOCUMENT_TOTAL} documents`}</span></span>`;
+  if (map.state === 'running') status = html`<span class="sp-map-run" role="status"><span class="spinner sm" aria-hidden="true"></span><span>${`Mapping… ${map.startedAt ? dur(secondsBetween(map.startedAt, new Date(now).toISOString()) || 0) : ''} · ${map.documents} of ${MAP_DOCUMENT_TOTAL} documents`}</span></span>`;
   else if (map.state === 'done') {
-    const took = map.startedAt && map.finishedAt ? seconds(map.startedAt, map.finishedAt) : null;
+    const took = map.startedAt && map.finishedAt ? secondsBetween(map.startedAt, map.finishedAt) : null;
     status = html`<span class="sp-inst-ok"><span aria-hidden="true">✓</span> ${`Done · ${map.documents} of ${MAP_DOCUMENT_TOTAL} documents${took != null ? ' · ' + dur(took) : ''}`}</span>`;
   } else if (map.state === 'failed') status = html`<span class="sp-bad" role="alert">${'Failed: ' + (map.error || 'the map failed')}</span>`;
   else status = html`<span class="sp-muted">${map.hasCode ? 'Not mapped yet' : 'No code yet: nothing to map'}</span>`;
@@ -83,8 +81,7 @@ export function ProjectInstaller({ conformance, map, busy = false, actions, onCo
   const backBlocked = step === 1 ? 'This is the first step.' : mapping ? 'The map is running.' : map.state === 'done' ? 'The map already ran.' : '';
   const finished = map.state === 'done' || (map.state === 'idle' && map.needed === false);
   return html`<div class="sp-inst" id="pi-installer" data-step=${step}>
-    <${StepIndicator} step=${skipConformance ? 1 : step} steps=${skipConformance ? [[1, 'Map']] : STEPS} allDone=${step === STEPS.length && finished} />
-    <p class="sp-inst-d">${STEP_TEXT[step]}</p>
+    <${StepHeader} step=${skipConformance ? 1 : step} steps=${skipConformance ? [[1, 'Map']] : STEPS} allDone=${step === STEPS.length && finished} text=${STEP_TEXT[step]} />
     ${step === 1 ? html`<${ConformanceStep} written=${conformance.written} suggestion=${conformance.suggestion} choice=${choice} setChoice=${setChoice} locked=${busy} />
         ${standards && !skipConformance ? html`<${StandardsBlock} api=${standards} scope=${standards.scope} />` : null}`
       : html`<${MapStep} map=${map} now=${now} retry=${actions.retryMap} />`}
