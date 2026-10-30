@@ -98,7 +98,7 @@ Every feature is its own lane with ONE agent per step (`SKILL.md`, "Lanes"): nev
 | Gate | Yes, one `spec-reviewer` per feature. Read-only. A feature enters it as soon as its own spec is back. |
 | Execution | One executor per feature, in parallel only with disjoint `PATHS` (and deps verified) or a worktree; a colliding feature waits as `approved` while the others go on. |
 | Execution (task waves) | Inside one feature, one executor per task of the wave, at most `Max parallel tasks` (ROADMAP header, default 3); waves run in order. Across features the total stays inside `Max spend per turn` and `Max minutes per turn`: shrink the wave when short. |
-| Verification | One `verifier` per feature, in parallel by default. Serialize only two that would build the same project or solution output (the other lanes keep moving). |
+| Verification | `harness verify` per feature (code, no agent), in parallel by default. Serialize only two that would build the same project or solution output (the other lanes keep moving). |
 | Commit | Always serial, always the orchestrator; one feature at a time, as soon as ITS verification passed. |
 
 Before dispatching 2+ executors in parallel, **check disjointness by code**, not by eye: `harness state disjoint <root> <slug1> <slug2>` (exit 1 = `paths` conflict).

@@ -71,7 +71,7 @@ Most guard refusals in an E2E run are about HOW a call is written, not about a m
 | `spec-writer` | sonnet | spec of one feature in `.specs/features/<slug>/` |
 | `spec-reviewer` | sonnet | spec gate, read-only |
 | `executor` | sonnet | implements one feature; the prompt's `KIND: back\|front\|generic` picks the skills: `backend-dev` or `frontend-dev` (toolkit) plus the skills bound to the project's standards slots, or the `SKILL:` lines for a generic feature |
-| `verifier` | sonnet | test / build / typecheck / lint |
+| `verifier` | sonnet | test / build / typecheck / lint; **fallback only**: normal verification is `harness verify` (code, no agent) |
 | `verifier-flow` | sonnet | validates a flow by running the app: routes (curl) and E2E (Playwright), via the `flow-validator` skill. Opt-in |
 
 **Model ceiling: Sonnet.** No subagent goes up to Opus or any model above Sonnet, under any circumstance — not even after a failure. When calling `Agent`, do not pass a `model` other than `sonnet` (or `haiku`, if you want it cheaper). When a feature fails, it escalates to the orchestrator and the user, never to a bigger model.
@@ -80,7 +80,7 @@ Never use `subagent_type: "fork"` for executors: a fork inherits the parent's mo
 
 ## Lanes: one pipeline per feature (the default)
 
-The unit of work is **one feature = one lane**. A lane is that feature's own pipeline: `spec-writer` -> `spec-reviewer` (gate) -> executor -> `verifier` -> commit. The turn starts every lane at the step its feature is at (`--lanes slug:step,...`, up to `--wave` lanes) and each lane advances **by itself**:
+The unit of work is **one feature = one lane**. A lane is that feature's own pipeline: `spec-writer` -> `spec-reviewer` (gate) -> executor -> `harness verify` (code; the `verifier` agent only as fallback) -> commit. The turn starts every lane at the step its feature is at (`--lanes slug:step,...`, up to `--wave` lanes) and each lane advances **by itself**:
 
 1. **One agent per feature per step. Never one agent for several features.** Every `Agent` call covers exactly ONE feature, and its prompt has exactly ONE `FEATURE: <slug>` line (executors also `SCOPE_FEATURE: <slug>`), as the first line of the prompt, and no other feature's slug anywhere in it. Never "review these two specs", "verify both", "write the specs of a and b". This holds for `spec-writer`, `spec-reviewer`, `executor-*`, `verifier` and `verifier-flow` (not for `brownfield-mapper`, which is per document). The panel's pipeline reads that line: one transcript per agent, one run of the node per feature; a batched agent shows up as ONE feature and hides the other.
 2. **Rounds, no phase barrier.** Dispatch in rounds: a round is ONE message with one `Agent` call per live lane, each lane at its OWN step (lane `a` may be at the gate while `b` executes and `c` verifies), so they all run in parallel. When the round returns, handle **each lane on its own, right away**: write its status, commit it if it is verified (one commit per feature, as soon as its `verifier` says `PASS`/`UNVERIFIED`, without waiting for the other lanes), and put it in the next round at its next step. A lane that finished its whole flow leaves the rounds; the others keep going. Never "all the specs, then all the gates, then all the executors".
@@ -206,7 +206,7 @@ Mark `building` before dispatching. Every executor prompt carries the line `SCOP
 2. Before each wave write SCOPE.json `tasks`: `{"<slug>/<Tn>": [files]}` (see `references/state.md`). Dispatch ONE executor per task of the wave, in one message, each prompt with `FEATURE: <slug>`, `SCOPE_FEATURE: <slug>` and `SCOPE_TASK: <slug>/<Tn>`, plus the path of `tasks.md`.
 3. Wave size: at most `Max parallel tasks` (ROADMAP header, default 3, 1 to 5) executors per wave inside one feature; the total across the features in flight stays inside `Max spend per turn` and `Max minutes per turn`. When the budget or minutes left are short, shrink the wave (down to one task) instead of dispatching what cannot finish.
 4. Mark each task with `harness tasks set <slug> <Tn> running` on dispatch and `done` or `failed` on its return. A `failed` task goes back to its own executor with the error, up to 2 times; the third failure is the existing quarantine rule (`tries=`). Never start the next wave before the current one is `done`.
-5. After the LAST wave dispatch ONE `verifier` for the whole feature (Phase 6), never one per task. Consolidate the `DECISION:` lines of every executor into `VALIDATE.md` (the usual grammar, with the turn).
+5. After the LAST wave run `harness verify` once for the whole feature (Phase 6), never one per task. Consolidate the `DECISION:` lines of every executor into `VALIDATE.md` (the usual grammar, with the turn).
 6. Before the commit run `harness tasks mirror <slug>` (copies the final status into `tasks.md`), then ONE commit per feature as in Phase 7.
 7. Resume: `tasks waves` returns only the not-done tasks, so a restarted turn continues at the first unfinished wave; never redo a `done` task.
 
@@ -216,7 +216,7 @@ Mark `building` before dispatching. Every executor prompt carries the line `SCOP
 
 `STATUS: DONE` → go to verification. Any other status → see `references/dispatch.md`.
 
-**Phase 6 — verification (its own phase, always runs).** Dispatch ONE `verifier` for the feature (prompt with `TOOLKIT: <path>`) as soon as ITS executor returned `DONE` (in the next round, whatever the other lanes are doing); see "Testing rule". Commit it right after its `PASS`/`UNVERIFIED`.
+**Phase 6 — verification (its own phase, always runs, as code).** As soon as ITS executor returned `DONE` (in the next round, whatever the other lanes are doing) run `harness verify <root> --feature <slug> --scope <the feature's PATHS folder>` (add `--needs-contract` for a back-end feature of a monorepo): it runs the toolkit's `craft verify` itself and prints the `FEATURE` / `VERDICT` / `RAN` / `FAIL` block, with no agent and no model tokens. Exit 0 = `PASS`, 1 = `FAIL`, 3 = `UNVERIFIED`. Exit 4 (toolkit missing) or a project where you believe checks exist that `craft verify` did not detect: dispatch the `verifier` agent as before (prompt with `TOOLKIT: <path>`). A `WARNING: contract.md missing` line means send the executor back for it before marking `verified`. See "Testing rule". Commit it right after its `PASS`/`UNVERIFIED`.
 
 - `PASS` → `verified`.
 - `UNVERIFIED` → `verified`, with an unverified mark recorded in `STATE.md` and highlighted in the report.

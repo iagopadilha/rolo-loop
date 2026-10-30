@@ -11,6 +11,7 @@ mod paths;
 mod resume_cmd;
 mod serve_cmd;
 mod state_cmd;
+mod verify_cmd;
 
 use clap::{Parser, Subcommand};
 
@@ -71,6 +72,8 @@ enum Command {
     Rules(forward::Forwarded),
     /// Sends a test or custom notice through the configured channels
     Notify(forward::Forwarded),
+    /// Verification as code: runs the toolkit's craft verify and prints the verifier's return block
+    Verify(verify_cmd::Args),
     /// Pushes the feature branch and opens the PR at the end of the flow
     Deliver(forward::Forwarded),
     /// The unsupervised loop: runs claude in turns until it finishes or gets stuck
@@ -110,6 +113,7 @@ fn main() {
         Command::Inventory(a) => forward::inventory(a),
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
+        Command::Verify(args) => verify_cmd::run(args),
         Command::Deliver(a) => forward::deliver(a),
         Command::Loop(a) => forward::run_loop(a),
         Command::CloseLoop(a) => forward::close_loop(a),
