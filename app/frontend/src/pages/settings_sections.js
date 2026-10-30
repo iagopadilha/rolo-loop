@@ -108,7 +108,7 @@ function KeyGroup({ data, onSaved, keys, title, desc, id, after }) {
 }
 
 
-const CLAUDE_KEYS = ['orchestrator_model', 'claude_binary', 'claude_fallback_binaries', 'loop_isolation', 'loop_caveman', 'loop_extra_skills'];
+const CLAUDE_KEYS = ['orchestrator_model', 'claude_binary', 'claude_fallback_binaries', 'loop_isolation', 'loop_caveman'];
 const NETWORK_KEYS = ['egress_hosts', 'egress_never', 'egress_builtin_read', 'env_sources'];
 /** Keys no section above names go to Projects and data, so a setting added later is never lost. */
 const otherKeys = (data) => data.settings.map((s) => s.key).filter((k) => !CLAUDE_KEYS.includes(k) && !NETWORK_KEYS.includes(k));

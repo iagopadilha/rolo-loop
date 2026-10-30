@@ -49,14 +49,14 @@
 .tr-title{font:500 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);flex:none;}
 .tr-action{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto;}
 .tr-next{font-size:12px;color:var(--text2);}
-.tr-note{font:500 11px var(--mono);color:var(--amber);padding:2px 8px;border:1px dashed var(--amber-line);border-radius:6px;}
-.tr-job{display:inline-flex;align-items:center;gap:6px;font:500 11px var(--mono);color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:999px;padding:2px 9px;cursor:pointer;}
+.tr-note{font:500 11px var(--mono);color:var(--amber);padding:2px 8px;border:1px dashed var(--amber-line);border-radius:0;}
+.tr-job{display:inline-flex;align-items:center;gap:6px;font:500 11px var(--mono);color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:0;padding:2px 9px;cursor:pointer;}
 .tr-job:disabled{cursor:default;}
 .ck{display:flex;flex-direction:column;gap:4px;min-width:0;}
 .ck-list{display:flex;align-items:center;flex-wrap:wrap;list-style:none;margin:0;padding:0;row-gap:4px;}
 .ck-item{display:flex;align-items:center;}
 .ck-line{width:10px;height:1px;background:var(--line3);flex:none;}
-.ck-step{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--text2);font:500 11px var(--sans);cursor:pointer;white-space:nowrap;}
+.ck-step{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:0;border:1px solid var(--line2);background:transparent;color:var(--text2);font:500 11px var(--sans);cursor:pointer;white-space:nowrap;}
 .ck-step:hover{border-color:var(--line4);}
 .ck-ic{font:600 11px var(--mono);}
 .ck-ok{color:var(--green);border-color:var(--green-line);}
@@ -107,16 +107,16 @@
 .rm-res:empty{display:none;}
 .rm-budget-l{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .rm-budget{width:100px;}
-.rm-questions{border:2px solid var(--amber);background:var(--amber-bg);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
+.rm-questions{border:2px solid var(--amber);background:var(--amber-bg);border-radius:0;padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
 .rm-questions .small-label{color:var(--amber);margin:0;}
-.rm-reply{border:1px solid var(--line2);border-radius:8px;padding:6px 12px;background:var(--bg);}
+.rm-reply{border:1px solid var(--line2);border-radius:0;padding:6px 12px;background:var(--bg);}
 .rm-reply summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);}
 .rm-reply .md-doc{margin-top:8px;max-height:320px;overflow:auto;}
 
 /* ---------- conformance ---------- */
-.conf{border:1px solid var(--line2);border-radius:8px;padding:8px 12px 10px;margin:0;display:flex;flex-direction:column;gap:6px;}
+.conf{border:1px solid var(--line2);border-radius:0;padding:8px 12px 10px;margin:0;display:flex;flex-direction:column;gap:6px;}
 .conf legend{padding:0 4px;}
-.conf-op{display:flex;gap:10px;align-items:flex-start;padding:6px 8px;border-radius:6px;cursor:pointer;}
+.conf-op{display:flex;gap:10px;align-items:flex-start;padding:6px 8px;border-radius:0;cursor:pointer;}
 .conf-op:hover{background:var(--panel2);}
 .conf-op input{margin-top:3px;accent-color:var(--amber);}
 .conf-t{display:flex;flex-direction:column;gap:2px;}
@@ -124,7 +124,7 @@
 .conf-d{font-size:12px;color:var(--muted);line-height:1.45;}
 
 /* ---------- why use this panel ---------- */
-.why-diagram{display:block;flex:none;width:100%;height:auto;aspect-ratio:660/92;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:6px;}
+.why-diagram{display:block;flex:none;width:100%;height:auto;aspect-ratio:660/92;background:var(--bg);border:1px solid var(--line2);border-radius:0;padding:6px;}
 .why-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;line-height:1.55;color:var(--text2);}
 .why-list strong{color:var(--text);}
 .why-glossary{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:12px;line-height:1.5;}
@@ -134,17 +134,17 @@
 
 /* ---------- folder browser ---------- */
 .fb-bar{display:flex;gap:6px;align-items:center;}
-.fb-field{flex:1;min-width:0;border:1px solid var(--line3);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;padding:6px 8px;}
-.fb-filter{flex:1;min-width:0;border:1px solid var(--line3);border-radius:6px;background:var(--bg);color:var(--text);font:400 12px var(--sans);padding:5px 8px;}
+.fb-field{flex:1;min-width:0;border:1px solid var(--line3);border-radius:0;background:var(--bg);color:var(--text);font-size:12px;padding:6px 8px;}
+.fb-filter{flex:1;min-width:0;border:1px solid var(--line3);border-radius:0;background:var(--bg);color:var(--text);font:400 12px var(--sans);padding:5px 8px;}
 .fb-legend{font-size:11px;color:var(--muted);white-space:nowrap;}
 .fb-shortcuts{display:flex;gap:4px;flex-wrap:wrap;}
 .fb-shortcuts:empty{display:none;}
-.fb-list{border:1px solid var(--line2);border-radius:8px;max-height:320px;min-height:120px;overflow:auto;background:var(--bg);}
+.fb-list{border:1px solid var(--line2);border-radius:0;max-height:320px;min-height:120px;overflow:auto;background:var(--bg);}
 .fb-item{display:flex;align-items:center;gap:8px;width:100%;padding:6px 10px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);font:400 13px var(--sans);text-align:left;cursor:pointer;}
 .fb-item:hover,.fb-item:focus-visible{background:var(--panel2);}
 .fb-ic{color:var(--muted);font-size:10px;}
 .fb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.fb-tag{font:500 10px var(--mono);border-radius:4px;padding:0 5px;border:1px solid;}
+.fb-tag{font:500 10px var(--mono);border-radius:0;padding:0 5px;border:1px solid;}
 .fb-tag.specs{color:var(--amber);border-color:var(--amber-line);background:var(--amber-bg);}
 .fb-tag.git{color:var(--blue);border-color:var(--blue-line);background:var(--blue-bg);}
 .fb-empty{padding:16px;color:var(--dim);font-size:12px;text-align:center;}

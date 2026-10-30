@@ -186,6 +186,29 @@ pub fn list_servers(env: &Env, project_root: &str, claude_json: Option<&str>) ->
     collect(env, project_root, claude_json).into_iter().map(|r| json!({"name": r.name, "sources": r.sources, "defined": r.definition.is_some()})).collect()
 }
 
+/// Tool names that the Claude permission rules of `~/.claude/settings.json` mention (`mcp__<server>__<tool>`, a trailing `*` kept):
+/// `[(normalised server, tool)]`, no repeats. Names only: nothing else of a rule (its arguments, its settings) is read.
+pub fn known_tools(env: &Env) -> Vec<(String, String)> {
+    let settings = read_json(&claude_home(env).join("settings.json")).filter(Value::is_object).unwrap_or(json!({}));
+    let mut found: Vec<(String, String)> = Vec::new();
+    if let Some(Value::Object(permissions)) = settings.get("permissions") {
+        for key in ["allow", "deny", "ask"] {
+            for rule in permissions.get(key).and_then(Value::as_array).into_iter().flatten() {
+                let Some(rule_text) = rule.as_str() else { continue };
+                let text = rule_text.split('(').next().unwrap_or("").trim();
+                let Some(rest) = text.strip_prefix("mcp__") else { continue };
+                if let Some((server, tool)) = rest.split_once("__") {
+                    let pair = (server.to_string(), tool.trim().to_string());
+                    if !server.is_empty() && !pair.1.is_empty() && pair.1 != "*" && !found.contains(&pair) {
+                        found.push(pair);
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
 /// The usable definition of a server by its name (any spelling that normalises to the same tool prefix), or `None`. Never printed.
 pub fn definition(env: &Env, name: &str, project_root: &str, claude_json: Option<&str>) -> Option<Value> {
     let wanted = normalize_name(name);

@@ -7,7 +7,7 @@
 //! Feature line grammar (ROADMAP.md):
 //! `- [slug] status=<pending|speccing|specced|approved|building|verified|blocked> title="<what the user gets>" scope=<Small|Medium|Large|Complex>
 //! kind=<back|front|both|generic> paths=<p1,p2> [repo-order=<repo,repo>] [deps=<slug|dir:folder,...>] [isolation=same-tree|worktree]
-//! [tries=<n>] [origin=adopted] [e2e=ok|failed|not-covered] [regression=yes|baseline|ok|failed] [note=...]`
+//! [tries=<n>] [origin=adopted] [e2e=ok|failed|not-covered|pending] [regression=yes|baseline|ok|failed] [note=...]`
 
 use pycompat::json::py_json_dumps;
 use pycompat::{nt_abspath, splitlines, Re};
@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 pub const STATUSES: [&str; 7] = ["pending", "speccing", "specced", "approved", "building", "verified", "blocked"];
 pub const SCOPES: [&str; 4] = ["Small", "Medium", "Large", "Complex"];
 pub const KINDS: [&str; 4] = ["back", "front", "both", "generic"];
-pub const E2E: [&str; 3] = ["ok", "failed", "not-covered"];
+pub const E2E: [&str; 4] = crate::result_vocabulary::E2E_WORDS;
 pub const ISOLATIONS: [&str; 2] = ["same-tree", "worktree"];
 pub const REGRESSION: [&str; 4] = ["yes", "baseline", "ok", "failed"];
 pub const REFACTOR_PREFIX: &str = "refactor-";
@@ -52,7 +52,7 @@ fn back(status: &str) -> &'static [&'static str] {
 static REPO_PATH_PREFIX: LazyLock<Re> = LazyLock::new(|| Re::new(r"^([a-z0-9._-]+):(?![/\\])(.+)\z"));
 pub static FEATURE_LINE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^- \[([^\]]+)\]\s*(.*)\z"));
 pub static TITLE_FIELD: LazyLock<Re> = LazyLock::new(|| Re::new(r#"\btitle="([^"]*)""#));
-pub static STAGE_LINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^#{1,6}\s*Stage\s+(\S+)"));
+pub static STAGE_LINE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"^#{1,6}\s*(?:Stage|Etapa)\s+(\S+)"));
 static FOLDER_INVALID: LazyLock<Re> = LazyLock::new(|| Re::new(r#"[<>:"/\\|?*\x00-\x1f]"#));
 static KEY_VALUE: LazyLock<Re> = LazyLock::new(|| Re::new(r"([\w-]+)=(\S+)"));
 
@@ -259,7 +259,7 @@ pub fn check_fields(features: &Features, repo_names: Option<&[String]>) -> Vec<S
             }
         }
         if let Some(e2e) = f.get("e2e").filter(|s| !s.is_empty()) {
-            if !E2E.contains(&e2e) {
+            if crate::result_vocabulary::canonical_e2e(e2e).is_none() {
                 errors.push(format!("[{slug}] invalid e2e {}", py_repr(e2e)));
             }
         }
@@ -1012,6 +1012,60 @@ pub fn migrate_layout(work: &str) -> Vec<String> {
     moved
 }
 
+/// Names of the loop files that hold the HISTORY of one run (answers, validation lines, state, lock, log). Settings files are not here.
+const HISTORY_FILES: [&str; 8] = ["LOOP.json", "LOOP.lock", "ANSWERS.md", "VALIDATE.md", "GRAPH.md", "guard.log", ".guard-alert", "meta.json"];
+const HISTORY_FOLDERS: [&str; 2] = ["turns", "snapshots"];
+
+fn remove_any(path: &Path) -> bool {
+    if path.is_dir() {
+        std::fs::remove_dir_all(path).is_ok()
+    } else if path.exists() {
+        std::fs::remove_file(path).is_ok()
+    } else {
+        false
+    }
+}
+
+fn is_history_name(name: &str) -> bool {
+    let current = current_name(name);
+    HISTORY_FILES.contains(&current.as_str()) || HISTORY_FOLDERS.contains(&current.as_str())
+}
+
+/// A worktree that starts a NEW run must not carry the history of another run (old turns, snapshots, answers, validation lines, state,
+/// lock, log), also in an older layout (`loop_script`, `loop-logs`, files straight in `project/`). Settings, the roadmap and its approval are
+/// kept. Call it right after `.specs` was copied from the repo and BEFORE `migrate_layout`, which would otherwise move that history into place.
+/// Returns what was removed, relative to `.specs`.
+pub fn drop_foreign_history(work: &str) -> Vec<String> {
+    let specs = Path::new(work).join(".specs");
+    let project = specs.join("project");
+    let mut doomed: Vec<PathBuf> = vec![specs.join(OLD_LOGS_FOLDER_NAME), project.join(LEGACY_LOOP_FOLDER_NAME)];
+    if project.is_dir() {
+        doomed.extend(sorted_children(&project).into_iter().filter(|n| is_history_name(n) && n != LOOP_FOLDER_NAME).map(|n| project.join(n)));
+    }
+    let current = loop_dir(work);
+    for folder in [current.clone(), current.join(JSON_FOLDER_NAME), current.join(INTERNAL_FOLDER_NAME)] {
+        if folder.is_dir() {
+            doomed.extend(sorted_children(&folder).into_iter().filter(|n| is_history_name(n)).map(|n| folder.join(n)));
+        }
+    }
+    let mut removed = Vec::new();
+    for path in doomed {
+        if remove_any(&path) {
+            removed.push(relpath(&path, &specs));
+        }
+    }
+    removed
+}
+
+/// True when snapshot `number` was built from a ROADMAP other than the one approved for this run (the approval file exists and its signature
+/// differs). A baseline like that makes the first turn fail with "features removed from the ROADMAP" for features this run never had.
+pub fn baseline_is_stale(work: &str, number: u64) -> bool {
+    let Some(approval) = read_json_file(&loop_path(work, APPROVAL_NAME)) else { return false };
+    let Some(approved) = approval.get("signature").and_then(Value::as_str) else { return false };
+    let text = read(&snap_dir(work, number).join("ROADMAP.md"));
+    roadmap_signature(&text).0 != approved
+}
+
 // ---------------------------------------------------------------- snapshots and rewind
 
 pub const STATE_FILES: [&str; 5] = ["ROADMAP.md", "STATE.md", "LOOP.json", "ANSWERS.md", "RULES.md"];
@@ -1155,13 +1209,38 @@ pub fn write_loop_json(work: &str, args: &[String]) -> (i32, String) {
 
 pub const USAGE: &str = include_str!("loop_state_usage.txt");
 
+/// `harness state plan <folder> [slug]`: the resolved planning fields (defaults filled in) of every feature or of one, as JSON lines,
+/// plus a `WARNING:` line per field that could not be understood. Always exit 0: planning fields never block the loop.
+fn plan_report(features: &Features, only: Option<&str>) -> String {
+    let mut out = String::new();
+    for (slug, fields) in &features.0 {
+        if only.is_some_and(|wanted| wanted != slug) {
+            continue;
+        }
+        let (mut plan, warnings) = crate::plan_fields::resolve(fields);
+        plan["slug"] = json!(slug);
+        out.push_str(&format!(
+            "{}
+",
+            py_json_dumps(&plan, false)
+        ));
+        for warning in warnings {
+            out.push_str(&format!(
+                "WARNING: [{slug}] {warning}
+"
+            ));
+        }
+    }
+    out
+}
+
 /// `loop_state.py <command> <folder> ...` (the `harness state` subcommand). Returns `(exit_code, stdout)`.
 pub fn run_cli(args: &[String], repo_context: &dyn Fn(&str) -> (Vec<String>, String)) -> (i32, String) {
     if args.len() >= 2 && args[0] == "loop" {
         let (code, message) = write_loop_json(&nt_abspath(&args[1]), args);
         return (code, format!("{message}\n"));
     }
-    if args.len() < 2 || !["validate", "disjoint", "graph", "next", "migrate"].contains(&args[0].as_str()) {
+    if args.len() < 2 || !["validate", "disjoint", "graph", "next", "migrate", "plan"].contains(&args[0].as_str()) {
         return (2, format!("{USAGE}\n"));
     }
     let command = args[0].as_str();
@@ -1175,6 +1254,9 @@ pub fn run_cli(args: &[String], repo_context: &dyn Fn(&str) -> (Vec<String>, Str
         return (0, format!("{}\n", graph(&text)));
     }
     let (features, mut errors) = parse_roadmap(&text);
+    if command == "plan" {
+        return (0, plan_report(&features, args.get(2).map(String::as_str)));
+    }
     let (repo_names, primary_name) = repo_context(&work);
     if command == "next" {
         let wave = match args.iter().position(|a| a == "--wave") {
@@ -1348,6 +1430,68 @@ mod tests {
         let meta = restore(&work, 1).unwrap();
         assert_eq!(meta["head"], "abc123");
         assert!(read(&dir.path().join(".specs/project/ROADMAP.md")).contains("[b]"));
+    }
+
+    #[test]
+    fn foreign_history_is_dropped_but_settings_and_approval_stay() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().display().to_string();
+        let project = dir.path().join(".specs/project");
+        std::fs::create_dir_all(project.join("loop_script/voltas")).unwrap();
+        std::fs::write(project.join("loop_script/voltas/002.json"), "{}").unwrap();
+        std::fs::write(project.join("RESPOSTAS.md"), "old answer").unwrap();
+        std::fs::write(
+            project.join("ROADMAP.md"),
+            "## Stage 1
+- [a] status=pending paths=x
+",
+        )
+        .unwrap();
+        std::fs::create_dir_all(loop_path(&work, "turns")).unwrap();
+        std::fs::write(loop_path(&work, "turns").join("003.json"), "{}").unwrap();
+        snapshot(&work, 0, "old", None);
+        std::fs::create_dir_all(loop_path(&work, "LOOP.json").parent().unwrap()).unwrap();
+        std::fs::write(loop_path(&work, "LOOP.json"), "{}").unwrap();
+        std::fs::write(loop_path(&work, "ANSWERS.md"), "x").unwrap();
+        std::fs::write(loop_path(&work, "SCOPE.json"), "{}").unwrap();
+        approve_roadmap(&work, "2026-01-01T00:00:00").unwrap();
+        let removed = drop_foreign_history(&work);
+        assert!(!removed.is_empty());
+        assert!(!project.join("loop_script").exists() && !project.join("RESPOSTAS.md").exists());
+        assert!(!turns_dir(&work).exists() && !snap_dir(&work, 0).exists());
+        assert!(!loop_path(&work, "LOOP.json").exists() && !loop_path(&work, "ANSWERS.md").exists());
+        // must stay: settings, the roadmap and its approval
+        assert!(loop_path(&work, "SCOPE.json").is_file() && loop_path(&work, APPROVAL_NAME).is_file() && project.join("ROADMAP.md").is_file());
+        assert!(migrate_layout(&work).is_empty(), "nothing is left to migrate into the new run");
+        assert!(drop_foreign_history(&work).is_empty());
+    }
+
+    #[test]
+    fn a_baseline_from_another_roadmap_is_stale_and_the_approved_one_is_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().display().to_string();
+        let roadmap = dir.path().join(".specs/project/ROADMAP.md");
+        std::fs::create_dir_all(roadmap.parent().unwrap()).unwrap();
+        std::fs::write(
+            &roadmap,
+            "## Stage 1
+- [old-feature] status=pending paths=x
+",
+        )
+        .unwrap();
+        snapshot(&work, 0, "h", None);
+        assert!(!baseline_is_stale(&work, 0), "no approval yet: nothing to compare with");
+        std::fs::write(
+            &roadmap,
+            "## Stage 1
+- [new-feature] status=pending paths=y
+",
+        )
+        .unwrap();
+        approve_roadmap(&work, "2026-01-01T00:00:00").unwrap();
+        assert!(baseline_is_stale(&work, 0));
+        snapshot(&work, 0, "h", None);
+        assert!(!baseline_is_stale(&work, 0));
     }
 
     #[test]

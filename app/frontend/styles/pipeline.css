@@ -5,7 +5,7 @@
   --pl-line:var(--line); --pl-line-soft:var(--line); --pl-line-strong:var(--line2);
   --pl-text:var(--text); --pl-text2:var(--text2); --pl-text3:var(--text2); --pl-muted:var(--muted); --pl-dim:var(--dim);
   --pl-amber:var(--amber); --pl-amber-bg:var(--amber-bg0); --pl-amber-line:var(--amber-line); --pl-red-line:var(--red-line); --pl-red-bg:var(--red-bg); --pl-blue:var(--blue);
-  --pl-mono:var(--mono,'IBM Plex Mono',ui-monospace,Consolas,monospace); --pl-sans:var(--sans,'IBM Plex Sans',system-ui,sans-serif);
+  --pl-mono:var(--mono,'JetBrains Mono',ui-monospace,Consolas,monospace); --pl-sans:var(--sans,'Inter Tight',system-ui,sans-serif);
 }
 
 /* ---------- shared pieces ---------- */

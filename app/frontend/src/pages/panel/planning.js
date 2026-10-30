@@ -144,6 +144,7 @@ const importName = (x) => String(x.import_id || '').replace(/^\d{8}-\d{6}-/, '')
  *  and Confirm (sends them to the AI). A single file or pasted text is not imported. */
 function ImportForm({ api }) {
   const [path, setPath] = useState(''), [prev, setPrev] = useState(null), [err, setErr] = useState(''), [busy, setBusy] = useState('');
+  const [exists, setExists] = useState(false); // P3: the feature folder already exists in the plan: the user picks merge or replace
   /** Message of a refused call; the log path of an already_imported answer is added when the message does not carry it. */
   const importErrorText = (e) => {
     const logPath = (e && e.body && e.body.log_path) || '';
@@ -168,16 +169,22 @@ function ImportForm({ api }) {
     finally { setBusy(''); }
     if (v) { setPath(v); setPrev(null); readPreview(v); }
   };
-  const importAndSend = async () => {
-    setBusy('send'); setErr('');
+  const importAndSend = async (onExisting) => {
+    setBusy('send'); setErr(''); setExists(false);
     try {
-      const meta = await ctx.api.post('planning/import', { path: path.trim() }, 30000);
+      const body = { path: path.trim() };
+      if (onExisting === 'merge' || onExisting === 'replace') body.on_existing = onExisting;
+      const meta = await ctx.api.post('planning/import', body, 30000);
       const r = await ctx.api.post('planning/import/' + encodeURIComponent(meta.import_id) + '/send', {}, 30000);
       api.close();
       pl.err = null; pl.pending = null;
       if (r.job_id) followJob(r.job_id, Date.now()); else loadPlanning();
       loadImports();
-    } catch (e) { setErr('Not imported: ' + importErrorText(e)); setBusy(''); }
+    } catch (e) {
+      if (e.status === 409 && e.body && e.body.code === 'feature_folder_exists') setExists(true);
+      else setErr('Not imported: ' + importErrorText(e));
+      setBusy('');
+    }
   };
   const files = list(prev && prev.files), skipped = list(prev && prev.skipped), warnings = list(prev && prev.warnings);
   const counts = (prev && prev.counts) || {}, refused = prev && prev.refused, earlier = prev && prev.already_imported;
@@ -189,6 +196,10 @@ function ImportForm({ api }) {
       <input id="plan-imp-path" type="text" class="plan-imp-in" spellcheck="false" placeholder="Spec feature folder (with spec.md)" value=${path} onInput=${(e) => { setPath(e.currentTarget.value); setPrev(null); }} />
       <button type="button" class="btn btn-sm" id="plan-imp-browse" disabled=${!!busy} onClick=${browse}>${busy === 'browse' ? 'Waiting for the window…' : 'Browse folders…'}</button></div>
     ${err ? html`<div class="nl-box nl-bad" role="alert" id="plan-imp-err">${err}</div>` : null}
+    ${exists ? html`<div class="nl-box nl-warn" id="plan-imp-exists" role="alert"><b>This feature folder already exists in the plan.</b>
+      <div><b>Merge</b> keeps the files already there and adds the missing ones. <b>Replace</b> swaps the folder for the imported copy.</div>
+      <div class="plan-imp-act"><button type="button" class="btn btn-sm btn-primary" id="plan-imp-merge" disabled=${!!busy} onClick=${() => importAndSend('merge')}>Merge</button>
+        <button type="button" class="btn btn-sm" id="plan-imp-replace" disabled=${!!busy} onClick=${() => importAndSend('replace')}>Replace</button></div></div>` : null}
     ${prev ? html`<div class="plan-imp-prev" id="plan-imp-prev" role="status"><b>Spec feature ${prev.slug || importName(prev)}: ${files.length} file${files.length === 1 ? '' : 's'} found</b>
       ${refused ? html`<div class="nl-box nl-bad" id="plan-imp-refused" role="alert">Refused: ${refused.reason || 'this folder cannot be imported.'}</div>` : null}
       ${earlier ? html`<div class="nl-box nl-bad" id="plan-imp-earlier" role="alert">This spec feature was already imported (${earlier.import_id}). See the log <code>${earlier.log_path}</code>. A changed spec goes through the planning chat (Back to planning, then ask it to update the feature), not a second import.</div>` : null}
@@ -199,7 +210,7 @@ function ImportForm({ api }) {
     <div class="plan-imp-act">
       <button type="button" class="btn btn-sm" id="plan-imp-cancel" disabled=${busy === 'send'} onClick=${() => api.close()}>Cancel</button>
       <button type="button" class="btn btn-sm" id="plan-imp-preview" disabled=${!!busy} onClick=${() => readPreview(path)}>${busy === 'preview' ? 'Reading…' : 'Preview'}</button>
-      ${refused || earlier ? null : html`<button type="button" class="btn btn-sm btn-primary" id="plan-imp-confirm" disabled=${!canImport} onClick=${importAndSend}>${busy === 'send' ? 'Importing…' : 'Import'}</button>`}
+      ${refused || earlier ? null : html`<button type="button" class="btn btn-sm btn-primary" id="plan-imp-confirm" disabled=${!canImport} onClick=${() => importAndSend()}>${busy === 'send' ? 'Importing…' : 'Import'}</button>`}
     </div></div>`;
 }
 function openImport() {
@@ -822,7 +833,7 @@ function RoadmapPreviewBlock() {
   return html`<div class="plan-rm-sec">
     ${e2e == null ? null : html`<p class="plan-rm-cap"><b>E2E: ${e2e ? 'yes' : 'no'}</b>. ${e2e ? 'The loop runs the real app to validate the flows.' : 'The loop validates by build and tests only.'} Set in the ROADMAP: ask the chat to change it.</p>`}
     <${RoadmapPreview} rm=${rm} />
-    <p class="plan-rm-cap">Preview: how the loop will see this roadmap (features by stage, arrows = dependencies). Drag to move, Ctrl + scroll to zoom, click a feature for its details. The real graph appears when the loop runs.</p>
+    <p class="plan-rm-cap">Preview: how the loop will see this roadmap (features by stage, arrows = dependencies). Drag to move, scroll to zoom, click a feature for its details. The real graph appears when the loop runs.</p>
     <p class="plan-rm-note">Refactoring features can ask for a regression proof: the loop captures how the flow behaves before the change and compares after. Mark the feature <code>regression=yes</code> in the ROADMAP (only for slugs that start with <code>refactor-</code>). It needs a flow in FLOWS.md and a test environment (credential names; values in <code>.specs/project/.env.test</code> or the machine's <code>~/.loop-harness/.env</code>). Without them the loop stops and sends an e-mail saying it cannot test.</p>
   </div>`;
 }

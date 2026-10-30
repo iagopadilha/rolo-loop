@@ -23,6 +23,9 @@ The process ends on its own when the orchestrator gives its final reply. There i
 | (stage) | `next` only looks at the **current stage**: the first `## Stage N` of the ROADMAP with a still-open feature. Spec and execution of a future stage are not dispatched; the next stage only starts when this one closes (`verified`/`blocked`). |
 | `--ready a,b` | the slugs of the lanes (same as in `--lanes`): the `execute` ones have dependencies `verified` and `paths` disjoint from each other and from the `building` ones; at most `--wave`. **Start exactly these**; do not swap or add. |
 | `--stuck c` | features that depend on a `blocked` one. They do not move without the user: cite them in the `reason`. |
+| `--approvals` | read `.specs/project/loop/APPROVALS.md` first (the engine wrote it from the user's answers in the panel). **Approved**: run that command again now and finish the task that waited for it. **Waiting**: do not retry; work on every feature or task that does not depend on it. **Denied**: do not retry or work around it; leave that task undone and say so in the `reason`. |
+
+**A command that waits for approval never stops the run.** The guard answers a migration (apply or create) or the standard development command of the project's stack with `WAITING FOR THE USER'S APPROVAL [ask-command]`. That is not `NEEDS_CONFIRM`: the engine already raised one card for the user (one button to approve, one to approve always for this project, one to deny). Mark only the task that needs the command as waiting, keep going with the lanes that do not depend on it, and write `awaiting_user` only when nothing else can move (cite the waiting command in the `reason`; the run resumes by itself when the user approves). A command aimed at production is refused for good: there is no card and nothing to wait for, so do not retry it. The project can release the standard commands without asking with a plain list (`commands` in `PERMISSIONS.json`); you never write that file.
 
 ## What a turn does
 
@@ -98,7 +101,7 @@ When the user asks for changes after reviewing the decisions, the app appends a 
 A one-off doubt (small, reversible divergence) **does not stop the turn**: the orchestrator chooses the conservative path and writes a line in `.specs/project/loop/VALIDATE.md` (`- [<slug|general>] turn=<N> level=<important|critical> <doubt> | chose: <choice> | revert: <how>`). Only a blocking question (access, important business rule, discrepancy, architecture, scope, data, irreversible, PROD, spec vs rule) becomes `awaiting_user`. `VALIDATE.md` appears in the summary, in the completion notification, in the panel and in the PR. Quarantine (`blocked`) only pauses the loop when another feature depends on the blocked one (`--pause-on-blocked` always pauses; `--continue-on-blocked` never). The worktree `../<project>-worktree-loop` belongs to the engine: never create, delete or switch worktree on your own in headless (the manual worktree protocol of `dispatch.md` only applies in interactive mode).
 
 ## When testing
-`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the claude-maestro repository (engine, app and guard).
+`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the agent-maestro repository (engine, app and guard).
 
 ## Permission denied during a turn (only stops when it matters)
 

@@ -11,8 +11,9 @@ A walkthrough of one real use of the orchestrator on a made-up project, so you c
 | You | decide: conformance, roadmap, rules, answers to blocking questions | run git by hand inside the loop |
 | `orchestrator` (the chat) | plans, dispatches, writes state, commits, talks to you | write specs, code or tests itself |
 | `spec-writer`, `spec-reviewer` | write the spec; review it (the gate) | touch code |
-| `executor-back`, `executor-front`, `executor-generic` | implement one feature inside its declared `PATHS` | run git, write tests, leave `PATHS` |
+| `executor` (`KIND: back`, `front` or `generic`) | implement one feature inside its declared `PATHS` | run git, write tests, leave `PATHS` |
 | `verifier` | build, typecheck, lint of the feature | fix code |
+| `quality-gate` | reviews the feature's diff against the skills' standards | edit any file |
 | guard hook | blocks pushes, protected state, secrets, production writes for subagents | |
 | Loop Harness app (`app/`) | the engine repeats turns unattended, validates state, notifies you; the local panel shows it all and takes your clicks | decide anything, approve for you |
 
@@ -103,7 +104,7 @@ Press **Start loop** in the panel, or run the printed command, and walk away. Th
 | Dependency audit | skill `orchestrator-audit-dependencies` reads real imports and specs and flags a forgotten `deps=` before the wave starts |
 | 4 Gate | one `spec-reviewer` per feature (never one for several specs) on every `Medium`, `Large` or `Complex` spec. Result `APPROVED` or `BLOCKED` with the requirement IDs checked. A `Small` spec written by this loop skips the gate; an adopted spec never does |
 | 5 Execute | pick the executor by `KIND` and `PATHS`. Only features whose `deps=` are already `verified` run. Up to `--wave N` lanes run at once, with disjoint paths; a feature enters execution as soon as its own gate approved it |
-| 6 Verify | one `verifier` per feature, as soon as its executor is done, runs build, typecheck and lint and returns `PASS`, `FAIL` or `UNVERIFIED`. This phase always runs |
+| 6 Verify | `harness verify` per feature, as soon as its executor is done, runs build, typecheck and lint as code and returns `PASS`, `FAIL` or `UNVERIFIED` (the `verifier` agent only when the toolkit is missing). This phase always runs |
 | 6a, 6b | optional: behaviour regression for refactors (`regression=baseline`) and, only with `--e2e`, flow validation with curl and a browser |
 | 7 Commit | only the orchestrator commits: one atomic Conventional Commit per verified feature |
 | 8 Checkpoint | when a stage is done: `phases/stage-NN.md` is written, `STATE.md` is emptied, a short report with the progress graph is produced |

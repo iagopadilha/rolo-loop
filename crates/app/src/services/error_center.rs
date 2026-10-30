@@ -43,6 +43,38 @@ const STATUS_ERROR: &str = "error";
 const BLOCKED_STATUS: &str = "blocked";
 
 static BACKGROUND_TASKS: LazyLock<Re> = LazyLock::new(|| Re::new(r"Background tasks still running"));
+/// Terminal colour codes (`ESC[31m`, and the same without the ESC byte that a log copy may lose: `[90m`).
+static ANSI_CODES: LazyLock<Re> = LazyLock::new(|| Re::new(r"\x1b\[[0-9;]*[A-Za-z]|\[[0-9]{1,3}(?:;[0-9]{1,3})*m"));
+
+/// The text without terminal colour codes, so the detail of an item reads as plain text.
+fn strip_ansi(text: &str) -> String {
+    ANSI_CODES.replace_lit(text, "")
+}
+/// Words that make stderr a real problem even when it also names an account.
+static FAILURE_WORDS: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\b(error|failed|failure|exception|denied|panic|traceback|fatal|refused|unauthorized|invalid)\b"));
+static PERCENT: LazyLock<Re> = LazyLock::new(|| Re::new(r"(\d{1,3}(?:\.\d+)?)\s*%"));
+
+/// A5. The status table an account wrapper prints on stderr when it opens a session (each account, its state, the 5-hour and weekly usage,
+/// the reset time, and which one it opened). It is information, not an error. Returns the one-line summary ("account used: NAME, 11% of the
+/// 5-hour window") when the text names the account it opened (`[cc] conta: NAME`) and says nothing that reads as a failure; `None` for any
+/// other stderr, which keeps its own classification.
+pub fn account_wrapper_summary(stderr: &str) -> Option<String> {
+    let text = strip_ansi(stderr);
+    let account = engine_state::claude_binaries::account_from_stderr(&text);
+    if account.is_empty() || FAILURE_WORDS.search(&text).is_some() {
+        return None;
+    }
+    // the usage of the opened account: the first percentage on the table row that names it (the 5-hour window is listed first)
+    let usage = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("[cc]") && line.contains(&account))
+        .find_map(|line| PERCENT.search(line).and_then(|m| m.group(1).map(String::from)));
+    Some(match usage {
+        Some(percent) => format!("account used: {account}, {percent}% of the 5-hour window"),
+        None => format!("account used: {account}"),
+    })
+}
+
 static STOP_TURN: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?:after|on|in) turn (\d+)"));
 
 struct Cause {
@@ -354,7 +386,7 @@ impl ErrorCenterService<'_> {
         for number in &numbers[numbers.len().saturating_sub(TURNS_SCANNED_LIMIT)..] {
             let turn = files.read_turn(work_dir, *number);
             let when = to_iso(files.get_mtime(&files.get_turn_path(work_dir, *number)));
-            let stderr = text_or_empty(turn.get("stderr")).trim().to_string();
+            let stderr = strip_ansi(&text_or_empty(turn.get("stderr"))).trim().to_string();
             let exit_code = turn.get("exit_code");
             let mut item = if notify_truthy(turn.get("timeout")) {
                 let cause = &KNOWN_CAUSES[TIMEOUT_CAUSE];
@@ -373,6 +405,12 @@ impl ErrorCenterService<'_> {
                 let mut item = ItemSpec::new(format!("turn-{number}-failed"), KIND_TURN, SEVERITY_ERROR, format!("Turn {number} failed (exit code {code})"));
                 item.detail = detail;
                 item.happened = format!("Turn {number} ended with a failure: the `claude -p` process exited with code {code}.");
+                item
+            } else if let Some(summary) = account_wrapper_summary(&stderr) {
+                // A5: the account wrapper's table on a turn that ended well is a note about the account, not a stderr complaint
+                let mut item = ItemSpec::new(format!("turn-{number}-account"), KIND_TURN, SEVERITY_INFO, format!("Turn {number}: {summary}"));
+                item.detail = stderr;
+                item.happened = format!("Turn {number} ran normally. The account wrapper printed its status table; this is information, not an error ({summary}).");
                 item
             } else if !stderr.is_empty() {
                 let background = BACKGROUND_TASKS.search(&stderr).is_some();
@@ -500,6 +538,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_account_wrapper_table_is_information_not_an_error() {
+        let table = "[cc] conta: claude2\n  claude1   ok     5h  80%  7d  40%  reset 14:00\n  claude2   ok     5h  11%  7d  22%  reset 18:30\n[cc] reinicia: 2026-01-02T03:04:05Z\n";
+        assert_eq!(account_wrapper_summary(table).as_deref(), Some("account used: claude2, 11% of the 5-hour window"));
+        assert_eq!(account_wrapper_summary("\u{1b}[90m[cc] conta: main\u{1b}[0m\n").as_deref(), Some("account used: main"));
+        assert_eq!(account_wrapper_summary("[cc] conta: claude2\nError: connection refused\n"), None, "a failure keeps its own classification");
+        assert_eq!(account_wrapper_summary("Background tasks still running"), None);
+        assert_eq!(account_wrapper_summary(""), None);
+    }
+
+    #[test]
+    fn a_turn_that_ended_well_with_the_table_is_listed_as_an_account_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::for_tests(dir.path());
+        let repo = dir.path().join("p");
+        std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
+        let context = ProjectContext::new(app.project_service().open_existing_project(&repo.display().to_string()).unwrap());
+        let w = context.work_dir();
+        let path = app.loop_files.get_turn_path(&w, 1);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, json!({"exit_code": 0, "stderr": "[cc] conta: claude2\n claude2 5h 11%\n"}).to_string()).unwrap();
+        let body = app.error_center().build_errors(&context);
+        assert_eq!(body["items"][0]["id"], "turn-1-account");
+        assert_eq!(body["items"][0]["severity"], "info");
+        assert_eq!(body["items"][0]["title"], "Turn 1: account used: claude2, 11% of the 5-hour window");
+        assert_eq!(body["problems"], 0);
+    }
+
+    #[test]
     fn known_and_unknown_reasons_are_explained() {
         let (title, _, _, recover) = explain("dirty tree outside the paths");
         assert_eq!((title.as_str(), recover), ("Files left uncommitted in the worktree", vec!["commit_leftovers".to_string(), "discard_leftovers".to_string()]));
@@ -524,7 +590,7 @@ mod tests {
         };
         write_turn(1, json!({"timeout": true, "stderr": "slow"}));
         write_turn(2, json!({"exit_code": 1, "result": "boom"}));
-        write_turn(3, json!({"stderr": "Background tasks still running"}));
+        write_turn(3, json!({"stderr": "\u{1b}[90mBackground\u{1b}[0m tasks still running [31mred[0m"}));
         write_turn(4, json!({"exit_code": 0}));
         let guard = crate::repositories::loop_command_file::get_loop_internal_dir(&w).join("guard.log");
         std::fs::create_dir_all(guard.parent().unwrap()).unwrap();
@@ -536,6 +602,8 @@ mod tests {
         let body = app.error_center().build_errors(&context);
         let ids: Vec<&str> = body["items"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["turn-2-failed", "turn-1-timeout", "feature-a", "turn-3-stderr", "guard-loop-git-write"]);
+        let colored = body["items"].as_array().unwrap().iter().find(|i| i["id"] == "turn-3-stderr").unwrap();
+        assert_eq!(colored["detail"], "Background tasks still running red");
         assert_eq!((body["counts"].clone(), body["problems"].clone()), (json!({"error": 3, "warning": 0, "info": 2}), json!(3)));
         assert_eq!(body["items"][0]["title"], "Turn 2 failed (exit code 1)");
         assert_eq!(body["items"][4]["turn_counts"], json!({"2": 1}));

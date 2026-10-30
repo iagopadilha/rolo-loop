@@ -24,7 +24,17 @@ pub const MAP_CODEBASE_PROMPT: &str = "/orchestrator map";
 pub const MAP_ALLOWED_FOLDERS: [&str; 2] = [".specs", run_hints::MAP_FOLDER];
 pub const MAP_GUARD_IGNORED_PATHS: [&str; 4] = [".git", "node_modules", ".specs/project/loop/internal", ".specs/project/loop/json/MONITOR.json"];
 const MAP_GUARD_IGNORED_TRASH: &str = ".specs/.trash";
-pub const MAP_NOTHING_WRITTEN: &str = "The AI finished but wrote no document in docs/codebase, so nothing was mapped. The usual cause: the /orchestrator skill is not loaded in that claude session (update the plugin: claude plugin update claude-maestro@claude-maestro) and the AI answered as a plain chat.";
+pub const MAP_NOTHING_WRITTEN: &str = "The AI finished but wrote no document in docs/codebase, so nothing was mapped. The usual cause: the /orchestrator skill is not loaded in that claude session (update the plugin: claude plugin update agent-maestro@agent-maestro) and the AI answered as a plain chat.";
+pub const MAP_GUARD_REFUSALS_SHOWN: usize = 3;
+
+/// The failure text when the guard refused actions during a job that then wrote nothing: the real cause, not the skill.
+pub fn guard_blocked_message(refusals: &[String]) -> String {
+    format!(
+        "The AI finished but wrote no document in docs/codebase, so nothing was mapped. The guard refused {} action(s) during the job: {}. Fix or release that rule (PERMISSIONS.json) and map again.",
+        refusals.len(),
+        refusals.join(" | ")
+    )
+}
 pub const ROOT_INVENTORY_NAME: &str = "_root";
 pub const MAP_GUARD_NOTE: &str = "\n\n(The app undid changes outside .specs/ and docs/codebase/: {})";
 pub const MAP_GUARD_FILES_SHOWN: usize = 8;
@@ -64,6 +74,8 @@ pub struct MapStart {
     /// Optional, runs after the snapshot in the job thread (e.g. a later inventory); an error ends the job as error.
     pub extra_before_start: Option<ExtraBeforeStart>,
     pub parallel_key: Option<String>,
+    /// Environment of the job (the guard reads `LOOP_PRIMARY_SPECS` to find the primary repo's confirmed subprojects).
+    pub extra_env: Vec<(String, String)>,
 }
 
 impl MapStart {
@@ -82,6 +94,7 @@ impl MapStart {
             job_type: JOB_TYPE_MAP.into(),
             extra_before_start: None,
             parallel_key: None,
+            extra_env: Vec::new(),
         }
     }
 }
@@ -117,7 +130,9 @@ impl MapJobRunner<'_> {
             job_type,
             extra_before_start,
             parallel_key,
+            extra_env,
         } = params;
+        let started_at = engine_state::loop_io::now_iso(); // same local format as the `t` of guard.log
         let holder: Arc<Mutex<Option<WorkspaceSnapshot>>> = Arc::new(Mutex::new(None));
         let map_root_path = if map_root.is_empty() { PathBuf::from(&repo_path) } else { Path::new(&repo_path).join(&map_root) };
         let map_folder = run_hints::MAP_FOLDER.split('/').fold(map_root_path.clone(), |a, p| a.join(p));
@@ -129,7 +144,13 @@ impl MapJobRunner<'_> {
         }
         let app = self.app.shared();
         let (snapshot_slot, snapshot_repo, snapshot_ignored) = (holder.clone(), repo_path.clone(), ignored_paths.clone());
+        // M6: the guard's rules are applied to the paths this map will write BEFORE anything is spent; every refusal comes in one message
+        let (dry_cwd, dry_root, dry_env) = (work_dir.clone().unwrap_or_else(|| repo_path.clone()), map_root_path.display().to_string(), extra_env.clone());
         let before_start: super::claude_jobs::BeforeStart = Box::new(move |update_progress| {
+            let refusals = engine_state::map_dry_check::check(&dry_cwd, &dry_root, &dry_env);
+            if !refusals.is_empty() {
+                return Err(ClaudeJobError::new(engine_state::map_dry_check::message(&refusals)));
+            }
             let guard = WorkspaceFileGuard::default();
             *snapshot_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(guard.take_snapshot(&snapshot_repo, &path_refs(&snapshot_ignored), &DEFAULT_IGNORED_NAMES));
             if use_inventory {
@@ -148,9 +169,10 @@ impl MapJobRunner<'_> {
         let mut command = ClaudeJobCommand::new(argv, "");
         command.work_dir = work_dir;
         command.parallel_key = parallel_key;
+        command.extra_env = extra_env;
         command.before_start = Some(before_start);
         command.finalize = Some(Box::new(move |result| {
-            finish_app.map_jobs().finish(&finish_project, &finish_repo, &finish_root, &finish_folder, &finish_holder, &allowed_folders, result)
+            finish_app.map_jobs().finish(&finish_project, &finish_repo, &finish_root, &finish_folder, &finish_holder, &allowed_folders, &started_at, result)
         }));
         self.app.jobs().start_job(&repo_path, &job_type, command)
     }
@@ -165,6 +187,7 @@ impl MapJobRunner<'_> {
         map_folder: &Path,
         holder: &Arc<Mutex<Option<WorkspaceSnapshot>>>,
         allowed_folders: &[String],
+        started_at: &str,
         result: Value,
     ) -> Value {
         let snapshot = holder.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -188,7 +211,8 @@ impl MapJobRunner<'_> {
         }
         if ok && run_hints::list_map_documents(map_folder).is_empty() {
             result["ok"] = json!(false);
-            result["error"] = json!(MAP_NOTHING_WRITTEN);
+            let refusals = self.guard_refusals_since(&[repo_path, &map_root_path.display().to_string()], started_at);
+            result["error"] = json!(if refusals.is_empty() { MAP_NOTHING_WRITTEN.to_string() } else { guard_blocked_message(&refusals) });
         }
         if engine_state::notify_truthy(result.get("ok")) {
             // after the undo above: this is the app (not the AI) writing the index and pointing CLAUDE.md at the map
@@ -199,6 +223,28 @@ impl MapJobRunner<'_> {
             }
         }
         result
+    }
+
+    /// M4. `rule: detail` of the guard blocks logged since `since` in any of `folders` (at most `MAP_GUARD_REFUSALS_SHOWN`, redacted and clipped by
+    /// the same code as the panel's guard list).
+    pub fn guard_refusals_since(&self, folders: &[&str], since: &str) -> Vec<String> {
+        let mut found: Vec<(String, String)> = Vec::new();
+        for folder in folders {
+            for line in self.app.loop_files.read_guard_lines(folder) {
+                let decision = line.get("decision").and_then(Value::as_str).unwrap_or("").trim().to_lowercase();
+                let stamp = line.get("t").and_then(Value::as_str).unwrap_or("");
+                if !super::guard_events::BLOCK_DECISIONS.contains(&decision.as_str()) || stamp < since {
+                    continue;
+                }
+                let event = super::guard_events::build_guard_event(&line);
+                let item = format!("{}: {}", event["rule"].as_str().unwrap_or(""), event["detail"].as_str().unwrap_or(""));
+                if !found.iter().any(|(_, existing)| *existing == item) {
+                    found.push((stamp.to_string(), item));
+                }
+            }
+        }
+        found.sort();
+        found.into_iter().map(|(_, item)| item).take(MAP_GUARD_REFUSALS_SHOWN).collect()
     }
 
     /// Short sha of HEAD for the "mapped at" marker; `None` when git cannot tell (the marker then says it is unknown).
@@ -222,6 +268,8 @@ mod tests {
     struct Mapper {
         write_into: Option<PathBuf>,
         also_touch: Option<PathBuf>,
+        /// Lines the guard "wrote" into this guard.log while the job ran.
+        guard_log: Option<(PathBuf, String)>,
     }
 
     impl ProcessRunner for Mapper {
@@ -232,6 +280,10 @@ mod tests {
             if let Some(dir) = &self.write_into {
                 std::fs::create_dir_all(dir).unwrap();
                 std::fs::write(dir.join("STACK.md"), "x").unwrap();
+            }
+            if let Some((path, lines)) = &self.guard_log {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, lines).unwrap();
             }
             if let Some(file) = &self.also_touch {
                 std::fs::write(file, "oops").unwrap();
@@ -264,7 +316,7 @@ mod tests {
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::write(repo.join("src/a.rs"), "original").unwrap();
-        let runner = Arc::new(Mapper { write_into: Some(repo.join("docs/codebase")), also_touch: Some(repo.join("src/a.rs")) });
+        let runner = Arc::new(Mapper { write_into: Some(repo.join("docs/codebase")), also_touch: Some(repo.join("src/a.rs")), guard_log: None });
         let app = App::for_tests_with(dir.path(), runner);
         let repo_text = repo.display().to_string();
         let job = app.map_jobs().start(MapStart::new(&repo_text, "p1")).unwrap();
@@ -278,15 +330,63 @@ mod tests {
     }
 
     #[test]
+    fn a_map_the_guard_would_refuse_fails_at_once_with_every_refusal_in_one_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(repo.join(".specs/project")).unwrap();
+        std::fs::create_dir_all(repo.join("svc")).unwrap();
+        let runner = Arc::new(Mapper { write_into: Some(repo.join("svc/docs/codebase")), also_touch: None, guard_log: None });
+        let app = App::for_tests_with(dir.path(), runner);
+        let repo_text = repo.display().to_string();
+        let mut params = MapStart::new(&repo_text, "p1");
+        params.map_root = "svc".into();
+        params.work_dir = Some(repo.join("svc").display().to_string());
+        let job = app.map_jobs().start(params).unwrap();
+        let finished = wait_finished(&app, &repo_text, job["id"].as_str().unwrap());
+        let error = finished["error"].as_str().unwrap_or("").to_string();
+        assert_eq!(finished["state"], "error", "{finished}");
+        assert!(error.starts_with("The guard would refuse 8 of the files this map writes") && error.contains("nothing was spent"), "{error}");
+        assert!(!repo.join("svc/docs/codebase/STACK.md").exists(), "no agent ran");
+    }
+
+    #[test]
     fn a_map_job_that_writes_nothing_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
-        let app = App::for_tests_with(dir.path(), Arc::new(Mapper { write_into: None, also_touch: None }));
+        let app = App::for_tests_with(dir.path(), Arc::new(Mapper { write_into: None, also_touch: None, guard_log: None }));
         let repo_text = repo.display().to_string();
         let job = app.map_jobs().start(MapStart::new(&repo_text, "p1")).unwrap();
         let finished = wait_finished(&app, &repo_text, job["id"].as_str().unwrap());
         assert_eq!((finished["state"].clone(), finished["error"].clone()), (json!("error"), json!(MAP_NOTHING_WRITTEN)));
         assert!(guard_note(&["a".into(), "b".into()]).ends_with("(The app undid changes outside .specs/ and docs/codebase/: a, b)"));
+    }
+
+    #[test]
+    fn a_job_that_wrote_nothing_names_the_guard_refusals_of_this_job_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let log = repo.join(".specs/project/loop/internal/guard.log");
+        std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+        // a refusal from an earlier day must not be blamed; the one written during the job must
+        let lines = concat!(
+            r#"{"t":"2001-01-01T00:00:00","rule":"old-rule","decision":"blocked","detail":"earlier job"}"#,
+            "\n",
+            r#"{"t":"2999-01-01T00:00:00","rule":"scope-specs-only","decision":"blocked","detail":"write outside the allowed folders"}"#,
+            "\n",
+            r#"{"t":"2999-01-01T00:00:01","rule":"fyi","decision":"info","detail":"not a block"}"#,
+            "\n"
+        );
+        std::fs::write(&log, &lines[..lines.find("\n{\"t\":\"2999").unwrap() + 1]).unwrap();
+        let runner = Arc::new(Mapper { write_into: None, also_touch: None, guard_log: Some((log.clone(), lines.to_string())) });
+        let app = App::for_tests_with(dir.path(), runner);
+        let repo_text = repo.display().to_string();
+        let job = app.map_jobs().start(MapStart::new(&repo_text, "p1")).unwrap();
+        let finished = wait_finished(&app, &repo_text, job["id"].as_str().unwrap());
+        let error = finished["error"].as_str().unwrap();
+        assert!(error.contains("scope-specs-only: write outside the allowed folders"), "{error}");
+        assert!(!error.contains("old-rule") && !error.contains("not a block") && !error.contains("skill is not loaded"), "{error}");
     }
 }

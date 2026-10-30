@@ -32,7 +32,9 @@ pub fn is_code(name: &str) -> bool {
 }
 
 fn git_files(root: &str) -> Option<Vec<String>> {
-    let out = std::process::Command::new("git").args(["-C", root, "ls-files"]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output().ok()?;
+    let mut git = std::process::Command::new("git");
+    git.args(["-C", root, "ls-files"]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    let out = crate::loop_io::hidden(&mut git).output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     if out.status.success() && !text.trim().is_empty() {
         Some(
@@ -84,12 +86,9 @@ pub fn code_files(root: &str) -> Vec<String> {
 }
 
 fn last_commit_time(folder: &str) -> Option<i64> {
-    let out = std::process::Command::new("git")
-        .args(["-C", folder, "log", "-1", "--format=%ct", "--", "."])
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()?;
+    let mut git = std::process::Command::new("git");
+    git.args(["-C", folder, "log", "-1", "--format=%ct", "--", "."]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    let out = crate::loop_io::hidden(&mut git).output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if out.status.success() && !text.is_empty() {
         text.parse().ok()

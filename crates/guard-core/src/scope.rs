@@ -458,7 +458,8 @@ fn option_values(plain: &[String], long_names: &[&str], short_names: &[&str]) ->
 }
 
 pub fn resolve_dir(g: &G, path: &str, cwd: Option<&str>) -> String {
-    let path = g.expanduser(path.trim_matches(|c| c == '"' || c == '\''));
+    // `/c/x` is not absolute for Python 3.13+ on Windows: map the git-bash drive forms first, or `cd /c/x` lands in `<cwd>/c/x`
+    let path = crate::paths::git_bash_drive(&g.expanduser(path.trim_matches(|c| c == '"' || c == '\'')));
     if nt_isabs(&path) {
         g.norm(&path)
     } else {
@@ -486,7 +487,7 @@ fn target_dirs(g: &G, tokens: &[String], cwd: Option<&str>) -> Vec<String> {
                 bare = ".".to_string();
             }
         }
-        let raw = g.expanduser(&bare);
+        let raw = crate::paths::git_bash_drive(&g.expanduser(&bare));
         let raw = if nt_isabs(&raw) {
             raw
         } else {
@@ -686,9 +687,25 @@ const MAP_DOCS_FOLDER: &str = "docs/codebase/";
 const SUBPROJECTS_SUGGESTED_PATH: &str = ".specs/project/SUBPROJECTS-SUGGESTED.json";
 const SYSTEM_MAP_PATH: &str = "docs/codebase/SYSTEM.md";
 
-fn confirmed_subproject_map_folders(specs_dir: &str) -> Vec<String> {
-    let path = nt_join(&nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project"), "SUBPROJECTS.json");
-    let Some(data) = std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
+/// `relative` is inside `folder` (given with its trailing slash) or is the folder itself (`mkdir -p docs/codebase`).
+fn in_folder(relative: &str, folder: &str) -> bool {
+    relative.starts_with(folder) || relative == folder.trim_end_matches('/')
+}
+
+/// The confirmed monorepo folders of the project. The list lives in the PRIMARY repo's `.specs`: a map job of another repo is told where it
+/// is by `LOOP_PRIMARY_SPECS` (nothing is copied into that repo); without it the repo's own `.specs` is read.
+fn confirmed_subproject_map_folders(g: &G, specs_dir: &str) -> Vec<String> {
+    let exported = g.env.text("LOOP_PRIMARY_SPECS");
+    let primary = exported.trim();
+    let mut candidates = vec![nt_join(&nt_join(&nt_dirname(specs_dir), ".specs"), "project")];
+    if !primary.is_empty() {
+        candidates.push(nt_join(primary, "project"));
+    }
+    let Some(data) = candidates
+        .iter()
+        .map(|folder| nt_join(folder, "SUBPROJECTS.json"))
+        .find_map(|path| std::fs::read(path).ok().and_then(|b| String::from_utf8(b).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()))
+    else {
         return vec![];
     };
     let mut folders = Vec::new();
@@ -732,7 +749,7 @@ pub fn check_specs_only(g: &G, target: &str, rules: &[String], specs_dir: Option
     }
     let relative = if inside_repo { absolute[root.len() + 1..].to_string() } else { absolute.clone() };
     let narrow = has_rule(rules, "subprojects-only") || has_rule(rules, "system-only");
-    if !narrow && SPECS_ONLY_FOLDERS.iter().any(|f| relative.starts_with(f)) {
+    if !narrow && SPECS_ONLY_FOLDERS.iter().any(|f| in_folder(&relative, f)) {
         return vec![];
     }
     let short = |s: &str| -> String { s.chars().take(100).collect() };
@@ -748,7 +765,8 @@ pub fn check_specs_only(g: &G, target: &str, rules: &[String], specs_dir: Option
         }
         return vec![h("system-only", format!("the system map writes only {SYSTEM_MAP_PATH}: {}", short(&relative)))];
     }
-    if has_rule(rules, "map-docs") && (relative.starts_with(MAP_DOCS_FOLDER) || confirmed_subproject_map_folders(specs).iter().any(|f| relative.starts_with(&g.fold(f))))
+    if has_rule(rules, "map-docs")
+        && (in_folder(&relative, MAP_DOCS_FOLDER) || confirmed_subproject_map_folders(g, specs).iter().any(|f| in_folder(&relative, &g.fold(f))))
     {
         return vec![];
     }
@@ -771,7 +789,7 @@ pub fn check_scope(g: &G, target: &str, rules: &[String], specs_dir: Option<&str
         return hits;
     }
     if has_rule(rules, "repo-only") && !inside_repo {
-        hits.push(h("repo-only", "file outside the project's worktrees: only repository code"));
+        hits.push(h("repo-only", format!("file {}: only repository code", crate::call_forms::OUTSIDE_WORKTREES)));
         return hits;
     }
     if absolute.starts_with(&format!("{root}/.regression/")) {

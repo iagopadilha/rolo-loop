@@ -55,7 +55,7 @@ Anti-rubber-stamp rule, applied by the orchestrator: `APPROVED` is only valid wi
 
 `BLOCKED` goes back to the `spec-writer` with the `FINDINGS` pasted into the prompt. A second rejection of the same spec goes to quarantine.
 
-## `executor-back` / `executor-front` / `executor-generic`
+## `executor` (`KIND: back|front|generic`)
 
 ```
 FEATURE: <slug>
@@ -95,6 +95,18 @@ NOTES: up to 2 lines, or "-"
 - `PASS` → `verified`, go to commit.
 - `UNVERIFIED` → the repo has no test, build, typecheck or lint. The feature advances, but is marked unverified in `STATE.md` and shown that way in the report. Never present `UNVERIFIED` as approved.
 - `FAIL` → goes back to the same executor with the `FAIL` block in the prompt. Second failure → quarantine.
+
+## `quality-gate`
+
+```
+FEATURE: <slug>
+VERDICT: APPROVED|BLOCKED
+FINDINGS:
+- <path>:<line> <rule-id> <blocker|warning>: <problem>. <fix>.
+NOTES: up to 2 lines, or "-"
+```
+
+`BLOCKED` goes back to the same executor with the `FINDINGS` pasted into the prompt. A second `BLOCKED` goes to quarantine. `warning` lines only go to the report.
 
 ## `verifier-flow`
 

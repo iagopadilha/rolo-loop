@@ -279,7 +279,7 @@ pub fn without_answer_flags(argv: &[String]) -> Vec<String> {
             skip_next = false;
             continue;
         }
-        if is_flag(token, "--answer") || is_flag(token, "--option") {
+        if is_flag(token, "--answer") || is_flag(token, "--option") || is_flag(token, "--instruction") {
             skip_next = !token.contains('=');
             continue;
         }
@@ -354,6 +354,9 @@ mod tests {
     fn relaunch_command_drops_the_answer() {
         let argv: Vec<String> = ["harness", "loop", "C:\\r", "--answer", "yes", "--wave", "2", "--option=1", "--ans=x", "--e2e"].map(String::from).to_vec();
         assert_eq!(without_answer_flags(&argv), vec!["harness", "loop", "C:\\r", "--wave", "2", "--e2e"]);
+        let with_instruction: Vec<String> =
+            ["harness", "loop", "C:\\r", "--instruction", "fix the spec", "--wave", "2", "--instruction=again"].map(String::from).to_vec();
+        assert_eq!(without_answer_flags(&with_instruction), vec!["harness", "loop", "C:\\r", "--wave", "2"]);
         let dir = tempfile::tempdir().unwrap();
         let work = dir.path().display().to_string();
         let path = write_loop_command(&work, &argv, "C:\\cwd").unwrap();

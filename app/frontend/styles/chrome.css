@@ -15,8 +15,8 @@
 .tr-line.is-compact .tr-action{margin-left:0;flex:none;flex-wrap:nowrap;gap:6px;}
 .tr-line.is-compact .tr-action .btn{padding:1px 8px;font-size:11px;}
 .tr-line.is-compact .tr-ai-sep{margin-left:6px;padding-left:8px;}
-.tr-line.is-compact .ck-detail{position:absolute;z-index:5;margin-top:26px;padding:4px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--panel);}
-.tr-toggle{flex:none;margin-left:auto;border:1px solid var(--line2);background:transparent;color:var(--dim);border-radius:6px;font:600 10px var(--mono);padding:0 6px;line-height:18px;cursor:pointer;}
+.tr-line.is-compact .ck-detail{position:absolute;z-index:5;margin-top:26px;padding:4px 8px;border:1px solid var(--line2);border-radius:0;background:var(--panel);}
+.tr-toggle{flex:none;margin-left:auto;border:1px solid var(--line2);background:transparent;color:var(--dim);border-radius:0;font:600 10px var(--mono);padding:0 6px;line-height:18px;cursor:pointer;}
 .tr-toggle:hover{color:var(--text);border-color:var(--line4);}
 .tr-line.is-compact .tr-action+.tr-toggle{margin-left:0;}
 .trail{position:relative;}

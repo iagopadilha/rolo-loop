@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(report["guard"]["found"], false);
         let problems: Vec<&str> = report["problems"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
         assert!(
-            problems.iter().any(|p| p.starts_with("orchestrator skill not found")) && problems.iter().any(|p| p.starts_with("claude-craft-kit not found")),
+            problems.iter().any(|p| p.starts_with("the plugin's bin/guard.exe was not found")) && problems.iter().any(|p| p.starts_with("claude-craft-kit not found")),
             "{problems:?}"
         );
         assert_eq!(report["notify_channels"].as_array().unwrap().len(), 5);

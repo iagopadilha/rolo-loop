@@ -4,13 +4,28 @@
 import { html, render } from '../util/preact.js';
 import { ChatColumn } from '../pages/panel/dialogs/chat_column.js';
 import { registerRenderer } from '../pages/project_panel.js';
+import { LogoMark } from './logo.js';
 
 let dialogCounter = 0;
 
 // Calls `renderBody` as a component, so a body may use hooks without touching the frame's own hook order.
 const BodyHost = ({ renderBody }) => renderBody();
 
-function BigDialogFrame({ titleId, badge, badgeColor, title, renderBody, chat, onClose }) {
+function BigDialogFrame({ titleId, badge, badgeColor, title, renderBody, chat, onClose, page }) {
+  if (page) {
+    // full-page view (feature, agent, dependencies): the same header as every page, a way back, the crumb
+    return html`
+      <div class="bd-head bd-page-head">
+        <span class="logo" aria-hidden="true"><${LogoMark} /></span>
+        <button type="button" class="btn bd-back" onClick=${onClose}><span aria-hidden="true">←</span>${page === true ? 'Back' : page}</button>
+        ${badge ? html`<span class="bd-badge" style=${{ color: badgeColor, borderColor: badgeColor }}>${badge}</span>` : null}
+        <h2 class="bd-title" id=${titleId}>${title}</h2>
+      </div>
+      <div class="bd-main">
+        <div class="bd-body" tabindex="-1"><div class="bd-page-inner"><${BodyHost} renderBody=${renderBody} /></div></div>
+        ${chat ? html`<${ChatColumn} key=${JSON.stringify(chat.scope)} chat=${chat} />` : null}
+      </div>`;
+  }
   return html`
     <div class="bd-head">
       ${badge ? html`<span class="bd-badge" style=${{ color: badgeColor, borderColor: badgeColor }}>${badge}</span>` : null}
@@ -50,7 +65,7 @@ export function openBigDialog({ badge, badgeColor = 'var(--info)', title, body, 
     rerender() {
       if (closed) return;
       render(html`<${BigDialogFrame} titleId=${titleId} badge=${badge} badgeColor=${badgeColor} title=${title}
-        renderBody=${body} chat=${chat} onClose=${handle.close} />`, dialog);
+        renderBody=${body} chat=${chat} onClose=${handle.close} page=${page} />`, dialog);
     },
   };
 

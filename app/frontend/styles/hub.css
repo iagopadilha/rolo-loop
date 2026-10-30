@@ -10,5 +10,5 @@
 
 /* Repository manager: per-repo setup command and the repos suggested by the planning AI */
 .rp-setup{display:flex;flex-direction:column;gap:8px;padding:12px 0 2px;border-top:1px dashed var(--line2);}
-.rp-setup-input{flex:1 1 260px;min-width:0;font-size:12px;padding:6px 8px;border:1px solid var(--line3);border-radius:6px;background:var(--bg);color:var(--text);}
-.rp-suggested{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--amber);border-radius:8px;}
+.rp-setup-input{flex:1 1 260px;min-width:0;font-size:12px;padding:6px 8px;border:1px solid var(--line3);border-radius:0;background:var(--bg);color:var(--text);}
+.rp-suggested{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--amber);border-radius:0;}

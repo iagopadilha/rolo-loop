@@ -7,7 +7,7 @@ use crate::domain::errors::{AppError, Kind};
 use crate::domain::project::ProjectContext;
 use crate::repositories::loop_read_formatting::{now_iso, number_value, to_number, to_text_list};
 use crate::repositories::specs_file::compute_bytes_version;
-use engine_state::{graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
+use engine_state::{e2e_evidence, graph_view, loop_state, notify_truthy, roadmap_settings, subprojects};
 use pycompat::{last_segment, nt_normpath, partition, Re};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
@@ -17,6 +17,7 @@ use std::sync::LazyLock;
 pub const QUARANTINE_OPTIONS: [&str; 2] = ["try again", "skip and continue"];
 const KNOWN_ACTIONS: [&str; 4] = ["deliver", "summary", "push", "clean_worktrees"];
 const RECENT_ACTIONS_LIMIT: usize = 10;
+const PERMISSIONS_LOG_LIMIT: usize = 50;
 const LOOP_WORKTREE_SUFFIX: &str = "-worktree-loop";
 const SECONDS_PER_MINUTE: f64 = 60.0;
 const COST_UNIT: &str = "USD";
@@ -171,6 +172,28 @@ pub fn parse_answers(text: &str) -> Vec<Value> {
     answers[answers.len().saturating_sub(ANSWERS_LIMIT)..].to_vec()
 }
 
+/// "What is running now" at a glance (G1): the turn, each lane (feature, its name, its stage and step), the process that runs them and since
+/// when. `{"running": false}` when nothing the engine started is alive. Built only from the engine's process registry and the roadmap view.
+fn build_now(processes: &[Value], stages: &[Value], features: &[Value], turn: Option<u64>) -> Value {
+    let Some(process) = processes.first() else { return json!({"running": false, "turn": turn, "lanes": [], "label": null, "started_at": null}) };
+    let lanes: Vec<Value> = process["lanes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|lane| {
+            let slug = lane["feature"].as_str().unwrap_or("");
+            let feature = features.iter().find(|f| f["id"] == slug);
+            let stage_n = feature.map(|f| f["stage"].clone()).unwrap_or(Value::Null);
+            let stage_title = stages.iter().find(|s| s["n"] == stage_n && !stage_n.is_null()).map(|s| s["title"].clone()).unwrap_or(Value::Null);
+            json!({"feature": slug, "name": feature.map(|f| f["name"].clone()).unwrap_or(Value::Null), "step": lane["step"], "stage": stage_n, "stage_title": stage_title})
+        })
+        .collect();
+    json!({
+        "running": true, "turn": process["turn"], "lanes": lanes, "label": process["label"], "started_at": process["started_at"], "pid": process["pid"],
+        "claude": process["claude"], "claude_account": process["claude_account"],
+    })
+}
+
 fn epoch_now() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
@@ -228,6 +251,7 @@ impl LoopPanelService<'_> {
             ("claude", g("claude")),
             ("claude_account", g("claude_account")),
             ("claude_switches", g("claude_switches")),
+            ("claude_events", if g("claude_events").is_array() { g("claude_events") } else { json!([]) }),
             ("claude_account_info", self.app.accounts.build_current_account(&meta)),
             ("claude_totals", build_usage_totals(&turn_rows, &calls)),
             ("claude_usage_view", json!(self.app.accounts.build_usage_view(&meta, &turn_rows, &calls, false))),
@@ -246,20 +270,28 @@ impl LoopPanelService<'_> {
             .collect();
         let quarantine = Self::build_quarantine(&features);
         let shutdown = self.app.activity.get().and_then(|m| m.seconds_until_shutdown());
+        let processes = engine_state::process_registry::list(&work_dir, running);
+        let now_block = build_now(&processes, &stages, &features, running_turn);
         json!({
+            "processes": processes, "now": now_block,
+            "permissions_log": engine_state::access_grant::journal_view(&work_dir, PERMISSIONS_LOG_LIMIT),
+            "approvals": engine_state::approvals::view(&work_dir),
             "now": now_iso(), "project": get_project_name(&meta, context), "repo": context.repo_path(), "work": work_dir, "branch": g("branch"),
             "project_ref": {"id": context.project.id, "name": context.project.name, "repo_path": context.project.repo_path},
             "loop": self.build_loop_block(&work_dir, &summary, turn.clone()),
             "meta": meta_block,
             "limits": self.build_limits(&work_dir, &meta, running, &numbers), "stages": stages, "features": features, "counts": counts,
             "graph": graph, "agents": agents, "validate": validate,
+            "validations": e2e_evidence::validations(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
+            "manual_checks": e2e_evidence::manual_checks(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
+            "validation_report": engine_state::validation_report::build(&work_dir, &Path::new(&work_dir).join(".specs").join("project").display().to_string()),
             "decisions_summary": self.app.decisions().open_counts(context),
             "recent_actions": self.list_recent_actions(&work_dir),
             "roadmap_approval": files.read_roadmap_approval(&work_dir, Some(context.repo_path())),
             "planning_required": self.app.planning_requirement().is_planning_required(context),
             "answers": parse_answers(&files.read_state_file(&work_dir, "ANSWERS.md")),
             "turns": turn_rows, "quarantine": quarantine,
-            "guard_events": guard["events"], "guard_counts": guard["counts"],
+            "guard_events": guard["events"], "guard_counts": guard["counts"], "guard_waiting": guard["waiting"],
             "monitor": {"url": project_url, "idle_in_s": null, "shutdown_in_s": shutdown},
         })
     }
@@ -297,6 +329,8 @@ impl LoopPanelService<'_> {
             "reason": if running { Value::Null } else { or_null(summary.get("reason")) },
             "next": if running { Value::Null } else { or_null(loop_json.get("next")) },
             "options": if running { vec![] } else { texts("options") }, "to_check": texts("to_check"),
+            "pause_kind": if running { Value::Null } else { or_null(loop_json.get("pause_kind")) },
+            "credential_request": if running { Value::Null } else { or_null(loop_json.get("credential_request")) },
             "at": loop_json.get("at").cloned().unwrap_or(Value::Null),
             "pause_requested": self.app.loop_files.is_pause_requested(work_dir),
         })
@@ -357,7 +391,7 @@ impl LoopPanelService<'_> {
     pub fn build_graph(&self, context: &ProjectContext) -> Value {
         let roadmap_text = self.app.loop_files.read_roadmap(&context.work_dir());
         let (features, _) = loop_state::parse_roadmap(&roadmap_text);
-        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features)})
+        json!({"dependencies_mermaid": graph_view::mermaid(&features), "states_mermaid": loop_state::graph(&roadmap_text), "text": graph_view::ascii_graph(&features), "dependency_proposals": engine_state::audit_deps::proposals(&context.work_dir())})
     }
 
     // ------------------------------------------------ codebase maps (read only)
@@ -397,6 +431,23 @@ impl LoopPanelService<'_> {
         for folder in folders {
             Self::walk_map(work_dir, &current.join(folder), files);
         }
+    }
+
+    /// `POST access/grant {kind, value, reason}`: the same release as `harness grant` (`host` or `cost_limit`), journaled with who = `panel`. A refusal
+    /// is a normal answer (`ok: false` and the sentence that says why); the journal line is in `entry`.
+    pub fn grant_access(&self, context: &ProjectContext, body: &Value) -> Result<Value, AppError> {
+        let text = |key: &str| body.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+        let (kind, value, reason) = (text("kind"), text("value"), text("reason"));
+        if kind.trim().is_empty() || value.trim().is_empty() {
+            return Err(AppError::invalid_request("`kind` and `value` are required"));
+        }
+        let (repo, work) = (context.repo_path().to_string(), context.work_dir());
+        let data_dir = self.app.config.ctx.data_dir();
+        let toolkit_root = self.app.config.ctx.toolkit_root.display().to_string();
+        let access = engine_state::access_grant::AccessContext { repo: &repo, work: &work, data_dir: &data_dir, toolkit_root: &toolkit_root, who: "panel" };
+        let result = engine_state::access_grant::grant_access(&access, &kind, &value, &reason);
+        self.app.log.info("access_grant", &[("project", json!(context.project.id)), ("kind", json!(kind.trim())), ("granted", json!(result.granted))]);
+        Ok(json!({"ok": result.granted, "changed": result.changed, "message": result.message, "entry": result.entry}))
     }
 
     /// `GET codebase/tree`: `{groups:[{folder, label, files:[{path, name}]}]}` for the root map and the map of each non-skipped subproject of the
@@ -452,6 +503,21 @@ impl LoopPanelService<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn now_strip_names_lanes_stage_and_process() {
+        assert_eq!(build_now(&[], &[], &[], Some(3))["running"], false);
+        let process = json!({"turn": 3, "pid": 99, "started_at": "2026-01-01T10:00:00", "label": "Loop turn 3 \u{b7} feature a", "claude": "claude", "claude_account": "",
+                             "lanes": [{"feature": "a", "step": "execute"}]});
+        let stages = vec![json!({"n": 1, "title": "Stage 1", "features": ["a"]})];
+        let features = vec![json!({"id": "a", "name": "Alpha", "stage": 1, "status": "building"})];
+        let now = build_now(&[process], &stages, &features, Some(3));
+        assert_eq!((now["running"].clone(), now["turn"].clone(), now["pid"].clone()), (json!(true), json!(3), json!(99)));
+        assert_eq!(
+            (now["lanes"][0]["name"].as_str(), now["lanes"][0]["step"].as_str(), now["lanes"][0]["stage_title"].as_str()),
+            (Some("Alpha"), Some("execute"), Some("Stage 1"))
+        );
+    }
 
     #[test]
     fn command_limits_cost_cap_and_answers() {

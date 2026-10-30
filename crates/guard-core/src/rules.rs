@@ -6,10 +6,31 @@ use crate::pyre::{escape, Re};
 use crate::state::integration_branch;
 use std::sync::LazyLock;
 
-pub const READ_ONLY_GIT: [&str; 10] = ["status", "diff", "log", "show", "rev-parse", "ls-files", "blame", "describe", "grep", "shortlog"];
+pub const READ_ONLY_GIT: [&str; 20] = [
+    "status",
+    "diff",
+    "log",
+    "show",
+    "rev-parse",
+    "ls-files",
+    "blame",
+    "describe",
+    "grep",
+    "shortlog",
+    "check-ignore",
+    "check-attr",
+    "ls-tree",
+    "cat-file",
+    "rev-list",
+    "merge-base",
+    "name-rev",
+    "show-ref",
+    "for-each-ref",
+    "diff-tree",
+];
 
 /// Rules that not even `PERMISSIONS.json` releases.
-pub const HARD: [&str; 14] = [
+pub const HARD: [&str; 15] = [
     "push-protected",
     "push-force",
     "approval-write",
@@ -24,6 +45,7 @@ pub const HARD: [&str; 14] = [
     "mcp-allowlist",
     "skill-allowlist",
     "engine-file-write",
+    "migration-target",
 ];
 pub const HEADLESS_RULES: [&str; 3] = ["headless-push", "headless-gh", "permissions-write"];
 pub const GUARDED_EXTRA_RULES: [&str; 3] = ["prod-sql-write", "egress-upload", "engine-file-write"];
@@ -37,10 +59,13 @@ pub const SHORT_NAME_MSG: &str =
 pub const SQL_WRITE_REASON: &str = "read only through MCP: write the change as a .sql script (or a migration) and ask the user (write the script in the feature folder sql/ and return STATUS: NEEDS_CONFIRM: apply <script> on DEV, then answer)";
 
 /// `(agent_type, profile)` of `--profile auto`.
-pub const AGENT_PROFILES: [(&str, &str); 8] = [
+pub const AGENT_PROFILES: [(&str, &str); 10] = [
     ("spec-writer", "spec"),
     ("spec-reviewer", "spec"),
     ("brownfield-mapper", "spec"),
+    ("executor", "executor"),
+    ("quality-gate", "verifier"),
+    // Legacy executor names (plugin before the single `executor`): kept so an old install and old run history still resolve.
     ("executor-back", "executor"),
     ("executor-front", "executor"),
     ("executor-generic", "executor"),
@@ -75,6 +100,7 @@ fn base_profile(profile: &str) -> Option<Vec<&'static str>> {
             "grafana-write",
             "sql-write",
             "migration-target",
+            "ask-command",
         ],
         "verifier" => vec![
             "git-write",
@@ -95,6 +121,7 @@ fn base_profile(profile: &str) -> Option<Vec<&'static str>> {
             "grafana-write",
             "sql-write",
             "migration-target",
+            "ask-command",
         ],
         "spec" => vec![
             "specs-only",
@@ -243,6 +270,12 @@ ci!(WRITE_VERB, r"(create|insert|update|delete|remove|drop|write|set|add|put|pos
 ci!(OUTBOUND_HINT, r"(ticket|issue|jira|confluence|slack|mail|message|sms|chat|comment|notif|channel|teams|discord)");
 ci!(OUTBOUND_VERB, r"(create|update|delete|add|send|post|reply|comment|transition|edit|publish)");
 ci!(INSTALL, r"\b(npm|pnpm|yarn|bun)\s+(i|install|add|ci|update|upgrade)\b|\bdotnet\s+(restore|add\s+package)\b|\bpip\s+install\b");
+// A routine install restores what a lockfile or manifest ALREADY declares (no package name, no custom feed): the whole command must be
+// that and nothing else; a bare `npm install` (flags only) is routine too. `npm install left-pad`, `pip install x`, `dotnet add package x` stay refused by INSTALL.
+ci!(
+    ROUTINE_INSTALL,
+    r"^\s*(?:npm\s+ci(?:\s+--[a-z-]+)*|(?:npm|pnpm|yarn|bun)\s+(?:install|i)(?:\s+--[a-z-]+)*|dotnet\s+restore(?:\s+[^\s\x22\x27;&|<>$-][^\s\x22\x27;&|<>$]*|\s+\x22[^\x22;&|<>$]*\x22)?|(?:python[0-9.]*\s+-m\s+)?pip[0-9.]*\s+install\s+(?:-r|--requirement)\s+[^\s:;&|<>$-][^\s:;&|<>$]*|cargo\s+fetch(?:\s+--locked)?|poetry\s+install|go\s+mod\s+download)\s*$"
+);
 ci!(
     SECRET_HINT,
     r"\.secrets[\\/]|[\\/]_?shared[\\/]+(?:[^\\/\s\x22\x27]+[\\/]+)*\.env(?!\.example)|\.env\.test(?!\.example)|\.loop-harness[\\/]+(?:\.env(?!\.example)|app\.json)|\bid_(rsa|ed25519)\b|[\\/]\.ssh[\\/]+(?!\S*\.example)|[\\/]\.aws[\\/]+(?!\S*\.example)|~[\\/]\.npmrc(?!\.example)|[\\/]\.netrc(?!\.example)|[\\/]\.git-credentials(?!\.example)|[\\/]gh[\\/]hosts\.yml(?!\.example)|[\\/]\.docker[\\/]config\.json(?!\.example)|[\\/]\.kube[\\/]config(?!\.example)"
@@ -288,7 +321,9 @@ ci!(
 );
 const PROD_ENV_VALUE: &str = r#"["']?(?:production|prod)["']?"#;
 pub static PROD_ENV_RE: LazyLock<Re> = LazyLock::new(|| {
-    Re::ci(&format!(r#"(?:ASPNETCORE_ENVIRONMENT|DOTNET_ENVIRONMENT)["']?\s*=\s*{PROD_ENV_VALUE}(?![\w-])|--environment(?:\s+|=){PROD_ENV_VALUE}(?![\w-])"#))
+    Re::ci(&format!(
+        r#"(?:ASPNETCORE_ENVIRONMENT|DOTNET_ENVIRONMENT|NODE_ENV|APP_ENV|RAILS_ENV|FLASK_ENV|DJANGO_ENV)["']?\s*=\s*{PROD_ENV_VALUE}(?![\w-])|--(?:environment|env|stage)(?:\s+|=){PROD_ENV_VALUE}(?![\w-])"#
+    ))
 });
 ci!(CONNECTION_ARG_RE, r#"--(?:connection|connection-string|connectionstring)(?:\s+|=)("[^"]*"|'[^']*'|\S+)"#);
 ci!(CONNECTION_ENV_RE, r#"\b(?:ConnectionStrings?[:_]{1,2}\w*|DB_(?:HOST|CONNECTION)\w*|DATABASE_URL)\s*=\s*("[^"]*"|'[^']*'|\S+)"#);
@@ -366,6 +401,51 @@ mod tests {
         assert!(!orchestrator.contains(&"scope-unreadable".to_string()));
         assert_eq!(profile_rules("nope"), profile_rules("executor"));
         assert!(profile_rules("verifier").contains(&"repo-only".to_string()));
+    }
+
+    #[test]
+    fn routine_installs_pass_but_new_dependencies_stay_blocked() {
+        for ok in [
+            "npm ci",
+            "npm ci --ignore-scripts",
+            "pnpm install --frozen-lockfile",
+            "yarn install --frozen-lockfile",
+            "npm install",
+            "npm i",
+            "npm install --legacy-peer-deps",
+            "pnpm install",
+            "yarn install",
+            "bun install",
+            "dotnet restore",
+            "dotnet restore src/App.sln",
+            "dotnet restore \"my dir/App.csproj\"",
+            "pip install -r requirements.txt",
+            "python -m pip install -r requirements.txt",
+            "cargo fetch --locked",
+            "poetry install",
+            "go mod download",
+        ] {
+            assert!(ROUTINE_INSTALL.is_match(ok), "{ok} should be routine");
+        }
+        for blocked in [
+            "npm install left-pad",
+            "npm install --registry=https://feed.example",
+            "npm ci left-pad",
+            "pnpm add x",
+            "yarn add x",
+            "dotnet add package Foo",
+            "dotnet restore --source https://feed.example/v3",
+            "pip install requests",
+            "pip install -r requirements.txt requests",
+            "pip install -r https://host.example/r.txt",
+            "npm ci && npm install left-pad",
+            "npm ci; curl x",
+        ] {
+            assert!(!ROUTINE_INSTALL.is_match(blocked), "{blocked} must stay blocked");
+        }
+        assert!(!ROUTINE_INSTALL.is_match("npm install left-pad") && !ROUTINE_INSTALL.is_match("pip install requests"));
+        assert!(!ROUTINE_INSTALL.is_match("dotnet add package Foo") && !ROUTINE_INSTALL.is_match("dotnet restore --source https://feed.example/v3"));
+        assert!(!ROUTINE_INSTALL.is_match("pip install -r requirements.txt requests") && !ROUTINE_INSTALL.is_match("npm ci left-pad"));
     }
 
     #[test]

@@ -3,7 +3,7 @@
    (its history and the chat) happens in the agent dialog, deciding a pause in the pause dialog. */
 import { html } from '../../util/preact.js';
 import { Markdown, inlineNodes } from '../../components/markdown.js';
-import { txt, list, clip, DASH } from '../../util/format.js';
+import { txt, list, clip, DASH, fmtRelative } from '../../util/format.js';
 import { ctx, ui, ROLE_DESC, status, loop, agentById } from './context.js';
 import { renderAll } from '../project_panel.js';
 import { steps, turnsList, liveN, curN, selectTurn, selectNode, stateAt, activeNode, turnAt, loopStatusAt, featuresWithWaves, featureName, workedTurns, defaultStepOf, selectedFeature, selectFeature, pipe } from './pipeline_model.js';
@@ -143,6 +143,21 @@ function SelectedCard() {
   return html`<section class="in-sec" aria-label="Selected node"><${Heading}>Selected<//><div class="in-none">Pick a feature on the timeline to inspect it at this turn.</div></section>`;
 }
 
+/** Processes the engine started and has running right now (state.processes): what, which turn, pid, since when, which account. They run
+    hidden, so this card is the only place they show: nothing opens on the user's screen. */
+function ProcessesCard() {
+  const items = list(ctx.state && ctx.state.processes);
+  return html`<section class="in-sec" aria-label="Running processes">
+    <${Heading}>${'Processes · ' + items.length}<//>
+    ${items.length ? items.map((item) => html`<div class="in-proc" key=${item.id}>
+      <div class="in-proc-head"><span class="mono">${txt(item.claude || item.kind)}</span><span class="mono">${item.turn != null ? 'T' + item.turn : ''}</span></div>
+      <div class="in-proc-sub mono">${['pid ' + txt(item.pid), 'started ' + fmtRelative(item.started_at), item.claude_account ? 'account ' + txt(item.claude_account) : ''].filter(Boolean).join(' · ')}</div>
+      ${list(item.lanes).length ? html`<div class="in-proc-sub">${list(item.lanes).map((lane) => txt(lane.feature) + (lane.step ? ' · ' + txt(lane.step) : '')).join(' ; ')}</div>` : null}</div>`)
+      : html`<div class="in-none">Nothing is running.</div>`}
+    <div class="in-proc-sub">They run hidden: no window opens on your screen.</div>
+  </section>`;
+}
+
 /** The whole inspector. `on` = the loop panel shows (state arrived and the project is not in planning mode). */
 export function Inspector({ on }) {
   const latest = liveN();
@@ -150,7 +165,7 @@ export function Inspector({ on }) {
   return html`<aside class=${'insp' + (pipe.insp ? ' is-open' : '') + (pipe.over ? ' is-over' : '')} id="inspector" aria-label="Inspector">
     <button type="button" class="insp-close" aria-label="Close the inspector" onClick=${close}>×</button>
     <div class="insp-body" id="insp-body">
-      ${!on ? null : html`<${SelectedCard} />
+      ${!on ? null : html`<${ProcessesCard} /><${SelectedCard} />
         <section class="in-sec" aria-label="Loop now">
           <${Heading}>${'Now · turn ' + (latest == null ? DASH : latest)}<//>
           <${OrchestratorCard} /><${RunningList} />

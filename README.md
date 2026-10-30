@@ -1,14 +1,14 @@
-# claude-maestro
+# agent-maestro
 
 Unattended build loops for Claude Code, run on your own subscription.
 
 > Status: under construction. This is a ground-up Rust rebuild; nothing is released yet.
 
-claude-maestro lets you describe a goal, approve a plan and leave a loop to work through it. A planner splits the work into features; sub-agents write the spec, review it, implement and verify each feature inside an isolated git worktree; a guard hook keeps every tool call inside the lines you drew. You watch it all from a local web panel and answer when the loop asks.
+agent-maestro lets you describe a goal, approve a plan and leave a loop to work through it. A planner splits the work into features; sub-agents write the spec, review it, implement and verify each feature inside an isolated git worktree; a guard hook keeps every tool call inside the lines you drew. You watch it all from a local web panel and answer when the loop asks.
 
 ## What is in the box
 
-- A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and eight sub-agents (`spec-writer`, `spec-reviewer`, `executor-back`, `executor-front`, `executor-generic`, `verifier`, `verifier-flow`, `brownfield-mapper`).
+- A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and seven sub-agents (`spec-writer`, `spec-reviewer`, `executor`, `quality-gate`, `verifier`, `verifier-flow`, `brownfield-mapper`).
 - `harness`, one Windows binary: the loop engine, the local panel server and the command line.
 - `guard`, the hook binary Claude Code runs before every tool call.
 - The panel: a small Preact app served by `harness` on `127.0.0.1`.
@@ -46,8 +46,8 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 ## Install
 
 ```
-/plugin marketplace add iagopadilha/claude-maestro
-/plugin install claude-maestro@claude-maestro
+/plugin marketplace add iagopadilha/agent-maestro
+/plugin install agent-maestro@agent-maestro
 harness install
 harness doctor
 ```

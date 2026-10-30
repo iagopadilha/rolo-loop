@@ -40,6 +40,28 @@ If essential data is missing (how to authenticate, which app, success criterion)
 - **Clean everything up:** close the browser, shut down only what you started, remove only the test data you created.
 - **Never `PASS` without having run.** If it did not start, did not authenticate or the browser did not open: `UNVERIFIED`.
 
+## Call forms the guard accepts
+
+<!-- BEGIN call-forms (generated from the guard's rule data by `cargo test -p guard-core call_forms`; do not edit by hand) -->
+### How the E2E must call things (forms the guard accepts)
+
+Most guard refusals in an E2E run are about HOW a call is written, not about a missing permission. Write each call in the form below the first time.
+
+- **Not this** (call form, `egress-host`): a `curl` whose URL is built in a sub-shell, read from a file or held in a variable with another name.
+  **This:** write the URL in the command (`curl http://localhost:5000/health`) or use a variable named `*_URL / *_HOST / *_BASE` that is defined in `.specs/project/.env.test` (`curl $API_URL/health`).
+- **Not this** (call form, `egress-host`): a wrapper function or script that forwards its arguments (`call() { curl "$@"; }`, `$*`), because the URL is no longer in the command.
+  **This:** call `curl` directly in every command, with the URL or the variable written in that command.
+- **Not this** (refused on purpose, `egress-tamper`): `python -S`, `python -E`, `python -I`: they skip the preload the loop's network layer depends on.
+  **This:** run the script as `python script.py` (or `python -c '...'`) without those flags.
+- **Not this** (call form, `egress-tamper`): `playwright-cli run-code --filename x.js` when the file does not exist yet (written in the same call), because the guard must read it first.
+  **This:** write the script file in one call and run it in a LATER call (`playwright-cli run-code --filename=<worktree>/e2e/step.js`), or pass the code inline.
+- **Not this** (call form, `repo-only`): a write, or a git command, from a folder that is not one of the loop's worktrees (for example the parent folder of the worktrees).
+  **This:** run from inside the worktree and keep the evidence and scripts in it.
+- **Not this** (call form, Claude Code): a token or password written in the command (`curl -H "Authorization: Bearer eyJ..."`).
+  **This:** let the test runner set it: `"<TOOLKIT>/bin/craft.exe" testenv exec --project <root> '<command>'` puts it in an environment variable, and the command sends `-H "Authorization: Bearer $JWT"`; never write the value.
+- **Network list:** only `localhost` and the hosts of `.specs/project/NETWORK.json` are reachable; a host that is not listed is `UNVERIFIED` with the host named in `NOTES`, never a reason to try another client.
+<!-- END call-forms -->
+
 ## Monorepo and context
 
 - No `SUBPROJECT:` line in the prompt = nothing in this section changes: work as before.
@@ -47,17 +69,22 @@ If essential data is missing (how to authenticate, which app, success criterion)
 - **File size:** run `harness inventory <folder> --changed <feature paths> --json` (the Loop Harness app's `harness`, read-only) and report every changed file above the threshold in `NOTES` as a WARNING. It is never a failure and never changes the verdict.
 - Read the `SUBPROJECT:` lines for what to start and where. For API routes, read the CONTRACT section of `docs/codebase/SYSTEM.md` (between `<!-- CONTRACT:BEGIN -->` and `<!-- CONTRACT:END -->`).
 
-## Reserved for the loop: not yours, and a guard block is final
+## Reserved for the loop
 
-This applies only inside the loop (your prompt came from the `/orchestrator` skill); in a normal conversation with the user these actions stay allowed as usual.
-
-- **Not yours in the loop, so do not even try them:** `git add`/`commit`/`push`/`checkout`/`switch`/`stash`/`reset` (the orchestrator commits each feature at its own checkpoint step; push and PR happen once, at the end, in the engine's `harness deliver`); anything of `harness` except the read-only `inventory` (`deliver`, `loop`, `serve`, `state`, `rules`, `audit`, `graph`); writing `.specs/project/` state (ROADMAP, STATE, RULES, FLOWS, `loop/**`) or `LOOP.json`; sending anything out of the machine (ticket, issue, message or any MCP tool that writes); installing or adding dependencies unless the spec says so; touching a file outside your `PATHS` (or, for spec and mapper agents, outside `.specs/features/<your slug>/` and `docs/codebase/` **of the loop's worktree, your current folder**, never the user's original repo folder); and any repo other than the loop's worktrees.
-- **If you need one of them,** do not attempt it: ask for it in your return (`NOTES`; executor `STATUS: NEEDS_CONFIRM`; reviewer or verifier `BLOCKED` or `UNVERIFIED` with the reason) and finish your work without it.
-- **A guard block is final.** When the guard (a `PreToolUse` hook) blocks a command or a write, never retry it and never try a variant (other flags, `-C`, `python -c`, a script, a subshell, another tool, a copy of the file): that is the same attempt again and it only burns the turn. Stop that action, carry on with the rest of your work, and say in your return what was blocked and why it was needed.
+In the loop the orchestrator owns git (commit, push, checkout, stash, reset), `harness` (except the read-only `inventory`), the state in `.specs/project/` (ROADMAP, STATE, RULES, FLOWS, `loop/**`, `LOOP.json`), anything that leaves the machine, installs of new dependencies, files outside your scope and every repo other than the loop's worktrees. Do not attempt them: ask in your return (`NOTES`; executor `NEEDS_CONFIRM`; reviewer/verifier `BLOCKED`/`UNVERIFIED`) and finish the rest. **A guard block is final:** never retry it or try a variant (other flags, `python -c`, a subshell, a copy of the file); say what was blocked and why it was needed.
 
 ## Decisions to report (important and critical only)
 
 In your return add one line per decision the user should review, as `DECISION: [<slug>] level=<important|critical> <doubt> | chose: <choice> | revert: <how>` (`<slug>` is your feature, or `general`). **No `turn`: the orchestrator stamps it.** `important` = changes behavior, an API, data, security, a dependency or the feature's scope, or you were unsure and could not verify it. `critical` = `important` AND hard to revert or risky (data loss, security, public API break, irreversible migration, a scope change nobody asked for). Do NOT report routine choices (naming, placement inside the pattern, formatting); with nothing to report, add no line. You never write `VALIDATE.md` yourself.
+
+## Files the engine reads (keep them current, text only)
+
+All beside the feature's spec in `.specs/features/<slug>/`; one bullet per item, fields separated by `|`. Never write a credential value in any of them.
+
+- `VALIDATION.md`, the plan, written once and reused every turn: `- <case-id>: what it proves | covers: <REQ-ids> | call: <the call> | expect: <what must be in the answer or on the screen, not only 200> | needs: <test data or user>`. Change it only when the requirement changes; the engine shows a change as a new version. Re-run only the cases that failed or depend on the change.
+- `FINDINGS.md`: `- fix-now|decide|manual: <finding> | wrong: <list|lookup|screen|api|...>`. `fix-now` = clear expected result and low risk; the loop fixes it in the same run, and only if `BEHAVIOUR.md` says what the screen must do and `wrong:` names the side. `decide` = a product choice; `manual` = needs a person. When the intended behaviour is silent, write `decide` and ask; never guess the direction of the fix.
+- `BEHAVIOUR.md`: who operates the screen and which data it must reach, in plain sentences.
+- `.specs/project/loop/CLEANUP.md` (one for the run): `- [open] <test data the check created> | remove: <how to remove it> | feature: <slug>`; the engine lists it at the end and never runs it.
 
 ## Return (mandatory)
 

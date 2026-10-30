@@ -143,7 +143,8 @@ pub fn hook_path_problems(ctx: &AppCtx) -> Vec<String> {
 
 /// claude version, permission modes and git: what changes from machine to machine.
 pub fn environment_problems(opts: &LoopOpts, repo: &str) -> Pair {
-    let (mut problems, mut warns) = (Vec::new(), Vec::new());
+    let mut problems = Vec::new();
+    let warns = Vec::new();
     let binary = claude_binaries::resolve(if opts.claude.is_empty() { "claude" } else { &opts.claude });
     if !binary.is_empty() && !binary.ends_with(".py") {
         let (_, out, err) = run_timeout(&binary, &["--help"], None, 60);
@@ -154,16 +155,19 @@ pub fn environment_problems(opts: &LoopOpts, repo: &str) -> Pair {
         if !text.contains("--max-budget-usd") {
             problems.push("this `claude` has no --max-budget-usd; update Claude Code".into());
         }
-        if opts.permission_mode == "auto" && !text.contains("\"auto\"") {
-            problems.push("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits".into());
-        } else if opts.permission_mode == "auto" {
-            warns.push("`auto` mode depends on the plan/account; if the first turn fails because of it, run with --permission-mode acceptEdits".into());
-        }
+        problems.extend(auto_mode_problem(&opts.permission_mode, &text));
     }
     if git(repo, &["worktree", "list"]).0 != 0 {
         problems.push("this git does not support `git worktree` (needs >= 2.5)".into());
     }
     (problems, warns)
+}
+
+/// W4. The `auto` permission mode: probed once from the `--help` text of the `claude` in use. When the help lists it, nothing is said (it
+/// works); when it does not, that is a problem with the fix in the same line. The old "depends on the plan/account" line, shown on every
+/// start even when `auto` works, is gone.
+pub fn auto_mode_problem(permission_mode: &str, help: &str) -> Option<String> {
+    (permission_mode == "auto" && !help.contains("\"auto\"")).then(|| "this `claude` does not list the `auto` mode; use --permission-mode acceptEdits".to_string())
 }
 
 // ---------------------------------------------------------------- preflight (--check and before every run)
@@ -215,11 +219,12 @@ pub fn test_environment_stop_reason(root: &str, problems: &[String]) -> String {
 }
 
 /// All verified/blocked = nothing to do, EXCEPT when the user is answering a question (--option/--answer): the answer may reopen a
-/// quarantined feature (e.g. fix the spec and redo the gate).
-pub fn nothing_left_to_do(done: i64, total: i64, opts: &LoopOpts, state: Option<&Value>, tiebreak_possible: bool) -> bool {
+/// quarantined feature (e.g. fix the spec and redo the gate), and EXCEPT with --e2e while verified features still lack their final E2E result
+/// (`e2e_pending`): that is work left, so "Try again" after a stop in the final phase is not refused.
+pub fn nothing_left_to_do(done: i64, total: i64, opts: &LoopOpts, state: Option<&Value>, tiebreak_possible: bool, e2e_pending: usize) -> bool {
     let will_auto_answer =
         state.is_some_and(|s| s.get("status").and_then(Value::as_str) == Some("awaiting_user")) && opts.auto_answer && state.and_then(pick_auto_answer).is_some();
-    total != 0 && done == total && !(opts.option != 0 || !opts.answer.is_empty()) && !will_auto_answer && !tiebreak_possible
+    total != 0 && done == total && !(opts.option != 0 || !opts.answer.is_empty()) && !will_auto_answer && !tiebreak_possible && !(opts.e2e && e2e_pending > 0)
 }
 
 /// The roadmap must have been approved by the user (ROADMAP-APPROVED.json). When answering a question (--answer/--option) the signature is
@@ -273,9 +278,10 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
             problems.push(format!("{tag}{} is not a git repository", item.path));
             continue;
         }
-        if CONFORMANCE.search(&read(&Path::new(&item.path).join("CLAUDE.md"))).is_none() {
-            problems.push(format!("{tag}its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {} --write STANDARD|LEGACY)", item.path));
+        for problem in repo_conformance_problems(&item.path) {
+            problems.push(format!("{tag}{problem}"));
         }
+        warns.extend(stale_git_lock_warnings(&item.path).into_iter().map(|w| format!("{tag}{w}")));
         if !Path::new(&item.loop_worktree_path()).is_dir() && git(&item.path, &["branch", "--show-current"]).1.is_empty() {
             problems.push(format!("{tag}no current branch (detached HEAD)"));
         }
@@ -284,6 +290,45 @@ pub fn extra_repos_preflight(repos: &[RepoRef], opts: &LoopOpts, features: Optio
         }
     }
     (problems, warns)
+}
+
+/// S1. The Conformance line of a repo. A confirmed monorepo keeps it per subproject (its owner), so the repo root `CLAUDE.md` is not asked for
+/// it: every subproject that is not skipped needs its own line. A repo that is not a confirmed monorepo needs the root line.
+pub fn repo_conformance_problems(path: &str) -> Vec<String> {
+    if !subprojects::monorepo_confirmed(path, None) {
+        if CONFORMANCE.search(&read(&Path::new(path).join("CLAUDE.md"))).is_some() {
+            return vec![];
+        }
+        return vec![format!("its CLAUDE.md has no `Conformance: STANDARD|LEGACY` line (harness classify {path} --write STANDARD|LEGACY)")];
+    }
+    let (entry, _) = subprojects::load(path, None);
+    subprojects::entry_projects(entry.as_ref())
+        .iter()
+        .filter(|p| p.get("skip") != Some(&Value::Bool(true)))
+        .filter_map(|p| p.get("path").and_then(Value::as_str))
+        .filter(|sub| subprojects::read_conformance(path, sub) == "-")
+        .map(|sub| format!("subproject {sub} has no `Conformance: STANDARD|LEGACY` line in its own CLAUDE.md (confirmed monorepo: the line lives per subproject)"))
+        .collect()
+}
+
+/// A repository lock this old was left by a process that died.
+pub const STALE_LOCK_SECONDS: u64 = 60;
+
+/// S2. Warns about a stale `index.lock` of the repo (or of its linked worktree): every commit fails with it and the cause is not obvious.
+pub fn stale_git_lock_warnings(path: &str) -> Vec<String> {
+    let (code, lock, _) = git(path, &["rev-parse", "--git-path", "index.lock"]);
+    if code != 0 || lock.is_empty() {
+        return vec![];
+    }
+    let lock_path = if Path::new(&lock).is_absolute() { PathBuf::from(&lock) } else { Path::new(path).join(&lock) };
+    let age = std::fs::metadata(&lock_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|d| d.as_secs());
+    match age {
+        Some(seconds) if seconds >= STALE_LOCK_SECONDS => vec![format!(
+            "{} is {seconds}s old: a process that died left it and every commit will fail. If no git process is running, delete that file",
+            lock_path.display()
+        )],
+        _ => vec![],
+    }
 }
 
 fn readiness_checks_folder_has_map(folder: &str) -> bool {
@@ -303,7 +348,7 @@ pub fn check_fix(kind: &str) -> &'static str {
         "missing-roadmap" => "Generate and approve the roadmap in Planning",
         "uncommitted" => "Commit these files (the worktree is born from the last commit)",
         "dotnet-restore" => "Add `dotnet restore` as the Setup line in the ROADMAP header (planning)",
-        "node-modules" => "Add `npm ci` as the Setup line",
+        "node-modules" => "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line",
         "permission-mode" => "If the first turn fails, use permission mode acceptEdits",
         _ => "",
     }
@@ -373,6 +418,18 @@ pub fn repo_branch_problems(repo: &str) -> Pair {
     (problems, vec![])
 }
 
+/// Line endings: with `core.autocrlf=true` and no `.gitattributes` rule, a file checked out as CRLF reads as changed. The engine does not
+/// count line-ending-only changes, but the diff and the final PR still would; the app can add the LF rule to `.gitattributes`.
+pub fn line_ending_warnings(repo: &str) -> Vec<String> {
+    let attributes = read(&Path::new(repo).join(".gitattributes"));
+    let has_rule = pycompat::splitlines(&attributes).iter().any(|l| l.trim().starts_with("* ") && (l.contains("text") || l.contains("eol=")));
+    let autocrlf = git(repo, &["config", "--get", "core.autocrlf"]).1;
+    if has_rule || autocrlf == "input" || autocrlf == "false" {
+        return vec![];
+    }
+    vec!["line endings: this repo has no `* text=auto eol=lf` rule in .gitattributes and git converts to CRLF (core.autocrlf is not `input`), so files can read as changed only because of CRLF. Add the rule (the app offers it as a setup file) or run `git config core.autocrlf input`.".into()]
+}
+
 /// A repo whose worktree is not created yet and has no local integration branch starts from its current branch: say which.
 pub fn base_branch_warnings(env: &mut cfg::Env, repos: &[RepoRef], base_branch: &str) -> Vec<String> {
     let mut warns = Vec::new();
@@ -408,13 +465,20 @@ pub fn roadmap_problems(root: &str, repos: &[RepoRef], opts: &LoopOpts, setup_op
     let specs = Path::new(root).join(".specs").join("project").display().to_string();
     let state = load_json(&state_file(root, "LOOP.json"));
     let tiebreak = !gate_blocked_features(&specs).is_empty() && opts.auto_answer && opts.gate_tiebreaks > 0;
+    let pending_e2e = if opts.e2e { crate::turn_gates::e2e_pending(&specs).len() } else { 0 };
     if total == 0 {
         problems.push("ROADMAP.md has no feature line (`- [slug] status=...`)".into());
-    } else if nothing_left_to_do(done, total, opts, Some(&state), tiebreak) {
+    } else if nothing_left_to_do(done, total, opts, Some(&state), tiebreak, pending_e2e) {
         problems.push(format!("all {total} features are already verified/blocked: nothing to do"));
     } else {
-        let note = if done == total { " (answering the loop's question: the answer may reopen a quarantined feature)" } else { "" };
-        println!("[check] ROADMAP: {total} features, {done} closed, {} to do{note}", total - done);
+        let note = if done == total && pending_e2e > 0 {
+            format!(" (final E2E phase: {pending_e2e} verified feature(s) still without e2e=ok|failed|not-covered)")
+        } else if done == total {
+            " (answering the loop's question: the answer may reopen a quarantined feature)".to_string()
+        } else {
+            String::new()
+        };
+        println!("[check] ROADMAP: {total} features, {done} closed, {} to do{note}", if done == total && pending_e2e > 0 { pending_e2e as i64 } else { total - done });
     }
     (problems, vec![])
 }
@@ -449,7 +513,7 @@ pub fn dependency_audit_warnings(root: &str) -> Vec<String> {
     let loose: Vec<&audit_deps::Suggestion> = audit.suggestions.iter().filter(|s| s.cycle.is_empty()).collect();
     match loose.first() {
         Some(first) => vec![format!(
-            "{} forgotten dependency(ies) between features (e.g. {} -> {}). Run `harness audit --write` and decide; the orchestrator applies `deps=` before each wave.",
+            "{} forgotten dependency(ies) between features (e.g. {} -> {}). The panel lists them in Dependencies with one button to apply them now; the loop also adds the `deps=` itself before each turn.",
             loose.len(),
             first.feature,
             first.depends_on
@@ -545,17 +609,21 @@ pub fn push_problems(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
     (problems, warns)
 }
 
-/// Node / .NET repos: what a fresh worktree is born without.
+/// Node / .NET repos: what a fresh worktree is born without. Routine installs (a lockfile beside its manifest: `npm ci`, `dotnet restore`...)
+/// are run by the engine per subproject, so only what the engine will NOT install is said here.
 pub fn build_setup_warnings(repo: &str, work: &str, opts: &LoopOpts) -> Vec<String> {
     let mut warns = Vec::new();
-    let has_package = Path::new(repo).join("package.json").is_file();
-    if has_package && opts.setup.is_empty() && !Path::new(work).is_dir() {
-        warns.push("Node project: the worktree is born without node_modules. Use --setup \"npm ci\" (otherwise verify returns UNVERIFIED).".into());
+    let plan = crate::detect_setup::install_plan(repo);
+    let has_package = Path::new(repo).join("package.json").is_file() || plan.iter().any(|s| s.artifact == "node_modules");
+    if opts.setup.is_empty() && !Path::new(work).is_dir() {
+        for step in plan.iter().filter(|s| !s.routine) {
+            let place = if step.dir.is_empty() { "the root".to_string() } else { step.dir.clone() };
+            warns.push(format!(
+                "Node project ({place}): package.json without a lockfile, so the engine installs nothing there and the worktree is born without node_modules (verify returns UNVERIFIED). Commit a lockfile (`npm install` once) or use --setup \"npm install\"."
+            ));
+        }
     }
     let dotnet = find_dotnet(repo, 3);
-    if !dotnet.is_empty() && !Path::new(work).is_dir() {
-        warns.push(format!(".NET detected ({dotnet}): the worktree is born without bin/obj; `dotnet build` does an implicit restore (needs network or the NuGet cache). The executor does not run `dotnet restore` nor `dotnet add package` (guard); to restore beforehand, use --setup with `dotnet restore`."));
-    }
     if (!dotnet.is_empty() || has_package) && !Path::new(repo).join(".gitignore").is_file() {
         warns.push("repo has no .gitignore: bin/obj/node_modules generated by the build dirty the worktree and the loop stops on `dirty tree`.".into());
     }
@@ -747,8 +815,14 @@ pub fn preflight(ctx: &AppCtx, repo: &str, opts: &LoopOpts) -> Pair {
         push_new(warns, step_warns);
     };
     apply(&mut problems, &mut warns, repo_branch_problems(repo));
+    apply(&mut problems, &mut warns, (vec![], line_ending_warnings(repo)));
     apply(&mut problems, &mut warns, extra_repos_preflight(&repos, opts, Some(&features)));
     apply(&mut problems, &mut warns, (root_conformance_problems(&root), vec![]));
+    let mut lock_warns = stale_git_lock_warnings(repo);
+    if root != repo {
+        lock_warns.extend(stale_git_lock_warnings(&root));
+    }
+    apply(&mut problems, &mut warns, (vec![], lock_warns));
     apply(&mut problems, &mut warns, (if has_roadmap { vec![] } else { readiness_checks::installer_problems(&root, &repos) }, vec![]));
     let setup_open = !problems.is_empty(); // a real earlier step is still open: "generate the roadmap" is not said yet
     apply(&mut problems, &mut warns, roadmap_problems(&root, &repos, opts, setup_open));
@@ -803,6 +877,88 @@ mod tests {
     }
 
     #[test]
+    fn a_confirmed_monorepo_asks_the_conformance_line_per_subproject_not_at_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        std::fs::write(Path::new(&r).join("CLAUDE.md"), "no line here\n").unwrap();
+        assert_eq!(repo_conformance_problems(&r).len(), 1, "a plain repo still needs the root line");
+        let name = default_name_of(&r);
+        std::fs::create_dir_all(Path::new(&r).join(".specs/project")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/web")).unwrap();
+        std::fs::create_dir_all(Path::new(&r).join("apps/api")).unwrap();
+        std::fs::write(
+            Path::new(&r).join(".specs/project/SUBPROJECTS.json"),
+            format!("{{\"repos\": {{\"{name}\": {{\"monorepo\": true, \"confirmed\": true, \"projects\": [{{\"path\": \"apps/web\", \"skill\": \"x\"}}, {{\"path\": \"apps/api\", \"skill\": \"x\"}}, {{\"path\": \"tools\", \"skip\": true}}]}}}}}}"),
+        )
+        .unwrap();
+        std::fs::write(Path::new(&r).join("apps/web/CLAUDE.md"), "Conformance: STANDARD\n").unwrap();
+        let problems = repo_conformance_problems(&r);
+        assert_eq!(problems.len(), 1, "the root file is not asked, a subproject without its line still is: {problems:?}");
+        assert!(problems[0].contains("apps/api") && !problems[0].contains("tools"));
+        std::fs::write(Path::new(&r).join("apps/api/CLAUDE.md"), "Conformance: LEGACY\n").unwrap();
+        assert!(repo_conformance_problems(&r).is_empty());
+    }
+
+    fn default_name_of(path: &str) -> String {
+        subprojects::default_repo_name(path)
+    }
+
+    #[test]
+    fn only_an_old_index_lock_is_warned_about() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        assert!(stale_git_lock_warnings(&r).is_empty());
+        let lock = Path::new(&r).join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        assert!(stale_git_lock_warnings(&r).is_empty(), "a fresh lock may belong to a running git");
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+        std::fs::OpenOptions::new().write(true).open(&lock).unwrap().set_modified(old).unwrap();
+        let warnings = stale_git_lock_warnings(&r);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("index.lock") && warnings[0].contains("no git process is running"));
+    }
+
+    #[test]
+    fn line_ending_advice_goes_away_with_a_rule_or_autocrlf_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = repo(dir.path());
+        git(&r, &["config", "core.autocrlf", "true"]);
+        assert_eq!(line_ending_warnings(&r).len(), 1);
+        std::fs::write(Path::new(&r).join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
+        assert!(line_ending_warnings(&r).is_empty());
+        std::fs::remove_file(Path::new(&r).join(".gitattributes")).unwrap();
+        git(&r, &["config", "core.autocrlf", "input"]);
+        assert!(line_ending_warnings(&r).is_empty());
+    }
+
+    #[test]
+    fn engine_installs_make_the_node_warning_about_lockfiles_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo_dir, work) = (dir.path().join("proj"), dir.path().join("proj-worktree-loop").display().to_string());
+        std::fs::create_dir_all(repo_dir.join("web")).unwrap();
+        std::fs::create_dir_all(repo_dir.join("docs")).unwrap();
+        std::fs::write(repo_dir.join(".gitignore"), "node_modules\n").unwrap();
+        std::fs::write(repo_dir.join("web/package.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("web/package-lock.json"), "{}").unwrap();
+        std::fs::write(repo_dir.join("docs/package.json"), "{}").unwrap();
+        let warns = build_setup_warnings(&repo_dir.display().to_string(), &work, &LoopOpts::new(""));
+        assert_eq!(warns.len(), 1, "{warns:?}");
+        assert!(warns[0].starts_with("Node project (docs)") && warns[0].contains("without a lockfile"), "{}", warns[0]);
+        assert_eq!(check_item_kind(&warns[0]), "node-modules");
+    }
+
+    #[test]
+    fn auto_mode_is_probed_and_only_a_missing_mode_is_said() {
+        let help = "--permission-mode <mode> (choices: \"acceptEdits\", \"auto\", \"dontAsk\")";
+        assert_eq!(auto_mode_problem("auto", help), None, "a working auto mode says nothing");
+        assert_eq!(auto_mode_problem("acceptEdits", "no such mode"), None);
+        assert_eq!(
+            auto_mode_problem("auto", "--permission-mode <mode> (choices: \"acceptEdits\")").as_deref(),
+            Some("this `claude` does not list the `auto` mode; use --permission-mode acceptEdits")
+        );
+    }
+
+    #[test]
     fn kinds_and_fixes() {
         assert_eq!(check_item_kind("Missing .specs/project/ROADMAP.md: generate"), "missing-roadmap");
         assert_eq!(check_item_kind("uncommitted changes in api: 1 setup file"), "uncommitted");
@@ -810,7 +966,7 @@ mod tests {
         assert_eq!(check_item_kind("Node project: the worktree"), "node-modules");
         assert_eq!(check_item_kind("`auto` mode depends on the plan"), "permission-mode");
         assert_eq!(check_item_kind("anything else"), "other");
-        assert_eq!(check_fix("node-modules"), "Add `npm ci` as the Setup line");
+        assert_eq!(check_fix("node-modules"), "Commit a lockfile (the engine then runs `npm ci` itself) or add `npm install` as the Setup line");
         let items = check_items(&["a problem".to_string()], &["Node project: x".to_string()], &[], "C:\\nope");
         assert_eq!((items[0]["level"].clone(), items[1]["kind"].clone(), items[1]["level"].clone()), (json!("problem"), json!("node-modules"), json!("warning")));
     }
@@ -830,6 +986,25 @@ mod tests {
         opts.claude = "cmd".into();
         let (problems, _) = preflight(&ctx, &r, &opts);
         assert!(problems.iter().any(|p| p.starts_with("missing .specs/project/ROADMAP.md")), "{problems:?}");
+    }
+
+    #[test]
+    fn pending_e2e_is_work_left_for_the_preflight() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().display().to_string();
+        std::fs::create_dir_all(dir.path().join(".specs/project")).unwrap();
+        let roadmap = dir.path().join(".specs/project/ROADMAP.md");
+        std::fs::write(
+            &roadmap,
+            "## Stage 1\n- [a] status=verified paths=src/a e2e=ok\n- [b] status=verified paths=src/b e2e=unverified\n- [c] status=verified paths=src/c\n",
+        )
+        .unwrap();
+        let mut opts = LoopOpts::new(&root);
+        assert_eq!(roadmap_problems(&root, &[], &opts, false).0, vec!["all 3 features are already verified/blocked: nothing to do"]);
+        opts.e2e = true;
+        assert!(roadmap_problems(&root, &[], &opts, false).0.is_empty()); // b and c still need their E2E result: "Try again" is allowed
+        std::fs::write(&roadmap, "## Stage 1\n- [a] status=verified paths=src/a e2e=pass\n- [b] status=verified paths=src/b e2e=not-covered\n").unwrap();
+        assert_eq!(roadmap_problems(&root, &[], &opts, false).0.len(), 1); // nothing pending any more
     }
 
     #[test]

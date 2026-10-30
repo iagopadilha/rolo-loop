@@ -16,7 +16,9 @@ use std::path::{Path, PathBuf};
 
 pub const SKILL_DIR_VARIABLE: &str = "LOOP_SKILL_DIR";
 pub const PLUGIN_ROOT_VARIABLE: &str = "CLAUDE_PLUGIN_ROOT";
-pub const PLUGIN_NAME: &str = "claude-maestro";
+pub const PLUGIN_NAME: &str = "agent-maestro";
+/// Id the plugin had before the rename; an install made under it keeps working.
+pub const LEGACY_PLUGIN_NAME: &str = "claude-maestro";
 pub const TOOLKIT_PLUGIN_NAME: &str = "claude-craft-kit";
 pub const TOOLKIT_CONFIG_KEY: &str = "dev_toolkit_dir";
 /// Minimum toolkit version (layout with `bin/`, `shared/templates`, `shared/rules`).
@@ -136,7 +138,13 @@ impl Locator {
     }
 
     pub fn list_installed_plugin_skill_dirs(&self) -> Vec<PathBuf> {
-        self.installed_plugin_roots(PLUGIN_NAME).into_iter().map(|p| p.join("skills").join("orchestrator")).filter(|p| p.is_dir()).collect()
+        let mut roots = self.installed_plugin_roots(PLUGIN_NAME);
+        for legacy in self.installed_plugin_roots(LEGACY_PLUGIN_NAME) {
+            if !roots.iter().any(|p| same_text(p, &legacy)) {
+                roots.push(legacy);
+            }
+        }
+        roots.into_iter().map(|p| p.join("skills").join("orchestrator")).filter(|p| p.is_dir()).collect()
     }
 
     pub fn list_skill_dir_candidates(&self, configured: &str) -> Vec<PathBuf> {
@@ -439,6 +447,19 @@ mod tests {
         let release = f.cached("other", "0.4.0", false, None, Some("0.4.0"));
         f.cached("third", "weird", false, None, Some("not-a-version"));
         assert_eq!(f.locator().find_toolkit_root(&empty()), release);
+    }
+
+    #[test]
+    fn plugin_installed_under_either_name_is_found() {
+        let f = fx();
+        for (name, version) in [(PLUGIN_NAME, "0.4.0"), (LEGACY_PLUGIN_NAME, "0.3.1")] {
+            let skill = f.claude_home.join("plugins/cache/market").join(name).join(version).join("skills").join("orchestrator");
+            fs::create_dir_all(&skill).unwrap();
+        }
+        let dirs = f.locator().list_installed_plugin_skill_dirs();
+        assert_eq!(dirs.len(), 2);
+        assert!(dirs.iter().any(|p| p.to_string_lossy().contains(PLUGIN_NAME)));
+        assert!(dirs.iter().any(|p| p.to_string_lossy().contains(LEGACY_PLUGIN_NAME)));
     }
 
     #[test]

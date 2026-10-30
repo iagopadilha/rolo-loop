@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "mcp-policy"
 description = "Which MCP servers a loop session may use (config.json mcp_servers), shared by the guard, the engine and the API"
 version.workspace = true

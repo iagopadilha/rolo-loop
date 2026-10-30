@@ -12,6 +12,7 @@ import { repoInfo } from './header.js';
 import { DecisionsCount, openDecisionsDialog } from './decisions.js';
 import { openReopenPlanning } from './reopen_planning.js';
 import { FollowUpChat } from './follow_up_chat.js';
+import { Stepper } from '../../components/stepper.js';
 
 const POLL_MS = 4000;
 const COMMIT_FIRST_MESSAGE = 'chore(loop): commit the pending work before finishing';
@@ -112,6 +113,39 @@ export function openFinishDialog({ state, project, onDone } = {}) {
     } catch (failure) { s.error = failure.message; } finally { s.busy = false; draw(); }
   };
 
+  /** The Finish as numbered steps, derived from what the check says (nothing is invented): decisions, pending work, pull request, deliver. */
+  const finishSteps = (repos) => {
+    const pendingWork = repos.filter((repo) => countOf(repo.uncommitted != null ? repo.uncommitted : repo.dirty) || countOf(repo.unpushed) || repo.pushed === false);
+    const noPr = repos.filter((repo) => !repo.pr_url && list(repo.reasons).some((reason) => reason.code === 'pr_missing'));
+    const names = (items) => items.map((repo) => txt(repo.repo || repo.name)).join(', ');
+    return [
+      { id: 'decisions', title: 'Check what the AI decided alone', what: 'Open the decisions it took without asking and mark the ones you agree with.',
+        status: unreviewed() && !s.accept ? 'active' : 'done', result: unreviewed() ? `${unreviewed()} critical decision(s) not reviewed` : 'nothing waiting for review',
+        action: { label: 'Review decisions', onClick: () => openDecisionsDialog({ project, state }), hint: 'or tick "Finish without reviewing them" below' } },
+      { id: 'push', title: 'Commit and push the work', what: 'Saves what is still only in the worktree and pushes the loop branch of each repository.',
+        status: pendingWork.length ? 'active' : 'done', result: pendingWork.length ? `waiting in: ${names(pendingWork)}` : 'every repository is pushed',
+        action: { label: 'Commit and push', onClick: commitFirst, disabled: s.busy || !s.reasons, hint: s.reasons ? '' : 'press Finish once to see exactly what is pending' } },
+      { id: 'pr', title: 'Pull request', what: 'Finishing opens it when the remote supports it; otherwise it gives the compare link.',
+        status: noPr.length ? 'todo' : 'done', result: noPr.length ? `no pull request yet in: ${names(noPr)} (not a blocker)` : 'ready' },
+      { id: 'deliver', title: 'Back up, restore the plan and clean up', what: 'Saves a backup, puts the plan back in the repository and removes the worktree.',
+        status: 'todo', action: { label: s.busy ? 'Finishing…' : 'Finish', onClick: () => finish(FINISH_MODES.safe), disabled: s.busy || !!s.reasons || blockedByDecisions() } },
+    ];
+  };
+
+  /** Runs the one action of a step the back end sent (`{id, label, method, route}`), then reads the check again: the steps always come from it. */
+  const runStepAction = async (action) => {
+    s.busy = true; s.error = ''; s.note = ''; draw();
+    try {
+      const route = String(action.route || '').replace(/^\/+/, '');
+      const res = String(action.method || 'POST').toUpperCase() === 'GET' ? await ctx.api.get(route, 120000) : await ctx.api.post(route, {}, 120000);
+      s.note = res && res.next ? txt(res.next) : `${action.label}: done`;
+      s.data = await ctx.api.get('wrap-up', 30000);
+    } catch (failure) { s.error = failure.message; } finally { s.busy = false; draw(); }
+  };
+  /** The steps of the back end (GET wrap-up `steps`), in the shape the Stepper renders; the click runs the step's own action. */
+  const backendSteps = () => list(s.data.steps).map((step) => ({ id: step.id, title: step.title, what: step.what, status: step.status, result: step.result,
+    action: step.action && step.action.route ? { label: step.action.label || 'Run', disabled: s.busy, onClick: () => runStepAction(step.action) } : null }));
+
   const body = () => {
     if (s.receipt) return html`<${Receipt} receipt=${s.receipt} />`;
     if (s.error && !s.data) return html`<div class="nl-box nl-bad" role="alert">${s.error}</div>`;
@@ -120,6 +154,7 @@ export function openFinishDialog({ state, project, onDone } = {}) {
     const delivery = s.data.delivery || {};
     return html`<div class="wu-dlg">
       <p class="dlg-text">${delivery.remove_worktree_on_finish === false ? 'Finishing runs the delivery (push and pull request) and keeps the worktree.' : 'Finishing delivers what is missing, saves a backup, puts the plan back in the repository and removes the worktree. The branch stays.'}</p>
+      <${Stepper} steps=${list(s.data.steps).length ? backendSteps() : finishSteps(repos)} label="Steps to finish the loop" />
       ${repos.length ? html`<ul class="wu-repos" aria-label="Check per repository">${repos.map((repo, index) => html`<${RepoCheck} key=${index} repo=${repo} blocked=${list(s.reasons).map((reason) => reason.repo)} />`)}</ul>` : html`<div class="hint">No repository reported.</div>`}
       ${unreviewed() ? html`<div class="nl-box nl-warn" role="alert"><strong>${`${unreviewed()} critical decision${unreviewed() === 1 ? '' : 's'} not reviewed.`}</strong>
         <div><button type="button" class="btn btn-sm" onClick=${() => openDecisionsDialog({ project, state })}>Review them</button></div>

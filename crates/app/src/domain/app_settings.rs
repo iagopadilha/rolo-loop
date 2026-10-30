@@ -18,6 +18,8 @@ pub const LIST: &str = "list";
 pub const CHOICE: &str = "choice";
 const TEXT_MAX_LENGTH: usize = 500;
 const LIST_MAX_ITEMS: usize = 50;
+/// `loop_extra_skills` takes the whole skill list of a machine (the Settings screen lists at most this many).
+const SKILLS_MAX_ITEMS: usize = 400;
 pub const CAVEMAN_NOT_INSTALLED_NOTE: &str =
     "Not installed: no SessionStart hook that mentions caveman was found in your Claude settings (~/.claude/settings.json), so there is nothing to carry.";
 pub const CAVEMAN_RECOMMENDATION: &str = "Off by default: loop output is mostly machine-read lines and files, so terse replies save little. Turn it on to measure.";
@@ -69,7 +71,7 @@ pub fn setting_catalog() -> Vec<SettingDefinition> {
             d
         },
         restart(def("claude_binary", "Claude command", "The command that starts Claude Code. Empty uses claude from your PATH. Change it to run a wrapper (for example cc) signed in with another account.", TEXT, json!(""))),
-        restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped.", LIST, json!([]))),
+        restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped. A loop that is already running reads the list again before each turn.", LIST, json!([]))),
         min(restart(def("max_parallel_maps", "Parallel subproject maps", "How many subproject map jobs of a monorepo run at the same time; the rest wait in a queue. Lower it if your machine or account limit struggles.", INT, json!(6))), 1.0),
         min(restart(def("idle_hours", "Idle shutdown (hours)", "The app shuts itself down after this many hours without activity or a running loop. 0 means it never shuts down.", NUMBER, json!(2))), 0.0),
         min(restart(def("inventory_giant_lines", "Giant file (lines)", "A code file with more lines than this counts as giant: the readiness check warns when a feature touches one without a refactor feature before it.", INT, json!(1500))), 1.0),
@@ -162,8 +164,9 @@ fn read_list_value(definition: &SettingDefinition, value: &Value) -> Result<Valu
             items.push(text);
         }
     }
-    if items.len() > LIST_MAX_ITEMS {
-        return Err(invalid_setting(format!("{} accepts at most {LIST_MAX_ITEMS} items", definition.key)));
+    let max_items = if definition.key == "loop_extra_skills" { SKILLS_MAX_ITEMS } else { LIST_MAX_ITEMS };
+    if items.len() > max_items {
+        return Err(invalid_setting(format!("{} accepts at most {max_items} items", definition.key)));
     }
     if definition.key == "loop_extra_skills" {
         for name in &items {
@@ -336,8 +339,11 @@ mod tests {
             "env_sources item 1 (relative/.env): use a full path (or one that starts with ~)"
         );
         assert!(validate_setting_value(&def_of("env_sources"), &json!(["C:\\a\\.env", "~/x/.env"])).is_ok());
-        let many: Vec<Value> = (0..51).map(|i| json!(format!("s{i}"))).collect();
-        assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(many)).unwrap_err().message, "loop_extra_skills accepts at most 50 items");
+        let many: Vec<Value> = (0..401).map(|i| json!(format!("s{i}"))).collect();
+        assert_eq!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(many)).unwrap_err().message, "loop_extra_skills accepts at most 400 items");
+        let fifty_one: Vec<Value> = (0..51).map(|i| json!(format!("s{i}"))).collect();
+        assert!(validate_setting_value(&def_of("loop_extra_skills"), &Value::Array(fifty_one.clone())).is_ok());
+        assert_eq!(validate_setting_value(&def_of("egress_hosts"), &Value::Array(fifty_one)).unwrap_err().message, "egress_hosts accepts at most 50 items");
     }
 
     #[test]

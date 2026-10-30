@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: MIT
-//! `harness`: command line of claude-maestro.
+//! `harness`: command line of agent-maestro.
 
 mod access_cmd;
 mod demo_cmd;
 mod doctor_cmd;
 mod forward;
+mod grant_cmd;
 mod install_cmd;
+mod metrics_cmd;
 mod paths;
+mod resume_cmd;
 mod serve_cmd;
+mod spec_lint_cmd;
 mod state_cmd;
+mod verify_cmd;
 
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "harness", version, about = "claude-maestro: loop engineering for Claude Code")]
+#[command(name = "harness", version, about = "agent-maestro: loop engineering for Claude Code")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -27,6 +32,12 @@ enum Command {
     Check(forward::Forwarded),
     /// Diagnostics: skill, guard, claude, toolkit, notify channels (--access: what a loop session can reach)
     Doctor(doctor_cmd::Args),
+    /// The granted E2E baseline: localhost plus the development hosts YOU list, production left denied (dry run unless --write)
+    Baseline(grant_cmd::BaselineArgs),
+    /// Releases one thing the E2E needs (a network entry or a higher cost limit) and journals it
+    Grant(grant_cmd::GrantArgs),
+    /// Resumes a stopped loop from outside the panel, with the same checks and settings as the panel's Resume
+    Resume(resume_cmd::Args),
     /// Writes ~/.loop-harness/config.json so the skill finds the app
     Install(install_cmd::Args),
     /// The panel on a fake project with mocked, moving loop data (never calls claude)
@@ -63,6 +74,13 @@ enum Command {
     Rules(forward::Forwarded),
     /// Sends a test or custom notice through the configured channels
     Notify(forward::Forwarded),
+    /// The code half of the spec gate: metadata block, valid values, requirement IDs (no model)
+    #[command(name = "spec-lint")]
+    SpecLint(spec_lint_cmd::Args),
+    /// Size of the instructions each agent and the orchestrator skill carry (bytes, rough tokens)
+    Metrics(metrics_cmd::Args),
+    /// Verification as code: runs the toolkit's craft verify and prints the verifier's return block
+    Verify(verify_cmd::Args),
     /// Pushes the feature branch and opens the PR at the end of the flow
     Deliver(forward::Forwarded),
     /// The unsupervised loop: runs claude in turns until it finishes or gets stuck
@@ -85,7 +103,10 @@ fn main() {
         Command::DemoEngine(a) => app::demo::stubs::engine_stub(&a.args),
         Command::Doctor(args) => doctor_cmd::run(args),
         Command::Install(args) => install_cmd::run(args),
+        Command::Resume(args) => resume_cmd::run(args),
         Command::Paths(args) => paths::run(args),
+        Command::Baseline(args) => grant_cmd::baseline(&cfg::Env::process(), args),
+        Command::Grant(args) => grant_cmd::grant(&cfg::Env::process(), args),
         Command::State(args) => state_cmd::run(args),
         Command::Tasks(a) => forward::tasks(a),
         Command::Graph(a) => forward::graph(a),
@@ -99,6 +120,9 @@ fn main() {
         Command::Inventory(a) => forward::inventory(a),
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
+        Command::SpecLint(args) => spec_lint_cmd::run(args),
+        Command::Metrics(args) => metrics_cmd::run(args),
+        Command::Verify(args) => verify_cmd::run(args),
         Command::Deliver(a) => forward::deliver(a),
         Command::Loop(a) => forward::run_loop(a),
         Command::CloseLoop(a) => forward::close_loop(a),

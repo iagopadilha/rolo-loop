@@ -45,6 +45,10 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
     route(router, app, "POST", &format!("{PROJECT_PREFIX}/close-loop"), close_loop);
     route(router, app, "GET", &format!("{PROJECT_PREFIX}/wrap-up"), get_wrap_up);
     route(router, app, "POST", &format!("{PROJECT_PREFIX}/wrap-up/finish"), finish_wrap_up);
+    route(router, app, "POST", &format!("{PROJECT_PREFIX}/wrap-up/deliver"), deliver_wrap_up);
+    route(router, app, "POST", &format!("{PROJECT_PREFIX}/wrap-up/stop-processes"), stop_wrap_up_processes);
+    route(router, app, "POST", &format!("{PROJECT_PREFIX}/access/grant"), grant_access);
+    route(router, app, "POST", &format!("{PROJECT_PREFIX}/close-loop/delete-leftover/{{name}}"), delete_leftover);
     route(router, app, "GET", "/api/app/overview", get_overview);
     // SetupCommitController
     route(router, app, "POST", &format!("{PROJECT_PREFIX}/workspace/repos/{{name}}/commit-setup"), commit_setup);
@@ -182,6 +186,22 @@ fn get_wrap_up(app: &App, request: &Request) -> Response {
 
 fn finish_wrap_up(app: &App, request: &Request) -> Response {
     respond_json(|| app.wrap_up().finish(&context_of(app, request)?, &request.body))
+}
+
+fn deliver_wrap_up(app: &App, request: &Request) -> Response {
+    respond_json(|| app.wrap_up().deliver(&context_of(app, request)?))
+}
+
+fn stop_wrap_up_processes(app: &App, request: &Request) -> Response {
+    respond_json(|| app.wrap_up().stop_processes(&context_of(app, request)?))
+}
+
+fn grant_access(app: &App, request: &Request) -> Response {
+    respond_json(|| app.loop_panel().grant_access(&context_of(app, request)?, &request.body))
+}
+
+fn delete_leftover(app: &App, request: &Request) -> Response {
+    respond_json(|| app.loop_worktrees().delete_leftover(&context_of(app, request)?, name_param(request)))
 }
 
 fn get_overview(app: &App, _: &Request) -> Response {

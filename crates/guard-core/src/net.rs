@@ -10,6 +10,7 @@
 //! - `egress-tamper`: commands that would switch the run-time layer off.
 //! - `env-file`: `.env` files inside the project may be read and written (except the test credentials), outside they are blocked.
 
+use crate::call_forms;
 use crate::egress::{destinations, ps_param, CURL_PROXY_OPTIONS, CURL_REDIRECT_OPTIONS, CURL_VALUE_LONG, CURL_VALUE_SHORT, EGRESS_TOOL_RE, WGET_VALUE_OPTIONS};
 use crate::paths::{inside_any, normalize_path, G};
 use crate::pyre::{last_segment, partition, rpartition, Re};
@@ -28,7 +29,7 @@ const MAX_DEPTH: usize = 3;
 const SENTINEL: &str = "\u{0}VAR\u{0}";
 
 static SECRET_NAME: LazyLock<Re> = LazyLock::new(|| Re::ci(r"(token|secret|passw|credential|private_key|api_?key|auth|pwd)"));
-static EXPANDABLE_NAME: LazyLock<Re> = LazyLock::new(|| Re::ci(r"_(?:URL|HOST|BASE)\z"));
+static EXPANDABLE_NAME: LazyLock<Re> = LazyLock::new(|| Re::ci(&format!(r"_(?:{})\z", call_forms::EXPANDABLE_SUFFIXES.join("|"))));
 static TEMP_HINT: LazyLock<Re> = LazyLock::new(|| Re::ci(r"[\\/](tmp|temp|scratchpad)[\\/]|^/tmp/"));
 static VARIABLE_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\$\{(\w+)\}|\$env:(\w+)|\$([A-Za-z_]\w*)|%([A-Za-z_]\w*)%"));
 static URL_LITERAL_RE: LazyLock<Re> = LazyLock::new(|| Re::ci(r#"(?:https?|wss?)://[^\s'"`\\<>)|^]+"#));
@@ -170,7 +171,8 @@ impl<'g> Ctx<'g> {
     }
 
     pub fn unprovable(&mut self, what: &str, why: &str) {
-        self.hit("egress-host", &format!("{what}: {why}; use a literal URL or a *_URL / *_HOST / *_BASE name defined in .specs/project/.env.test {BLOCK_HINT}"));
+        let names = call_forms::variable_names(" / ");
+        self.hit("egress-host", &format!("{what}: {why}; use a literal URL or a {names} name defined in .specs/project/.env.test {BLOCK_HINT}"));
     }
 }
 
@@ -231,7 +233,7 @@ fn substitute(ctx: &mut Ctx, text: &str) -> String {
 fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
     let mut text = raw.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
     if text.contains("$(") || text.contains('`') {
-        return (None, false, "the target comes from a sub-shell".into());
+        return (None, false, call_forms::SUBSHELL_TARGET.into());
     }
     text = substitute(ctx, &text);
     let mut cred = false;
@@ -239,7 +241,7 @@ fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
         let scheme = SCHEME_PREFIX.match_start(&text).map(|m| m.text().to_string()).unwrap_or_default();
         let rest = text[scheme.len()..].to_string();
         if scheme.contains(SENTINEL) || text.starts_with(SENTINEL) {
-            return (None, false, "the scheme or host is a variable that is not a *_URL/*_HOST/*_BASE name of .env.test".into());
+            return (None, false, format!("the scheme or host {} {} name of .env.test", call_forms::VARIABLE_NOT_NAMED, call_forms::variable_names("/")));
         }
         let (mut authority, tail) = match AUTH_SPLIT.search(&rest) {
             Some(m) => (rest[..m.start].to_string(), rest[m.start..].to_string()),
@@ -261,7 +263,7 @@ fn resolve_target(ctx: &mut Ctx, raw: &str) -> (Option<String>, bool, String) {
                 hostport.split(':').next().unwrap_or("").to_string()
             };
             if host.contains(SENTINEL) {
-                return (None, false, "the host is a variable that is not a *_URL/*_HOST/*_BASE name of .env.test".into());
+                return (None, false, format!("the host {} {} name of .env.test", call_forms::VARIABLE_NOT_NAMED, call_forms::variable_names("/")));
             }
             authority = format!("{}{}{}", userinfo, if at { "@" } else { "" }, host);
         }
@@ -763,7 +765,7 @@ fn http_tool(ctx: &mut Ctx, name: &str, args: &[String], cred_forced: bool) {
     }
     if targets.is_empty() {
         if !facts.help && !redirected {
-            ctx.unprovable(name, "no target URL found (a sub-shell, a config file or an input list hides it)");
+            ctx.unprovable(name, &format!("{} (a sub-shell, a config file or an input list hides it)", call_forms::NO_TARGET_URL));
         }
         return;
     }
@@ -1044,8 +1046,8 @@ fn python_parts(ctx: &mut Ctx, args: &[String]) -> (Vec<String>, bool, Vec<Strin
         } else if word.starts_with('-') && !word.starts_with("--") {
             let letters: Vec<char> = word.chars().skip(1).collect();
             for (position, letter) in letters.iter().enumerate() {
-                if "SEI".contains(*letter) {
-                    ctx.hit("egress-tamper", &format!("python -{letter} skips site/sitecustomize or the PYTHON* variables the loop's egress preload depends on"));
+                if call_forms::PYTHON_SKIP_FLAGS.contains(*letter) {
+                    ctx.hit("egress-tamper", &format!("python -{letter} {}", call_forms::PYTHON_SKIP_REASON));
                 }
                 if *letter == 'c' {
                     let tail: String = letters[position + 1..].iter().collect();
@@ -1257,10 +1259,7 @@ fn playwright(ctx: &mut Ctx, args: &[String], cred_forced: bool) {
             }
             match read_script(ctx, &file) {
                 None => {
-                    ctx.hit(
-                        "egress-tamper",
-                        &format!("playwright-cli run-code --filename {} cannot be read, so it cannot be proven not to change the network filter", last_segment(&file)),
-                    );
+                    ctx.hit("egress-tamper", &format!("playwright-cli run-code --filename {} {}", last_segment(&file), call_forms::RUN_CODE_UNREADABLE));
                     return;
                 }
                 Some(text) => codes.push(text),

@@ -2,11 +2,11 @@
 //! Creating and re-attaching the loop worktrees: base branch choice, carried setup files, local file copies, the primary worktree and one
 //! per extra repo.
 
-use crate::loop_io::{copy2, copy_tree, git, load_json, merge_pending_delivery, read, save_meta, worktree_of};
+use crate::loop_io::{copy2, copy_tree, git, hidden, load_json, merge_pending_delivery, read, save_meta, worktree_of};
 use crate::loop_state::{self, loop_path, parse_roadmap, Features};
 use crate::project_repos::{self, RepoRef};
 use crate::setup_files::{self, RefreshResult};
-use crate::{delivery, detect_setup, setup_approval, subprojects};
+use crate::{delivery, detect_setup, installs, setup_approval, subprojects};
 use cfg::Env;
 use pycompat::{nt_realpath, Re};
 use serde_json::{json, Map, Value};
@@ -100,6 +100,14 @@ pub fn step(tag: &str, kind: &str, text: &str) {
 
 /// `setup_files::refresh_loop_inputs` plus its log lines. A note is printed once per worktree; the copied names only when `quiet` is false.
 pub fn refresh_inputs(ctx: &Ctx, repo: &str, work: &str, tag: &str, quiet: bool) -> RefreshResult {
+    // a project that opted in to the E2E DEV baseline (PERMISSIONS.json) gets it applied here, before the network list is carried to the worktree
+    let data_dir = ctx.data_dir();
+    let access = crate::access_grant::AccessContext { repo, work, data_dir: &data_dir, toolkit_root: &ctx.toolkit_root, who: "engine" };
+    match crate::project_policy::apply_e2e_baseline(&access) {
+        Some(Err(why)) => step(tag, "warn", &format!("E2E DEV baseline not applied: {why}")),
+        Some(Ok(message)) if !quiet => step(tag, "check", &message),
+        _ => {}
+    }
     let result = setup_files::refresh_loop_inputs(repo, work, &ctx.data_dir().display().to_string(), &ctx.toolkit_root);
     if !result.copied.is_empty() && !quiet {
         step(tag, "copy", &format!("refreshed from the repo into the worktree: {}", result.copied.join(", ")));
@@ -215,7 +223,12 @@ pub fn carry_setup_into(repo: &str, work: &str, tag: &str, entry: Option<&Map<St
     if !others.is_empty() {
         warn_line(
             tag,
-            &format!("{} other changed file{} in your folder NOT carried: {}", others.len(), if others.len() == 1 { "" } else { "s" }, setup_files::shortened(&others)),
+            &format!(
+                "{} other changed file{} in your folder NOT carried (commit them on your branch first if the loop needs them; they stay untouched in your folder): {}",
+                others.len(),
+                if others.len() == 1 { "" } else { "s" },
+                setup_files::shortened(&others)
+            ),
         );
     }
     carried
@@ -327,6 +340,9 @@ pub fn refresh_unused_worktree(repo: &str, work: &str, meta_path: &Path) {
         let _ = if source.is_dir() { copy_tree(&source, &target, &[]) } else { copy2(&source, &target) };
         refreshed.push(name);
     }
+    if refreshed.contains(&".specs") {
+        loop_state::drop_foreign_history(work); // the repo's .specs may hold the history of an older run
+    }
     loop_state::migrate_layout(work);
     if kept.is_dir() {
         let _ = copy_tree(&kept, &loop_folder, &["ROADMAP-APPROVED.json"]);
@@ -417,16 +433,73 @@ pub fn resolve_copy(item: &RepoRef) -> Vec<String> {
     detect_setup::suggest_copy_files(&item.path, if code == 0 { &output } else { "" }).iter().filter_map(|e| e["path"].as_str().map(String::from)).collect()
 }
 
-/// `subprocess.run(setup, cwd=work, shell=True).returncode`.
+/// `subprocess.run(setup, cwd=work, shell=True).returncode` (no console window).
 fn run_shell(command: &str, cwd: &str) -> i32 {
     #[cfg(windows)]
-    let status = {
+    let mut cmd = {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd").arg("/C").raw_arg(command).current_dir(cwd).status()
+        let mut c = std::process::Command::new("cmd");
+        c.arg("/C").raw_arg(command);
+        c
     };
     #[cfg(not(windows))]
-    let status = std::process::Command::new("sh").arg("-c").arg(command).current_dir(cwd).status();
-    status.ok().and_then(|s| s.code()).unwrap_or(1)
+    let mut cmd = {
+        let mut c = std::process::Command::new("sh");
+        c.arg("-c").arg(command);
+        c
+    };
+    hidden(&mut cmd).current_dir(cwd).status().ok().and_then(|s| s.code()).unwrap_or(1)
+}
+
+/// The routine installs of the worktree (`npm ci`, `dotnet restore`, ... per subproject, cached by lockfile hash), run by the engine
+/// before anything else touches the worktree (so commit hooks find their tools). A failure is a warning with the next step, not a stop:
+/// the other subprojects still install and the checks report UNVERIFIED if the missing install matters.
+pub fn run_auto_installs(work: &str, tag: &str) {
+    for (install, outcome) in installs::run_detected(work) {
+        let place = if install.dir.is_empty() { "the root".to_string() } else { install.dir.clone() };
+        match outcome {
+            installs::Outcome::Ran => step(tag, "setup", &format!("{} in {place} (routine install by the engine)", install.command)),
+            installs::Outcome::UpToDate => step(tag, "setup", &format!("{} in {place}: up to date (lockfile unchanged)", install.command)),
+            installs::Outcome::Skipped(_) if !install.routine => {
+                step(tag, "warn", &format!("{place} has a package.json but no lockfile: nothing was installed there (commit a lockfile, or set this repo's setup)"))
+            }
+            installs::Outcome::Skipped(_) => {}
+            installs::Outcome::Failed(code, output) => step(
+                tag,
+                "warn",
+                &format!(
+                    "`{}` in {place} failed (code {code}){}; run it by hand in the worktree, the loop goes on",
+                    install.command,
+                    if output.is_empty() { String::new() } else { format!(": {}", head(&output, 200)) }
+                ),
+            ),
+        }
+    }
+}
+
+/// Local branch names of `repo` (to know afterwards which ones a failed start created).
+fn local_branches(repo: &str) -> HashSet<String> {
+    git(repo, &["for-each-ref", "--format=%(refname:short)", "refs/heads"]).1.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+}
+
+/// A start that fails after creating a worktree leaves nothing behind: the worktree folder is removed and so is every branch that did not
+/// exist in `before`. Never touches a branch that was already there (a re-attached one stays).
+pub fn rollback_start(repo: &str, work: &str, before: &HashSet<String>, tag: &str) {
+    let (code, _, _) = git(repo, &["worktree", "remove", "--force", work]);
+    if code != 0 || Path::new(work).exists() {
+        let _ = std::fs::remove_dir_all(work);
+    }
+    git(repo, &["worktree", "prune"]);
+    let mut removed: Vec<String> = Vec::new();
+    for branch in local_branches(repo).difference(before) {
+        if git(repo, &["branch", "-D", branch]).0 == 0 {
+            removed.push(branch.clone());
+        }
+    }
+    warn_line(
+        tag,
+        &format!("start failed: removed the worktree {work}{}", if removed.is_empty() { String::new() } else { format!(" and the new branch {}", removed.join(", ")) }),
+    );
 }
 
 fn now_stamp() -> String {
@@ -485,6 +558,9 @@ pub fn ensure_worktree(
                 println!("[loop] copied from the repo into the worktree: {}", synced.iter().map(|p| p.replace('\\', "/")).collect::<Vec<_>>().join(", "));
             }
             refresh_inputs(ctx, repo, &work, tag, false); // start or resume: the panel may have changed .env.test / NETWORK.json since the last run
+            if setup.is_empty() || setup_auto {
+                run_auto_installs(&work, tag); // cached by lockfile hash: a resume only installs what changed or went missing
+            }
         }
         let base = meta.get("base").and_then(Value::as_str).unwrap_or("").to_string();
         if !tag.is_empty() {
@@ -539,6 +615,7 @@ pub fn ensure_worktree(
         );
         return Ok((work.clone(), json!({"branch": branch, "base": base, "worktree": work, "copied": []})));
     }
+    let branches_before = local_branches(repo);
     if !reattach.is_empty() {
         git(repo, &["worktree", "prune"]); // the removed folder may still be registered against the branch
         let (code, _, err) = git(repo, &["worktree", "add", &work, &branch]);
@@ -561,7 +638,13 @@ pub fn ensure_worktree(
             return Err(format!("failed to create worktree: {err}"));
         }
     }
+    if setup.is_empty() || setup_auto {
+        run_auto_installs(&work, tag); // before the carried-setup commit: its hooks may need the installed tools
+    }
     let copied = copy_into_worktree(repo, &work);
+    if copied.iter().any(|c| c == ".specs") {
+        loop_state::drop_foreign_history(&work); // a new run never inherits the turns, snapshots and answers of another one
+    }
     // the root CLAUDE.md copied whole (not "carried") is a setup file too when it holds an app block: it joins the setup commit
     let copied_claude: Vec<String> =
         if copied.iter().any(|c| c == "CLAUDE.md") && setup_files::has_app_block(&work, "CLAUDE.md") { vec!["CLAUDE.md".into()] } else { vec![] };
@@ -593,9 +676,9 @@ pub fn ensure_worktree(
             if copied.is_empty() { "nothing".to_string() } else { copied.join(", ") }
         );
     }
-    if !setup.is_empty() {
+    if !setup.is_empty() && !setup_auto {
         if !tag.is_empty() {
-            step(tag, "setup", &format!("{setup}{}", if setup_auto { " (auto-detected)" } else { "" }));
+            step(tag, "setup", &setup);
         } else {
             println!("[loop] one-time setup: {setup}");
         }
@@ -604,8 +687,9 @@ pub fn ensure_worktree(
             if !tag.is_empty() {
                 step(tag, "error", &format!("setup failed (code {code})"));
             }
+            rollback_start(repo, &work, &branches_before, tag);
             return Err(format!(
-                "{}setup failed (code {code}); fix it and run again (the worktree already exists)",
+                "{}setup failed (code {code}); fix it and run again (the worktree and the new branch were removed)",
                 if tag.is_empty() { String::new() } else { format!("repo {tag}: ") }
             ));
         }
@@ -638,6 +722,10 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
         }
         let base = if known_base.is_empty() { git(&item.path, &["branch", "--show-current"]).1 } else { known_base };
         entry["base"] = json!(base);
+        let (setup, auto) = resolve_setup(item, "");
+        if !opts.dry_run && (setup.is_empty() || auto) {
+            run_auto_installs(&work, name); // cached by lockfile hash
+        }
         step(name, "reuse", &format!("worktree {work} on branch {branch}"));
         step(name, "ready", &format!("path={work} branch={branch} base={base}"));
         return Ok(entry);
@@ -677,6 +765,7 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
         return Ok(entry);
     }
     let (mut code, mut err);
+    let branches_before = local_branches(&item.path);
     if reattach {
         git(&item.path, &["worktree", "prune"]);
         (code, _, err) = git(&item.path, &["worktree", "add", &work, branch]);
@@ -691,6 +780,10 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
         step(name, "error", &format!("failed to create worktree: {err}"));
         return Err(format!("repo {name}: failed to create worktree: {err}"));
     }
+    let (setup, auto) = resolve_setup(item, "");
+    if setup.is_empty() || auto {
+        run_auto_installs(&work, name); // before the carried-setup commit: its hooks may need the installed tools
+    }
     let copied = copy_local_files(&item.path, &work, &resolve_copy(item), name);
     let sub_entry = subprojects::load(&opts.repo_path, Some(name)).0;
     let carried = carry_setup_into(&item.path, &work, name, sub_entry.as_ref(), false, &[]);
@@ -699,16 +792,16 @@ pub fn ensure_extra_worktree(ctx: &mut Ctx, item: &RepoRef, opts: &WtOpts, branc
     let copied_names: Vec<&String> = copied.keys().collect();
     step(name, "copy", &if copied_names.is_empty() { "nothing".to_string() } else { copied_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ") });
     entry["copied"] = Value::Object(copied);
-    let (setup, auto) = resolve_setup(item, "");
-    if !setup.is_empty() {
-        step(name, "setup", &format!("{setup}{}", if auto { " (auto-detected)" } else { "" }));
+    if !setup.is_empty() && !auto {
+        step(name, "setup", &setup);
         code = run_shell(&setup, &work);
         err = String::new();
         if code != 0 {
             step(name, "error", &format!("setup failed (code {code})"));
-            return Err(format!("repo {name}: setup failed (code {code}); fix it and run again (the worktree already exists)"));
+            rollback_start(&item.path, &work, &branches_before, name);
+            return Err(format!("repo {name}: setup failed (code {code}); fix it and run again (the worktree and the new branch were removed)"));
         }
-    } else if !opts.setup.is_empty() {
+    } else if setup.is_empty() && !opts.setup.is_empty() {
         step(name, "warn", &format!("--setup ({}) runs only in the primary repo; set this repo's own setup in the repository manager", opts.setup));
     }
     let _ = err;
@@ -734,7 +827,14 @@ pub fn ensure_worktrees(ctx: &mut Ctx, repo: &str, opts: &mut WtOpts) -> Result<
         refuse_unapproved_setup(ctx, &primary, repo)?; // an existing worktree never runs setup again
     }
     let (primary_setup, primary_auto) = resolve_setup(&primary, &opts.setup);
+    let primary_existed = Path::new(&work_now).is_dir();
+    let primary_branches = local_branches(repo);
     let (work, mut meta) = ensure_worktree(ctx, repo, opts, &primary.name, &resolve_copy(&primary), Some(&mut hashes), Some(&primary_setup), primary_auto)?;
+    // what THIS call created, to take back if a later repo fails (L3): (repo path, worktree, branches before)
+    let mut created: Vec<(String, String, HashSet<String>, String)> = vec![];
+    if !primary_existed && !opts.dry_run {
+        created.push((repo.to_string(), work.clone(), primary_branches, primary.name.clone()));
+    }
     let previous = meta.get("repos").and_then(Value::as_object).cloned().unwrap_or_default();
     let primary_copied = if hashes.is_empty() {
         previous.get(&primary.name).and_then(|p| p.get("copied")).filter(|c| c.is_object()).cloned().unwrap_or(json!({}))
@@ -759,8 +859,23 @@ pub fn ensure_worktrees(ctx: &mut Ctx, repo: &str, opts: &mut WtOpts) -> Result<
             continue;
         }
         let known = previous.get(&item.name).and_then(Value::as_object).cloned().unwrap_or_default();
-        let created = ensure_extra_worktree(ctx, item, opts, &branch, &known)?;
-        entries.insert(item.name.clone(), created);
+        let existed = Path::new(&item.loop_worktree_path()).is_dir();
+        let branches_before = local_branches(&item.path);
+        match ensure_extra_worktree(ctx, item, opts, &branch, &known) {
+            Ok(entry) => {
+                if !existed && !opts.dry_run {
+                    created.push((item.path.clone(), item.loop_worktree_path(), branches_before, item.name.clone()));
+                }
+                entries.insert(item.name.clone(), entry);
+            }
+            Err(message) => {
+                // a start that fails halfway leaves no worktree or branch of this call behind
+                for (path, tree, before, tag) in created.iter().rev() {
+                    rollback_start(path, tree, before, tag);
+                }
+                return Err(message);
+            }
+        }
     }
     let mut repos_value = Map::new();
     for name in order {
@@ -837,6 +952,38 @@ mod tests {
         std::fs::create_dir_all(&work).unwrap();
         let err = ensure_worktree(&mut ctx, &r, &WtOpts::default(), "", &[], None, None, false).unwrap_err();
         assert!(err.starts_with(&format!("folder {work} already exists but is not this loop's worktree (current branch: ")));
+    }
+
+    #[test]
+    fn a_failed_setup_rolls_back_the_worktree_and_the_new_branch() {
+        let parent = tempfile::tempdir().unwrap();
+        let r = repo(parent.path(), "api");
+        git_in(Path::new(&r), &["branch", "keep-me"]);
+        let mut e = env();
+        let mut ctx = Ctx { env: &mut e, toolkit_root: String::new() };
+        let failing = WtOpts { branch: "loop/fail".into(), setup: "exit 1".into(), ..Default::default() };
+        let err = ensure_worktree(&mut ctx, &r, &failing, "", &[], None, None, false).unwrap_err();
+        assert!(err.contains("setup failed (code 1)") && err.contains("removed"), "{err}");
+        let work = worktree_of(&r);
+        assert!(!Path::new(&work).exists(), "the worktree folder is gone");
+        assert!(!branch_exists(&r, "loop/fail"), "the new branch is gone");
+        assert!(branch_exists(&r, "keep-me") && branch_exists(&r, "developer"), "branches that were already there stay");
+        assert!(!git(&r, &["worktree", "list"]).1.contains("worktree-loop"));
+        // the same start can be run again right away
+        let ok = WtOpts { branch: "loop/fail".into(), ..Default::default() };
+        assert!(ensure_worktree(&mut ctx, &r, &ok, "", &[], None, None, false).is_ok());
+    }
+
+    #[test]
+    fn rollback_keeps_a_branch_that_existed_before() {
+        let parent = tempfile::tempdir().unwrap();
+        let r = repo(parent.path(), "svc");
+        git_in(Path::new(&r), &["branch", "loop/old"]);
+        let before = local_branches(&r);
+        let work = worktree_of(&r);
+        git_in(Path::new(&r), &["worktree", "add", &work, "loop/old"]);
+        rollback_start(&r, &work, &before, "");
+        assert!(!Path::new(&work).exists() && branch_exists(&r, "loop/old"));
     }
 
     #[test]

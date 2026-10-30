@@ -26,7 +26,7 @@ const RUNNING_REFRESH_MS = 10000;
 const REQUEST_TIMEOUT_MS = 30000;
 
 /** Screen state (view = timeline | diagram | list; insp = inspector open; over = inspector sheet/overlay shown on narrow screens): data (normalized GET pipeline), sel = selected turn n (null = live), node = {f, s} | {orch:true} | null. */
-export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'timeline', insp: true, over: false, feature: null };
+export const pipe = { data: null, loading: false, err: null, key: undefined, readAt: 0, queued: null, sel: null, node: null, view: 'timeline', insp: true, over: false, feature: null, focus: true };
 
 // ---------- loading ----------
 const stateKey = (state) => `${state && state.meta ? state.meta.turns : null}|${state && state.loop ? state.loop.status : null}|${state && state.loop ? state.loop.turn : null}`;

@@ -25,6 +25,20 @@ pub fn claude_names(opts: &LoopOpts) -> Vec<String> {
     claude_binaries::ordered(&opts.claude, &opts.claude_fallback)
 }
 
+/// Re-reads the fallback list from config.json before a turn, so a change made while the loop runs reaches the next turn. Only a list
+/// that is present in the file replaces the one from the command line. Returns true when the list changed.
+pub fn refresh_fallbacks(opts: &mut LoopOpts, env: &Env) -> bool {
+    let config = cfg::locator::read_user_config(&env.user_data_dir());
+    let Some(value) = config.get("claude_fallback_binaries") else { return false };
+    let fresh = claude_binaries::read_fallbacks(value);
+    if fresh == opts.claude_fallback {
+        return false;
+    }
+    opts.claude_fallback = fresh;
+    opts.claude_index = opts.claude_index.min(claude_names(opts).len() - 1);
+    true
+}
+
 pub fn current_claude(opts: &LoopOpts) -> String {
     let names = claude_names(opts);
     names[opts.claude_index.min(names.len() - 1)].clone()
@@ -179,6 +193,19 @@ pub fn claude_change_subject(name: &str, account: &str, is_main: bool, same_comm
     }
 }
 
+/// The kind of an account change, as the panel and the notice name it.
+pub fn change_kind(unusable: bool, same_command: bool, is_main: bool) -> &'static str {
+    if unusable {
+        "account_unusable"
+    } else if same_command {
+        "picker_switch"
+    } else if is_main {
+        "back_to_main"
+    } else {
+        "usage_limit_switch"
+    }
+}
+
 /// The part of the subject that names the account the loop is on now.
 pub fn claude_change_subject_core(name: &str, account: &str, is_main: bool, same_command: bool) -> String {
     let (method, who, _) = split_account_label(account);
@@ -291,6 +318,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_account_change_has_a_kind_for_the_panel_and_the_notice() {
+        assert_eq!(change_kind(true, false, false), "account_unusable");
+        assert_eq!(change_kind(true, true, true), "account_unusable");
+        assert_eq!(change_kind(false, true, false), "picker_switch");
+        assert_eq!(change_kind(false, false, true), "back_to_main");
+        assert_eq!(change_kind(false, false, false), "usage_limit_switch");
+    }
+
+    #[test]
     fn labels_split_and_describe() {
         assert_eq!(split_account_label("login, dev@example.com (Acme, team)"), ("login".to_string(), "dev@example.com".to_string(), "Acme, team".to_string()));
         assert_eq!(split_account_label("token, cc account claude2"), ("token".to_string(), "cc account claude2".to_string(), String::new()));
@@ -317,6 +353,21 @@ mod tests {
         );
         assert_eq!(command_base_name("C:/bin/claude.exe"), "claude");
         assert_eq!(usage_key("cc.cmd", "claudep"), "cc:claudep");
+    }
+
+    #[test]
+    fn fallbacks_are_read_again_from_the_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().display().to_string())]);
+        let mut opts = LoopOpts::new("x");
+        opts.claude_fallback = vec!["cc".into()];
+        assert!(!refresh_fallbacks(&mut opts, &env), "no key in the file: the command line list stays");
+        std::fs::write(dir.path().join("config.json"), r#"{"claude_fallback_binaries": ["cc2", "cc3"]}"#).unwrap();
+        assert!(refresh_fallbacks(&mut opts, &env));
+        assert_eq!(opts.claude_fallback, vec!["cc2", "cc3"]);
+        assert!(!refresh_fallbacks(&mut opts, &env));
+        std::fs::write(dir.path().join("config.json"), r#"{"claude_fallback_binaries": []}"#).unwrap();
+        assert!(refresh_fallbacks(&mut opts, &env) && opts.claude_fallback.is_empty() && opts.claude_index == 0);
     }
 
     #[test]

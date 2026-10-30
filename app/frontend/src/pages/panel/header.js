@@ -104,7 +104,33 @@ function ShutdownControl() {
         <button type="button" class="btn btn-danger btn-sm" id="btn-shutdown-yes" disabled=${!!ui.busy.shutdown} onClick=${doShutdown}>Yes, shut down</button>
         <button type="button" class="btn btn-sm" id="btn-shutdown-no" onClick=${cancelShutdown}>Cancel</button>
       </div>`
-    : html`<button type="button" class="btn btn-ghost" id="btn-shutdown" title="shuts down the whole app (every project)" onClick=${askShutdown}>Shut down app</button>`;
+    : html`<button type="button" class="more-item" id="btn-shutdown" role="menuitem" title="shuts down the whole app (every project)" onClick=${askShutdown}>Shut down app</button>`;
+}
+
+/** The "more" menu of the header: what you rarely need while following a loop (shut down the app, help). */
+const more = { open: false, bound: false };
+function closeMore() { if (!more.open) return; more.open = false; renderAll(); }
+function bindMoreMenu() {
+  if (more.bound) return;
+  more.bound = true;
+  document.addEventListener('pointerdown', (e) => { if (more.open && !e.target.closest('.more-wrap')) closeMore(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !more.open) return;
+    if (ui.confirmShutdown) return;
+    closeMore(); const b = $('btn-more'); if (b) b.focus();
+  });
+}
+function MoreMenu() {
+  bindMoreMenu();
+  const open = more.open || ui.confirmShutdown;
+  return html`<div class="more-wrap">
+    <button type="button" class="btn btn-ghost more-btn" id="btn-more" aria-haspopup="menu" aria-expanded=${String(open)} aria-label="More: shut down app, help" title="More"
+      onClick=${() => { more.open = !more.open; renderAll(); }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /><circle cx="19" cy="12" r="1.8" fill="currentColor" /></svg></button>
+    ${open ? html`<div class="more-menu" role="menu" aria-label="More">
+      <button type="button" class="more-item" role="menuitem" id="btn-why" onClick=${() => { more.open = false; renderAll(); openWhy(); }}>Why use this panel</button>
+      <${ShutdownControl} />
+    </div>` : null}
+  </div>`;
 }
 
 function askShutdown() {
@@ -132,11 +158,11 @@ export function cancelShutdown() {
   const b = $('btn-shutdown'); if (b) b.focus();
 }
 
-const CLOSED_TITLE = { notfound: 'project not found · Claude Maestro', shutdown: 'app shut down · Claude Maestro' };
+const CLOSED_TITLE = { notfound: 'project not found · Agent Maestro', shutdown: 'app shut down · Agent Maestro' };
 export function updateTitle() {
   const state = ctx.state;
-  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Claude Maestro'; return; }
-  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Claude Maestro'; return; }
+  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Agent Maestro'; return; }
+  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Agent Maestro'; return; }
   const label = NAVBAR_STATUS[statusKey()].label, v = loop().turn;
   document.title = `${ctx.offline ? 'disconnected · ' : ''}${label}${isNum(v) ? ' · turn ' + v : ''} · ${projectName() || 'project'}`;
 }

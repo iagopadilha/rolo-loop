@@ -59,6 +59,8 @@ GET /p/{project_id}/api/codebase/file token=0 activity=0 limit=65536
 GET /p/{project_id}/api/decisions token=0 activity=0 limit=65536
 POST /p/{project_id}/api/decisions/{decision_id}/review token=1 activity=1 limit=65536
 POST /p/{project_id}/api/decisions/{decision_id}/change token=1 activity=1 limit=65536
+GET /p/{project_id}/api/approvals token=0 activity=0 limit=65536
+GET /p/{project_id}/api/policy token=0 activity=0 limit=65536
 POST /p/{project_id}/api/answer token=1 activity=1 limit=65536
 POST /p/{project_id}/api/resume token=1 activity=1 limit=65536
 POST /p/{project_id}/api/note token=1 activity=1 limit=65536
@@ -67,6 +69,11 @@ POST /p/{project_id}/api/loop/check token=1 activity=1 limit=65536
 POST /p/{project_id}/api/loop/start token=1 activity=1 limit=65536
 POST /p/{project_id}/api/instruction token=1 activity=1 limit=65536
 POST /p/{project_id}/api/loop/raise-limit token=1 activity=1 limit=65536
+POST /p/{project_id}/api/approvals/{approval_id}/approve token=1 activity=1 limit=65536
+POST /p/{project_id}/api/approvals/{approval_id}/deny token=1 activity=1 limit=65536
+POST /p/{project_id}/api/policy token=1 activity=1 limit=65536
+POST /p/{project_id}/api/dependencies/apply token=1 activity=1 limit=65536
+POST /p/{project_id}/api/scripts/answer token=1 activity=1 limit=65536
 POST /p/{project_id}/api/shutdown token=1 activity=1 limit=65536
 GET /p/{project_id}/api/loop/settings token=0 activity=0 limit=65536
 GET /p/{project_id}/api/whiteboard token=0 activity=0 limit=65536
@@ -103,6 +110,10 @@ GET /p/{project_id}/api/close-loop/check token=0 activity=0 limit=65536
 POST /p/{project_id}/api/close-loop token=1 activity=1 limit=65536
 GET /p/{project_id}/api/wrap-up token=0 activity=0 limit=65536
 POST /p/{project_id}/api/wrap-up/finish token=1 activity=1 limit=65536
+POST /p/{project_id}/api/wrap-up/deliver token=1 activity=1 limit=65536
+POST /p/{project_id}/api/wrap-up/stop-processes token=1 activity=1 limit=65536
+POST /p/{project_id}/api/access/grant token=1 activity=1 limit=65536
+POST /p/{project_id}/api/close-loop/delete-leftover/{name} token=1 activity=1 limit=65536
 GET /api/app/overview token=0 activity=0 limit=65536
 POST /p/{project_id}/api/workspace/repos/{name}/commit-setup token=1 activity=1 limit=65536
 GET /p/{project_id}/api/follow-up token=0 activity=0 limit=65536
@@ -130,3 +141,4 @@ GET /api/app/settings token=0 activity=0 limit=65536
 POST /api/app/settings token=1 activity=1 limit=65536
 GET /api/app/settings/mcp-servers token=0 activity=0 limit=65536
 POST /api/app/settings/mcp-servers token=1 activity=1 limit=65536
+GET /api/app/settings/skills token=0 activity=0 limit=65536

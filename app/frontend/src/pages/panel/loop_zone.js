@@ -13,6 +13,9 @@ import { PauseBanner } from './pause_banner.js';
 import { Inspector } from './inspector.js';
 import { WrapUp, wrapUpVisible } from './wrap_up.js';
 import { TurnPicker } from './loop_timeline.js';
+import { costForecast } from './alert.js';
+import { hasValidations, manualCount, openValidationsDialog } from './validations.js';
+import { openPermissionsDialog, permissionsEntries } from './permissions.js';
 import { Icon } from '../../components/shell.js';
 
 const VIEWS = [['timeline', 'Timeline'], ['diagram', 'Graph'], ['list', 'List']];
@@ -25,6 +28,19 @@ function stepsInTurn(turn) {
 }
 
 function pickView(view) { pipe.view = view; renderAll(); }
+
+/** R3: "E2E 3 of 8 done, 5 left" from meta.e2e_progress (only runs with the final checks on). */
+function e2eText() {
+  const p = ctx.state && ctx.state.meta && ctx.state.meta.e2e_progress;
+  if (!p || !isNum(p.total) || p.total <= 0) return '';
+  return `E2E ${p.checked || 0} of ${p.total} done` + (isNum(p.pending) && p.pending > 0 ? `, ${p.pending} left` : '');
+}
+/** R4: the estimate of the whole run against the limit, shown only when it passes it. */
+function forecastText() {
+  const { forecast } = costForecast();
+  if (!forecast || forecast.exceeds_cap !== true || !isNum(forecast.estimated_total) || !isNum(forecast.cap)) return '';
+  return `Estimate US$ ${forecast.estimated_total.toFixed(0)} > limit US$ ${forecast.cap.toFixed(0)}`;
+}
 const columnWidth = () => { const col = document.getElementById('shell-col'); return col ? col.clientWidth : Infinity; };
 const inspectorCollapsed = () => columnWidth() < INSPECTOR_COLLAPSE_BELOW_PX;
 /** The inspector button: toggles the column (wide) or the overlay / bottom sheet (when the column is too narrow or on a phone). */
@@ -71,6 +87,10 @@ export function LoopPage() {
     <${PauseBanner} wrapUp=${wrap} />
     <div class="lp-head"><${TurnHeader} turn=${turn} />
       <div class="lp-tools">
+        ${hasValidations(ctx.state) ? html`<button type="button" class="btn btn-sm btn-ghost" title="What the loop checks per feature, and what only you can check" onClick=${openValidationsDialog}>Validations${manualCount(ctx.state) ? ` (${manualCount(ctx.state)})` : ''}</button>` : null}
+        ${e2eText() ? html`<span class="lp-chip" title="Final checks of the verified features: done and still to do">${e2eText()}</span>` : null}
+        ${forecastText() ? html`<span class="lp-chip is-critical" title="The engine's estimate passes the cost limit: the loop will pause at the limit; raise it when it does, or raise it before the next start">${forecastText()}</span>` : null}
+        <button type="button" class="btn btn-sm btn-ghost" title="What was released to the loop (hosts, cost limit) and a form to release more" onClick=${openPermissionsDialog}>Permissions${permissionsEntries(ctx.state).length ? ` (${permissionsEntries(ctx.state).length})` : ''}</button>
         ${pipe.sel != null ? html`<button type="button" class="btn btn-sm btn-ghost" title="back to the latest turn (live)" onClick=${() => selectTurn(null)}>Back to latest</button>` : null}
         <div class="sh-seg" role="group" aria-label="Pipeline view">${VIEWS.map(([key, label]) => html`<button key=${key} type="button"
           class=${'sh-seg-btn is-text' + (view === key ? ' is-on' : '')} aria-pressed=${String(view === key)} onClick=${() => pickView(key)}>${label}</button>`)}</div>

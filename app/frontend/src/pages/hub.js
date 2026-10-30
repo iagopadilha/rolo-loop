@@ -353,7 +353,7 @@ async function shutDown() {
     await appApi.post('shutdown', {}, 15000);
     if (hubPolling) hubPolling.stop();
     hb.closed = true; draw();
-    document.title = 'app shut down · Claude Maestro';
+    document.title = 'app shut down · Agent Maestro';
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
@@ -421,7 +421,7 @@ export function startHub(root) {
   hubRoot = root;
   root.replaceChildren();
   onRoute(() => draw());
-  document.title = 'projects · Claude Maestro';
+  document.title = 'projects · Agent Maestro';
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.sh-sw') || document.querySelector('dialog[open]')) return; // the switcher and the dialogs own Esc

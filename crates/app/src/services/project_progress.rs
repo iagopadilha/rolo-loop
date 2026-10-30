@@ -304,6 +304,7 @@ impl ProjectProgressService<'_> {
             "repos_unready": self.read_unready_repos(context),
             "repos_reference_warnings": self.read_reference_warnings(context),
             "readiness": self.read_readiness(context),
+            "loop_running": self.is_loop_running(context),
         })
     }
 

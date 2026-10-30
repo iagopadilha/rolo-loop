@@ -19,6 +19,7 @@
 use super::loop_panel::{effective_cost_cap, read_command_limits};
 use super::loop_worktree::extract_last_json;
 use super::planning_gates::get_integration_branch;
+use super::wrap_up_steps;
 use super::App;
 use crate::domain::errors::{AppError, Kind, LOOP_RUNNING_CODE};
 use crate::domain::project::ProjectContext;
@@ -109,9 +110,12 @@ impl WrapUpService<'_> {
         let mut delivery = settings.as_object().cloned().unwrap_or_default();
         delivery.insert("done".into(), json!(is_delivery_done(&record, &repos)));
         delivery.insert("integration_branch".into(), json!(self.integration_branch(context)));
+        let processes = check["processes"].as_array().cloned().unwrap_or_default();
+        let steps = wrap_up_steps::build_steps(&repos, &processes, &Value::Object(record.clone()), settings["remove_worktree_on_finish"] == true);
         Ok(json!({
             "status": summary["status"], "summary": self.build_summary(context, &meta, &record), "delivery": delivery, "check": check,
             "unreviewed_critical": self.app.decisions().unreviewed_critical(context).len(),
+            "steps": steps, "finish_options": wrap_up_steps::finish_options(settings["remove_worktree_on_finish"] == true),
         }))
     }
 
@@ -158,7 +162,10 @@ impl WrapUpService<'_> {
             return json!({"repos": []});
         }
         match self.app.loop_worktrees().check_close_loop(context) {
-            Ok(check) => json!({"repos": check["repos"].as_array().into_iter().flatten().map(|item| self.describe_checked_repo(context, item)).collect::<Vec<_>>()}),
+            Ok(check) => json!({
+                "repos": check["repos"].as_array().into_iter().flatten().map(|item| self.describe_checked_repo(context, item)).collect::<Vec<_>>(),
+                "processes": check["processes"],
+            }),
             Err(failure) => {
                 // the close routine is not available: the wrap-up still shows the rest
                 self.app.log.warn(
@@ -188,7 +195,9 @@ impl WrapUpService<'_> {
         out.insert("repo".into(), item["name"].clone());
         out.insert("pushed".into(), json!(!has("push_unconfirmed")));
         out.insert("uncommitted".into(), json!(if has("tree_dirty") { self.list_uncommitted_files(&worktree) } else { vec![] }));
-        out.insert("unpushed".into(), json!(if has("push_unconfirmed") { self.list_unpushed_commits(&worktree, item) } else { vec![] }));
+        let unpushed = if has("push_unconfirmed") { self.list_unpushed_commits(&worktree, item) } else { vec![] };
+        out.insert("unpushed_by_feature".into(), json!(wrap_up_steps::group_commits_by_feature(&unpushed)));
+        out.insert("unpushed".into(), json!(unpushed));
         out.insert("pr_url".into(), if PR_CONFIRMED.contains(&pr_status.as_str()) { link.clone().unwrap_or(Value::Null) } else { Value::Null });
         out.insert("compare_url".into(), if pr_status.starts_with(COMPARE_LINK_PREFIX) { link.unwrap_or(Value::Null) } else { Value::Null });
         Value::Object(out)
@@ -201,12 +210,15 @@ impl WrapUpService<'_> {
         let summary = self.app.loop_status().get_loop_summary(context);
         let meta = summary["meta"].as_object().cloned().unwrap_or_default();
         let settings = self.read_delivery_settings(context);
+        // Finish leaves nothing running: what the loop started (dev servers, apps for the checks) is stopped before anything is pushed or removed
+        let stopped = self.app.loop_worktrees().stop_loop_processes(context).ok().and_then(|r| r.get("stopped").cloned()).unwrap_or(json!([]));
         let before = self.read_close_check(context)["repos"].as_array().cloned().unwrap_or_default(); // the primary comes first: the receipt names its branch
         if mode != MODE_REMOVE_ANYWAY && settings["push_pr"] == true {
             self.deliver_when_pending(context, &before);
         }
         let record = self.read_delivery_record(context);
         let mut receipt = self.build_receipt(context, &meta, &record, &before);
+        receipt.insert("stopped_processes".into(), stopped);
         let closed = if mode == MODE_REMOVE_ANYWAY {
             Some(self.close_worktrees(context, &json!({"force_remove": true, "confirm_compare_link": true, "finished": true}))?)
         } else if mode == MODE_SAFE && settings["remove_worktree_on_finish"] == true {
@@ -220,6 +232,7 @@ impl WrapUpService<'_> {
             receipt.insert("worktree_removed".into(), json!(engine_state::notify_truthy(Some(&closed_list))));
             receipt.insert("closed".into(), closed_list);
             receipt.insert("kept".into(), closed.get("kept").cloned().unwrap_or(json!([])));
+            receipt.insert("background_delete".into(), closed.get("background_delete").cloned().unwrap_or(json!([])));
         }
         self.app.log.info("wrap_up_finished", &[("project", json!(context.project.id)), ("mode", json!(mode)), ("removed", receipt["worktree_removed"].clone())]);
         Ok(json!({"ok": true, "mode": mode, "receipt": receipt}))
@@ -245,15 +258,7 @@ impl WrapUpService<'_> {
     }
 
     fn ensure_can_finish(&self, context: &ProjectContext, mode: &str, confirm_text: &str, accept_unreviewed: bool) -> Result<(), AppError> {
-        if self.app.loop_status().is_loop_running(context) {
-            return Err(AppError::loop_running("the loop is running: wait for it to stop before finishing").with_code(LOOP_RUNNING_CODE));
-        }
-        if self.app.jobs().get_running_job(context.repo_path()).is_some_and(|job| job["type"] == FOLLOW_UP_JOB_TYPE) {
-            return Err(AppError::new(Kind::RepoConflict, FOLLOW_UP_RUNNING_MESSAGE).with_code(FOLLOW_UP_RUNNING_CODE));
-        }
-        if !Path::new(&context.project.loop_worktree_path()).is_dir() {
-            return Err(AppError::new(Kind::RepoConflict, "there is no loop worktree to finish").with_code(NO_WORKTREE_CODE));
-        }
+        self.ensure_idle(context)?;
         let folder_name = pycompat::last_segment(&pycompat::nt_normpath(context.repo_path())).to_string();
         if mode == MODE_REMOVE_ANYWAY && confirm_text != folder_name {
             return Err(AppError::invalid_request(format!("type the repository folder name ({folder_name}) to confirm removing the worktree anyway")));
@@ -271,18 +276,75 @@ impl WrapUpService<'_> {
     /// Push + PR through the engine's delivery script, only when the delivery did not complete or a repo holds commits the remote lacks (a later round);
     /// a PR that already exists is reused by the script. It never merges and never raises.
     fn deliver_when_pending(&self, context: &ProjectContext, checked_repos: &[Value]) {
-        let unconfirmed = checked_repos.iter().any(|item| item["reasons"].as_array().into_iter().flatten().any(|r| r["code"] == "push_unconfirmed"));
-        if is_push_done(&self.read_delivery_record(context)) && !unconfirmed {
+        // what the remote and GitHub say decides it, not the saved record: any repo whose push or PR is not confirmed is delivered
+        let pending =
+            checked_repos.iter().any(|item| item["reasons"].as_array().into_iter().flatten().any(|r| r["code"] == "push_unconfirmed" || r["code"] == "pr_missing"));
+        if !pending && !checked_repos.is_empty() {
             return;
         }
+        self.run_delivery(context);
+    }
+
+    /// ONE delivery for the whole run: the engine pushes the loop branch of EVERY repo of the run and opens one PR each (the primary first, the PRs
+    /// linked to each other). Returns the engine's answer (credentials stripped from every text).
+    fn run_delivery(&self, context: &ProjectContext) -> Map<String, Value> {
         let result = self.app.engine_scripts().run_engine_script_and_wait(DELIVERY_SCRIPT, &context.work_dir(), &[], DELIVERY_TIMEOUT_SECONDS, &[]);
         let returned = extract_last_json(&result.output);
         if returned.get("push").is_some_and(Value::is_string) {
             let status = returned.get("pr_status").filter(|s| engine_state::notify_truthy(Some(s))).cloned().unwrap_or(json!("not created"));
             let _ = self.app.loop_commands.write_delivery_to_meta(&context.work_dir(), &returned["push"], returned.get("pr").unwrap_or(&Value::Null), &status);
         }
-        let push: String = py_str(returned.get("push")).chars().take(RESULT_TEXT_LIMIT).collect();
+        let push: String = engine_state::delivery_truth::strip_userinfo(&py_str(returned.get("push"))).chars().take(RESULT_TEXT_LIMIT).collect();
         self.app.log.info("wrap_up_delivery_ran", &[("project", json!(context.project.id)), ("timed_out", json!(result.timed_out)), ("push", json!(push))]);
+        returned
+    }
+
+    /// `POST wrap-up/deliver`: ONE call that pushes the loop branch and opens the PR of every repo of the run, then shows what the remote and
+    /// GitHub now say. Never pushes any other branch, never merges.
+    pub fn deliver(&self, context: &ProjectContext) -> Result<Value, AppError> {
+        self.ensure_idle(context)?;
+        let returned = self.run_delivery(context);
+        let repos: Map<String, Value> = match returned.get("repos") {
+            Some(Value::Object(per_repo)) => per_repo.clone(),
+            _ => Map::new(),
+        };
+        let shown: Map<String, Value> = repos
+            .iter()
+            .map(|(name, item)| {
+                let text = |key: &str| item.get(key).and_then(Value::as_str).map(engine_state::delivery_truth::strip_userinfo).unwrap_or_default();
+                (
+                    name.clone(),
+                    json!({"branch": item.get("branch"), "push": text("push"), "pr_status": text("pr_status"), "pr": item.get("pr").cloned().unwrap_or(Value::Null)}),
+                )
+            })
+            .collect();
+        let single = if shown.is_empty() && returned.get("push").is_some() {
+            json!({"push": engine_state::delivery_truth::strip_userinfo(&py_str(returned.get("push"))), "pr_status": returned.get("pr_status"), "pr": returned.get("pr")})
+        } else {
+            Value::Null
+        };
+        let check = self.read_close_check(context);
+        Ok(json!({"ok": true, "delivered": shown, "delivered_single": single, "warnings": returned.get("warnings").cloned().unwrap_or(json!([])), "check": check}))
+    }
+
+    /// `POST wrap-up/stop-processes`: ends what the loop started (dev servers, apps for the checks) and shows what is left.
+    pub fn stop_processes(&self, context: &ProjectContext) -> Result<Value, AppError> {
+        let stopped = self.app.loop_worktrees().stop_loop_processes(context)?;
+        Ok(json!({"ok": stopped["ok"] == true, "stopped": stopped.get("stopped").cloned().unwrap_or(json!([])), "check": self.read_close_check(context)}))
+    }
+
+    /// The loop and its follow-up rounds must be idle for anything that pushes or removes.
+    fn ensure_idle(&self, context: &ProjectContext) -> Result<(), AppError> {
+        if self.app.loop_status().is_loop_running(context) {
+            return Err(AppError::loop_running("the loop is running: wait for it to stop before finishing").with_code(LOOP_RUNNING_CODE));
+        }
+        if self.app.jobs().get_running_job(context.repo_path()).is_some_and(|job| job["type"] == FOLLOW_UP_JOB_TYPE) {
+            return Err(AppError::new(Kind::RepoConflict, FOLLOW_UP_RUNNING_MESSAGE).with_code(FOLLOW_UP_RUNNING_CODE));
+        }
+        if !Path::new(&context.project.loop_worktree_path()).is_dir() {
+            return Err(AppError::new(Kind::RepoConflict, "there is no loop worktree to finish").with_code(NO_WORKTREE_CODE));
+        }
+        Ok(())
     }
 
     /// The safe close: every repo must be able to close (a compare-link-only repo is confirmed by this very click).
@@ -335,7 +397,7 @@ impl WrapUpService<'_> {
             let code = reason["code"].as_str().unwrap_or("");
             let kind = reason_kind_by_code(code).unwrap_or(if code.is_empty() { "blocked" } else { code });
             let text = if engine_state::notify_truthy(reason.get("text")) { py_str(reason.get("text")) } else { kind.to_string() };
-            let mut entry = json!({"repo": name, "kind": kind, "files": [], "commits": [], "message": format!("{name}: {text}")});
+            let mut entry = json!({"repo": name, "kind": kind, "files": [], "commits": [], "message": format!("{name}: {text}"), "action": reason.get("action").cloned().unwrap_or(Value::Null)});
             if kind == REASON_KIND_UNCOMMITTED {
                 let files = self.list_uncommitted_files(&worktree);
                 entry["message"] = json!(format!("{name}: {} uncommitted file(s) would be lost", files.len()));
@@ -436,6 +498,12 @@ mod tests {
             (json!(1), json!(2), json!({"repos": []}))
         );
         assert_eq!((view["delivery"]["push_pr"].clone(), view["delivery"]["done"].clone(), view["unreviewed_critical"].clone()), (json!(true), json!(false), json!(0)));
+        let steps = view["steps"].as_array().unwrap();
+        assert_eq!(steps.iter().map(|s| s["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["stop_processes", "commit", "push", "pr", "database", "backup", "remove"]);
+        assert!(steps
+            .iter()
+            .all(|s| ["done", "active", "todo", "error", "skipped"].contains(&s["status"].as_str().unwrap()) && s.get("action").is_some() && s["what"].is_string()));
+        assert_eq!(view["finish_options"].as_array().unwrap().len(), 3);
         let error = service.finish(&context, &json!({"mode": "safe"})).unwrap_err();
         assert_eq!((error.kind, error.code.as_deref()), (Kind::RepoConflict, Some("no_worktree")));
     }

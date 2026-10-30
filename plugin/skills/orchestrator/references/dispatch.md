@@ -4,16 +4,17 @@
 
 Decision order:
 
-1. `KIND` of the spec — `back` → `executor-back`; `front` → `executor-front`; `generic` → `executor-generic`.
+1. `KIND` of the spec — the one agent is `executor` for every kind. Put the line `KIND: back|front|generic` in the prompt: it tells the executor which skill to load (`back` → `backend-dev`, `front` → `frontend-dev`, `generic` → the `SKILL:` lines of the prompt).
 2. `KIND: both` — **split into two dispatches**, one per layer, each with the subset of `PATHS` that belongs to it. If the two subsets are disjoint, they may run in parallel. If the feature cannot be cut that way, run serially: back first, front after.
 3. `PATHS` breaks ties when `KIND` is doubtful. API, domain, service, repository, migration directories → back. Component, page, hook, UI route, style directories → front. Infra, script, CI, config, docs → generic.
 
-When dispatching `executor-generic`, include in the prompt a line `SKILL: <name>` when a useful domain skill exists (for example `migration` for a schema migration; never `github` — git belongs to the orchestrator). With no suitable skill, omit the line.
+When `KIND: generic`, include in the prompt a line `SKILL: <name>` when a useful domain skill exists (for example `migration` for a schema migration; never `github` — git belongs to the orchestrator). With no suitable skill, omit the line.
 
 ## What always goes in the executor prompt
 
 - The first line `FEATURE: <slug>` (exactly one feature per agent, in every dispatch of every role; the panel's pipeline reads it) and the path of the spec and, if they exist, of `design.md` and `tasks.md`. **Path, not content.**
 - The line `TOOLKIT: <path>`, in the prompt of EVERY agent you dispatch (executor, spec-writer, verifier, verifier-flow): the claude-craft-kit plugin root (the folder holding `skills/` and `shared/`), computed once per turn with `harness paths --json` (field `toolkit`; empty = the toolkit is missing, `harness doctor` reports it). The agent runs the toolkit scripts as `<TOOLKIT>/shared/scripts/<script>`.
+- `KIND: back|front|generic` (the executor loads its skills from it). When the feature has planning fields (`harness state plan <root> <slug>`): `READS: <a,b>` and `TOOLS: <a,b>` lines when `reads`/`tools` are set (the executor then reads only those and does not explore), and the executor shape from `split`: `none` = ONE executor for the whole feature walks `tasks.md` in order (the default); `group` = one executor per group of tasks that share files; `task` = one executor per task, one after the other. No planning fields = today's behavior.
 - The literal `PATHS` list, with the instruction not to leave it, and the line `SCOPE_FEATURE: <slug>` (the guard reads it to limit editing to this feature's `PATHS` only, not the union of the wave).
 - A warning when another executor is running in parallel on the same tree, with the neighbor's paths.
 - **Task wave dispatch** (build phase, `SKILL.md`): one executor per task, the extra line `SCOPE_TASK: <slug>/<Tn>` next to `SCOPE_FEATURE: <slug>`, and the path of `tasks.md` (the executor reads its own task there). Write SCOPE.json `tasks` (`{"<slug>/<Tn>": [files]}`) BEFORE the wave. The tasks of one wave never share a file (`harness tasks waves <slug>` guarantees it); tell each executor the files of its wave neighbors. A feature without `tasks.md` is dispatched as ONE task covering the spec (log it).
@@ -98,7 +99,7 @@ Every feature is its own lane with ONE agent per step (`SKILL.md`, "Lanes"): nev
 | Gate | Yes, one `spec-reviewer` per feature. Read-only. A feature enters it as soon as its own spec is back. |
 | Execution | One executor per feature, in parallel only with disjoint `PATHS` (and deps verified) or a worktree; a colliding feature waits as `approved` while the others go on. |
 | Execution (task waves) | Inside one feature, one executor per task of the wave, at most `Max parallel tasks` (ROADMAP header, default 3); waves run in order. Across features the total stays inside `Max spend per turn` and `Max minutes per turn`: shrink the wave when short. |
-| Verification | One `verifier` per feature, in parallel by default. Serialize only two that would build the same project or solution output (the other lanes keep moving). |
+| Verification | `harness verify` per feature (code, no agent), in parallel by default. Serialize only two that would build the same project or solution output (the other lanes keep moving). |
 | Commit | Always serial, always the orchestrator; one feature at a time, as soon as ITS verification passed. |
 
 Before dispatching 2+ executors in parallel, **check disjointness by code**, not by eye: `harness state disjoint <root> <slug1> <slug2>` (exit 1 = `paths` conflict).

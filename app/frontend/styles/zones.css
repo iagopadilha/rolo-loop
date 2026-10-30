@@ -19,11 +19,11 @@
 .tr-line.is-vertical .ck-list{flex-direction:column;align-items:stretch;row-gap:4px;}
 .tr-line.is-vertical .ck-item{display:block;}
 .tr-line.is-vertical .ck-line{display:none;}
-.tr-line.is-vertical .ck-step{width:100%;justify-content:flex-start;border-radius:6px;padding:6px 9px;text-align:left;}
-.tr-line.is-vertical .ck-detail{padding:6px 8px;border:1px solid var(--blue-line);border-radius:6px;background:var(--panel0);}
+.tr-line.is-vertical .ck-step{width:100%;justify-content:flex-start;border-radius:0;padding:6px 9px;text-align:left;}
+.tr-line.is-vertical .ck-detail{padding:6px 8px;border:1px solid var(--blue-line);border-radius:0;background:var(--panel0);}
 .tr-line.is-vertical .tr-action{margin-left:0;flex-direction:column;align-items:stretch;gap:8px;}
 .tr-line.is-vertical .tr-action .btn{width:100%;}
-.tr-line.is-vertical .tr-ai-sep{margin-left:0;padding-left:9px;border-left:1px solid var(--line3);border-radius:6px;}
+.tr-line.is-vertical .tr-ai-sep{margin-left:0;padding-left:9px;border-left:1px solid var(--line3);border-radius:0;}
 .tr-line.is-vertical .tr-note{white-space:normal;}
 
 /* roadmap and files inside the aside */

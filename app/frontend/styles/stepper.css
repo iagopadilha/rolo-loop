@@ -1,0 +1,18 @@
+/* Stepper (components/stepper.js): numbered, one action at a time, square and quiet. */
+.stp{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;border:1px solid var(--line3,#262434);}
+.stp-step{display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line3,#262434);opacity:.62;}
+.stp-step:last-child{border-bottom:0;}
+.stp-step.is-now,.stp-step.is-done,.stp-step.is-error{opacity:1;}
+.stp-step.is-now{background:var(--panel2,#14122A);}
+.stp-mark{flex:none;width:20px;height:20px;display:grid;place-items:center;border:1px solid var(--line4,#3A3750);font-size:11px;}
+.stp-step.is-done .stp-mark{background:#1f6f4a;border-color:#1f6f4a;color:#fff;}
+.stp-step.is-error .stp-mark{background:#8a2f2f;border-color:#8a2f2f;color:#fff;}
+.stp-step.is-active .stp-mark{border-color:#9A8CFA;color:#9A8CFA;}
+.stp-body{flex:1;min-width:0;}
+.stp-head{display:flex;align-items:baseline;gap:8px;}
+.stp-title{font-weight:600;font-size:13px;}
+.stp-state{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3,#6F6B86);}
+.stp-what{font-size:12px;color:var(--text2,#A7A3BD);margin-top:2px;}
+.stp-result{font-size:12px;margin-top:4px;word-break:break-word;}
+.stp-result.is-bad{color:#ff8a8a;}
+.stp-action{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;}

@@ -3,7 +3,7 @@
 
 use crate::app_ctx::AppCtx;
 use crate::claude_accounts::current_claude;
-use crate::loop_io::{git, run_process, ProcessResult};
+use crate::loop_io::{git, run_process_notifying, ProcessResult};
 use crate::loop_opts::{LoopOpts, DEFAULT_ORCHESTRATOR_MODEL};
 use crate::{claude_binaries, cli_output, mcp_access, runtime_isolation, turn_environment};
 use serde_json::Value;
@@ -176,10 +176,26 @@ pub fn push_lock_env(ctx: &AppCtx, cwd: &str, reported: &mut bool) -> Vec<(Strin
 
 /// Runs one turn: `(exit code, stdout, stderr, timed out)`.
 pub fn run_turn(ctx: &AppCtx, command: &[String], cwd: &str, timeout_min: i64, reported: &mut bool) -> (i32, String, String, bool) {
+    run_turn_notifying(ctx, command, cwd, timeout_min, reported, &mut |_| {})
+}
+
+/// [`run_turn`] that reports the pid of the started process to `on_start`.
+pub fn run_turn_notifying(
+    ctx: &AppCtx,
+    command: &[String],
+    cwd: &str,
+    timeout_min: i64,
+    reported: &mut bool,
+    on_start: &mut dyn FnMut(i64),
+) -> (i32, String, String, bool) {
     // a .cmd wrapper (`cc`) would cut the prompt at a line break
     let (command, stdin_text) = claude_binaries::prompt_through_stdin(command, "");
     let env = push_lock_env(ctx, cwd, reported);
-    let ProcessResult { code, stdout, stderr, timed_out } = run_process(&command, cwd, &env, &stdin_text, (timeout_min.max(0) as u64) * 60);
+    let timeout = (timeout_min.max(0) as u64) * 60;
+    let ProcessResult { code, stdout, stderr, timed_out } = match run_process_notifying(&command, cwd, &env, &stdin_text, timeout, on_start) {
+        Ok(result) => result,
+        Err(error) => ProcessResult { code: 1, stdout: String::new(), stderr: error.to_string(), timed_out: false },
+    };
     (code, stdout, stderr, timed_out)
 }
 

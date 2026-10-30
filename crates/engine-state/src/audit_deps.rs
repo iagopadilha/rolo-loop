@@ -532,6 +532,38 @@ pub fn mark_applied(markdown: &str, applied: &Applied) -> String {
     out
 }
 
+/// W3. The `deps=` the audit proposes, for the panel: `{proposals: [{feature, depends_on, type, evidence, state, cycle}], review: [...]}`.
+/// `state` is `pending` (can be applied) or `cycle` (would close a cycle; never applied). A proposal the user refused earlier is left out.
+/// Read-only: nothing is written.
+pub fn proposals(root: &str) -> Value {
+    let root = nt_abspath(root);
+    let result = audit(&root);
+    let previous = load_marks(&state_file(&root, "DEPENDENCIES.md"));
+    let refused = |s: &Suggestion| previous.iter().any(|(k, (mark, _))| *k == (s.feature.clone(), s.depends_on.clone()) && mark == "refused");
+    let proposals: Vec<Value> = result
+        .suggestions
+        .iter()
+        .filter(|s| !refused(s))
+        .map(|s| json!({"feature": s.feature, "depends_on": s.depends_on, "type": s.kind, "evidence": s.evidence, "state": if s.cycle.is_empty() { "pending" } else { "cycle" }, "cycle": s.cycle}))
+        .collect();
+    let review: Vec<Value> = result.review.iter().map(|(f, d)| json!({"feature": f, "depends_on": d})).collect();
+    json!({"proposals": proposals, "review": review})
+}
+
+/// W3. Applies every pending proposal to the ROADMAP now (the same step the loop runs before each turn), in one call.
+/// `{applied: [{feature, depends_on}], problems: [text]}`; on a problem the ROADMAP is left untouched.
+pub fn apply_now(root: &str) -> Value {
+    let (_, out) = run_cli(&[nt_abspath(root), "--apply".to_string()]);
+    let applied: Vec<Value> = out
+        .lines()
+        .filter_map(|l| l.strip_prefix("APPLIED: "))
+        .filter_map(|rest| rest.split_once(" deps+="))
+        .map(|(feature, depends_on)| json!({"feature": feature, "depends_on": depends_on}))
+        .collect();
+    let problems: Vec<String> = out.lines().filter_map(|l| l.strip_prefix("PROBLEM while applying (ROADMAP untouched): ")).map(String::from).collect();
+    json!({"applied": applied, "problems": problems})
+}
+
 pub const USAGE: &str = include_str!("audit_deps_usage.txt");
 
 pub fn run_cli(args: &[String]) -> (i32, String) {
@@ -646,5 +678,36 @@ mod tests {
         assert!(text.contains("deps=dir:shared,users-api"));
         let md = std::fs::read_to_string(dir.path().join(".specs/project/loop/DEPENDENCIES.md")).unwrap();
         assert!(md.contains("- [applied] orders-api -> users-api |"));
+    }
+
+    #[test]
+    fn proposals_are_read_only_and_apply_now_writes_them_once() {
+        let dir = project(&[
+            (
+                ".specs/project/ROADMAP.md",
+                "- [users-api] status=approved paths=src/users
+- [orders-api] status=approved paths=src/orders
+",
+            ),
+            (
+                "src/orders/svc.ts",
+                "import x from '../users/model';
+",
+            ),
+        ]);
+        let root = dir.path().display().to_string();
+        let shown = proposals(&root);
+        assert_eq!(
+            (shown["proposals"][0]["feature"].clone(), shown["proposals"][0]["depends_on"].clone(), shown["proposals"][0]["state"].clone()),
+            (json!("orders-api"), json!("users-api"), json!("pending"))
+        );
+        let before = std::fs::read_to_string(dir.path().join(".specs/project/ROADMAP.md")).unwrap();
+        assert!(!before.contains("deps="), "listing writes nothing");
+        let done = apply_now(&root);
+        assert_eq!(done["applied"], json!([{"feature": "orders-api", "depends_on": "users-api"}]));
+        assert_eq!(done["problems"], json!([]));
+        assert!(std::fs::read_to_string(dir.path().join(".specs/project/ROADMAP.md")).unwrap().contains("deps=users-api"));
+        assert_eq!(apply_now(&root)["applied"], json!([]), "a second click has nothing left to do");
+        assert_eq!(proposals(&root)["proposals"], json!([]));
     }
 }

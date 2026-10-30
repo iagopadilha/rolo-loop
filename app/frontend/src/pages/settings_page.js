@@ -3,7 +3,7 @@
    components/settings_ui.js. Sections: appearance, claude, network, mcp, notifications, projects, system. */
 import { html } from '../util/preact.js';
 import { Page } from '../components/page.js';
-import { McpServersSection } from '../components/mcp_servers_section.js';
+import { SkillsToolsSection } from '../components/skills_tools_section.js';
 import { currentRoute, navigate } from './panel/router.js';
 import { AppearanceSection, ClaudeSection, NetworkSettings, ProjectsSection } from './settings_sections.js';
 import { NotificationsSection, SystemSection } from './settings_system.js';
@@ -12,7 +12,7 @@ const SECTIONS = [
   { id: 'appearance', label: 'Appearance', sub: 'Theme of the app.', view: AppearanceSection },
   { id: 'claude', label: 'Claude', sub: 'Account, usage, command and model.', view: ClaudeSection },
   { id: 'network', label: 'Network', sub: 'Hosts the agents may reach.', view: NetworkSettings },
-  { id: 'mcp', label: 'MCP servers', sub: 'Which MCP servers a loop may use.', view: McpServersSection },
+  { id: 'mcp', label: 'Skills and tools', sub: 'What every agent of the loop receives: skills and MCP tools.', view: SkillsToolsSection },
   { id: 'notifications', label: 'Notifications', sub: 'Channels and a test message.', view: NotificationsSection },
   { id: 'projects', label: 'Projects and data', sub: 'Data folders and limits.', view: ProjectsSection },
   { id: 'system', label: 'System', sub: 'Checks, version and guard.', view: SystemSection },

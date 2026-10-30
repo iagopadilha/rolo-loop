@@ -193,3 +193,11 @@ button.lt-tick:focus-visible,.tp-btn:focus-visible{outline:2px solid var(--accen
 }
 @media (prefers-reduced-motion:no-preference){.lt-bar,.lt-fcard{transition:box-shadow .12s ease;}}
 
+
+/* chips next to the loop page tools (E2E progress, cost estimate above the limit) */
+.lp-chip{display:inline-flex;align-items:center;font:500 11px var(--mono);color:var(--fg2,var(--fg));border:1px solid var(--line2);border-radius:var(--r-sm,6px);padding:3px 8px;white-space:nowrap;}
+.lp-chip.is-critical{color:var(--red);border-color:var(--red);}
+
+.in-proc{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--line2);}
+.in-proc-head{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--fg);}
+.in-proc-sub{font-size:11px;color:var(--fg2,var(--fg));}

@@ -31,6 +31,8 @@ const DEFAULT_IMPORT_NAME: &str = "spec";
 const NAME_LIMIT: usize = 40;
 pub const ALREADY_IMPORTED_CODE: &str = "already_imported";
 pub const FEATURE_FOLDER_EXISTS_CODE: &str = "feature_folder_exists";
+const EXISTING_MERGE: &str = "merge";
+const EXISTING_REPLACE: &str = "replace";
 const COVERAGE_LINE_PREFIX: &str = "Coverage (";
 static IMPORT_ID_PATTERN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[0-9]{8}-[0-9]{6}-[a-z0-9._-]{1,60}\z"));
 static UNSAFE_NAME_CHARACTERS: LazyLock<Re> = LazyLock::new(|| Re::new(r"[^a-z0-9._-]+"));
@@ -133,7 +135,10 @@ impl PlanningImportService<'_> {
         let mut warnings: Vec<String> = if refused { vec![] } else { build_warnings(&scan, &items, &conformance) };
         let earlier = self.find_earlier_import(context, &source, &slug);
         if earlier.is_none() && Self::feature_folder_exists(context, &slug) {
-            warnings.push(format!("{} already exists without an import record: the import will be refused", Self::feature_relative_folder(&slug)));
+            warnings.push(format!(
+                "{} already exists without an import record: choose `on_existing` merge (keep its files, add the missing ones) or replace",
+                Self::feature_relative_folder(&slug)
+            ));
         }
         let mut counts = scan["counts"].as_object().cloned().unwrap_or_default();
         let len = |key: &str| items.get(key).and_then(Value::as_array).map(Vec::len).unwrap_or(0);
@@ -181,7 +186,8 @@ impl PlanningImportService<'_> {
             return Err(AppError::invalid_request(text_of(scan["refused"].get("reason"))));
         }
         let slug = Self::slug_of(body, &source);
-        self.refuse_second_import(context, &source, &slug)?;
+        let on_existing = Self::existing_folder_choice(body)?;
+        self.refuse_second_import(context, &source, &slug, on_existing)?;
         let read_files: Vec<Value> = scan["files"].as_array().cloned().unwrap_or_default().into_iter().filter(|e| e["status"] == STATUS_READ).collect();
         let items = detect_items(&read_files);
         let conformance = super::context_block::ContextBlockService::read_conformance_text(&context.work_dir(), "");
@@ -193,11 +199,18 @@ impl PlanningImportService<'_> {
         let import_id = self.unique_import_id(context, &format!("{stamp}-{slug}"));
         let folder = imported_root(&context.work_dir()).join(&import_id);
         let feature_folder = FEATURES_FOLDER_PARTS.iter().fold(PathBuf::from(context.work_dir()), |a, p| a.join(p)).join(&slug);
+        if on_existing == Some(EXISTING_REPLACE) && feature_folder.is_dir() {
+            let _ = std::fs::remove_dir_all(&feature_folder);
+        }
         for entry in &read_files {
             let redacted = redact_secrets(&text_of(entry.get("text")), None);
             let relative = text_of(entry.get("relative_path"));
             let _ = self.app.specs.write_text_atomic(&relative.split('/').fold(folder.clone(), |a, p| a.join(p)), &redacted);
-            let _ = self.app.specs.write_text_atomic(&relative.split('/').fold(feature_folder.clone(), |a, p| a.join(p)), &redacted);
+            let target = relative.split('/').fold(feature_folder.clone(), |a, p| a.join(p));
+            if on_existing == Some(EXISTING_MERGE) && target.exists() {
+                continue; // merge: what the folder already holds is kept
+            }
+            let _ = self.app.specs.write_text_atomic(&target, &redacted);
         }
         let _ = self.app.specs.write_text_atomic(&folder.join(IMPORT_LOG_NAME), &Self::build_log_text(&source, &slug, &import_id, &scan, &items, &warnings));
         let mut files: Vec<Value> = read_files.iter().map(|e| e["relative_path"].clone()).collect();
@@ -212,7 +225,17 @@ impl PlanningImportService<'_> {
         Ok(json!({"import_id": meta["import_id"], "files": meta["files"], "main": meta["main"], "at": meta["at"], "source": meta["source"]}))
     }
 
-    fn refuse_second_import(&self, context: &ProjectContext, source: &str, slug: &str) -> Result<(), AppError> {
+    /// P3. `on_existing` of the body: `merge` or `replace`, or `None` when the caller did not choose.
+    fn existing_folder_choice(body: &Value) -> Result<Option<&'static str>, AppError> {
+        match body.get("on_existing").and_then(Value::as_str).map(str::trim).filter(|c| !c.is_empty()) {
+            None => Ok(None),
+            Some(EXISTING_MERGE) => Ok(Some(EXISTING_MERGE)),
+            Some(EXISTING_REPLACE) => Ok(Some(EXISTING_REPLACE)),
+            Some(_) => Err(AppError::invalid_request("`on_existing` must be \"merge\" or \"replace\"")),
+        }
+    }
+
+    fn refuse_second_import(&self, context: &ProjectContext, source: &str, slug: &str, on_existing: Option<&str>) -> Result<(), AppError> {
         if let Some(earlier) = self.find_earlier_import(context, source, slug) {
             let message = format!(
                 "this spec feature was already imported ({}): see the log {}. A changed spec goes through the planning chat (Back to planning), not a second import",
@@ -225,13 +248,17 @@ impl PlanningImportService<'_> {
             }
             return Err(error);
         }
-        if Self::feature_folder_exists(context, slug) {
+        if on_existing.is_none() && Self::feature_folder_exists(context, slug) {
             return Err(AppError::new(
                 Kind::RepoConflict,
-                format!("{} already exists and was not imported by the app: rename the source folder or remove it by hand", Self::feature_relative_folder(slug)),
+                format!(
+                    "{} already exists and was not imported by the app: send `on_existing` = \"merge\" (keep its files, add the missing ones) or \"replace\" (the folder is replaced by the imported copy)",
+                    Self::feature_relative_folder(slug)
+                ),
             )
             .with_code(FEATURE_FOLDER_EXISTS_CODE)
-            .with_extra("feature_dir", json!(Self::feature_relative_folder(slug))));
+            .with_extra("feature_dir", json!(Self::feature_relative_folder(slug)))
+            .with_extra("choices", json!([EXISTING_MERGE, EXISTING_REPLACE])));
         }
         Ok(())
     }
@@ -416,4 +443,70 @@ impl PlanningImportService<'_> {
 
 fn t(value: Option<&Value>) -> bool {
     engine_state::notify_truthy(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::project::Project;
+
+    fn setup(dir: &Path) -> (std::sync::Arc<App>, ProjectContext, String) {
+        let repo = dir.join("app");
+        std::fs::create_dir_all(repo.join(".specs/features/my-feat")).unwrap();
+        std::fs::write(repo.join(".specs/features/my-feat/old.md"), "mine").unwrap();
+        std::fs::write(repo.join(".specs/features/my-feat/spec.md"), "keep me").unwrap();
+        let source = dir.join("src-spec").join("my-feat");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("spec.md"), "# Spec\n\n- ORIG-01: the first requirement\n").unwrap();
+        let app = App::for_tests(dir);
+        let project = Project {
+            id: "p".into(),
+            name: "app".into(),
+            repo_path: repo.display().to_string(),
+            opened_at: String::new(),
+            last_opened_at: String::new(),
+            favorite: false,
+        };
+        (app, ProjectContext::new(project), source.display().to_string())
+    }
+
+    #[test]
+    fn an_existing_feature_folder_asks_for_a_choice_instead_of_a_dead_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, context, source) = setup(dir.path());
+        let error = app.planning_imports().import_spec(&context, &json!({"path": source})).unwrap_err();
+        assert_eq!(error.code.as_deref(), Some(FEATURE_FOLDER_EXISTS_CODE));
+        assert_eq!(error.extras["choices"], json!(["merge", "replace"]));
+        let invalid = app.planning_imports().import_spec(&context, &json!({"path": source, "on_existing": "wipe"})).unwrap_err();
+        assert!(invalid.message.contains("merge") && invalid.message.contains("replace"));
+        assert_eq!(std::fs::read_to_string(Path::new(&context.work_dir()).join(".specs/features/my-feat/old.md")).unwrap(), "mine", "a refusal changes nothing");
+    }
+
+    #[test]
+    fn merge_keeps_what_is_there_and_replace_swaps_the_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, context, source) = setup(dir.path());
+        let folder = Path::new(&context.work_dir()).join(".specs/features/my-feat");
+        app.planning_imports().import_spec(&context, &json!({"path": source, "on_existing": "merge"})).unwrap();
+        assert_eq!(std::fs::read_to_string(folder.join("spec.md")).unwrap(), "keep me");
+        assert_eq!(std::fs::read_to_string(folder.join("old.md")).unwrap(), "mine");
+
+        let dir = tempfile::tempdir().unwrap();
+        let (app, context, source) = setup(dir.path());
+        let folder = Path::new(&context.work_dir()).join(".specs/features/my-feat");
+        app.planning_imports().import_spec(&context, &json!({"path": source, "on_existing": "replace"})).unwrap();
+        assert!(std::fs::read_to_string(folder.join("spec.md")).unwrap().contains("ORIG-01"));
+        assert!(!folder.join("old.md").exists());
+    }
+
+    #[test]
+    fn every_project_path_the_import_prompt_names_is_editable_by_the_chat() {
+        let editable = crate::services::planning::planning_editable_paths();
+        let found: Vec<String> =
+            Re::new(r"\.specs/project/[A-Za-z0-9_.-]+").find_all(IMPORT_MESSAGE).iter().map(|m| IMPORT_MESSAGE[m.start..m.end].to_string()).collect();
+        assert!(found.iter().any(|p| p.ends_with("IMPORT-COVERAGE.md")));
+        for path in found {
+            assert!(editable.contains(&path), "the import prompt asks the chat to write {path} but the planning rules do not allow it");
+        }
+    }
 }

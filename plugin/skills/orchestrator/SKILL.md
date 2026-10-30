@@ -19,7 +19,7 @@ The specification engine is still `tlc-spec-driven` (a skill of the claude-craft
 
 This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.exe` (plugin root) and the plugin's `agents/*.md`. The **runtime** is the Loop Harness app, in the `app/` folder of the same repository: the loop engine, a local HTTP server and a multi-project web panel. It runs on your machine with your own Claude subscription through the `claude` CLI (no API token). The old `skills/orchestrator/loop/` scripts no longer exist: do not look for them.
 
-**Find the `harness` executable, once per session.** Every command below starts with `harness`: run `harness --version` (one line, PowerShell or bash). It prints a version: go on. It fails (not on PATH): tell the user to put the claude-maestro `harness` executable on PATH (or give you its full path, which you then use in place of `harness`) and to run once `harness install` (it writes `~/.loop-harness/config.json` with the app folder and this skill's folder), and **stop**. Do not look for it anywhere else.
+**Find the `harness` executable, once per session.** Every command below starts with `harness`: run `harness --version` (one line, PowerShell or bash). It prints a version: go on. It fails (not on PATH): tell the user to put the agent-maestro `harness` executable on PATH (or give you its full path, which you then use in place of `harness`) and to run once `harness install` (it writes `~/.loop-harness/config.json` with the app folder and this skill's folder), and **stop**. Do not look for it anywhere else.
 
 **Every loop command is `harness <subcommand>`**, on one line, path in quotes. Subcommands: `serve --project <root>` (panel), `loop <root> [flags]`, `check <root> [flags]` (= `loop --check`), `state`, `notify`, `summary`, `deliver`, `rules`, `audit`, `graph`, `classify`, `scale`, `subprojects`, `system-map`, `tasks` (same arguments as the engine scripts), `doctor` (diagnosis: skill, guard, `claude`, notification channels) and `install`. Every `harness <subcommand>` named in the text is a command of the one `harness` executable (the engine is part of it): always call it as `harness <subcommand>`. `.specs` templates in `app/templates/`. App docs: `docs/HOW_TO_USE.md`, `API.md`, `ARCHITECTURE.md`, `SKILL_BRIDGE.md`.
 
@@ -29,7 +29,7 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 
 **Requires the claude-craft-kit plugin.** The dev skills (`backend-dev`, `frontend-dev`), the spec engine (`tlc-spec-driven`), `flow-validator` and the shared scripts (`craft verify`, `craft testenv`, `craft regression_diff`, ...) live there, not in this plugin; `harness doctor` reports it missing. **Toolkit path, once per turn:** run `harness paths --json` (`maestro_plugin`, `orchestrator_skill`, `toolkit`) and put the `toolkit` value in a line `TOOLKIT: <path>` of every subagent prompt (see `references/dispatch.md`).
 
-**What stays in the plugin:** this skill, `references/`, `bin/guard.exe` and the agents. The app finds the guard through `orchestrator_skill_dir` in `config.json` (or `LOOP_SKILL_DIR`, or `$CLAUDE_PLUGIN_ROOT/skills/orchestrator`). Zero-cost suite: `cargo test --workspace` in the claude-maestro repository (engine, app and guard).
+**What stays in the plugin:** this skill, `references/`, `bin/guard.exe` and the agents. The app finds the guard through `orchestrator_skill_dir` in `config.json` (or `LOOP_SKILL_DIR`, or `$CLAUDE_PLUGIN_ROOT/skills/orchestrator`). Zero-cost suite: `cargo test --workspace` in the agent-maestro repository (engine, app and guard).
 
 ## Testing rule (from the user — overrides the rest of this file and the references)
 
@@ -40,6 +40,27 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 - **The executor writes no tests**, creates no throwaway test script and runs no suite "just in case". Typecheck and lint of the files it touched itself remain its job (cheap).
 - **A target project with no tests stays without tests.** Never add tests or test tooling (framework, config, CI step) to a project that has none; the TDD wave is not used. A project that already has tests keeps today's rule above (D5).
 - Outside the loop (small tweak, one-off fix, visual-only change): do not dispatch a verification agent. The cost (tens to hundreds of thousands of tokens per turn) does not pay off.
+- **When you dispatch `verifier-flow` (E2E), pass it this block as it is** (it is generated from the guard, so it is always current). A refusal that matches one of its lines is a call form to rewrite once, not a permission to ask the user for:
+
+<!-- BEGIN call-forms (generated from the guard's rule data by `cargo test -p guard-core call_forms`; do not edit by hand) -->
+### How the E2E must call things (forms the guard accepts)
+
+Most guard refusals in an E2E run are about HOW a call is written, not about a missing permission. Write each call in the form below the first time.
+
+- **Not this** (call form, `egress-host`): a `curl` whose URL is built in a sub-shell, read from a file or held in a variable with another name.
+  **This:** write the URL in the command (`curl http://localhost:5000/health`) or use a variable named `*_URL / *_HOST / *_BASE` that is defined in `.specs/project/.env.test` (`curl $API_URL/health`).
+- **Not this** (call form, `egress-host`): a wrapper function or script that forwards its arguments (`call() { curl "$@"; }`, `$*`), because the URL is no longer in the command.
+  **This:** call `curl` directly in every command, with the URL or the variable written in that command.
+- **Not this** (refused on purpose, `egress-tamper`): `python -S`, `python -E`, `python -I`: they skip the preload the loop's network layer depends on.
+  **This:** run the script as `python script.py` (or `python -c '...'`) without those flags.
+- **Not this** (call form, `egress-tamper`): `playwright-cli run-code --filename x.js` when the file does not exist yet (written in the same call), because the guard must read it first.
+  **This:** write the script file in one call and run it in a LATER call (`playwright-cli run-code --filename=<worktree>/e2e/step.js`), or pass the code inline.
+- **Not this** (call form, `repo-only`): a write, or a git command, from a folder that is not one of the loop's worktrees (for example the parent folder of the worktrees).
+  **This:** run from inside the worktree and keep the evidence and scripts in it.
+- **Not this** (call form, Claude Code): a token or password written in the command (`curl -H "Authorization: Bearer eyJ..."`).
+  **This:** let the test runner set it: `"<TOOLKIT>/bin/craft.exe" testenv exec --project <root> '<command>'` puts it in an environment variable, and the command sends `-H "Authorization: Bearer $JWT"`; never write the value.
+- **Network list:** only `localhost` and the hosts of `.specs/project/NETWORK.json` are reachable; a host that is not listed is `UNVERIFIED` with the host named in `NOTES`, never a reason to try another client.
+<!-- END call-forms -->
 
 ## Roles
 
@@ -49,10 +70,9 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 | `brownfield-mapper` | sonnet | docs in `docs/codebase/` (project root, versioned; legacy `.specs/codebase/`); **how many agents depends on repo size** (Phase 1, `harness scale`) |
 | `spec-writer` | sonnet | spec of one feature in `.specs/features/<slug>/` |
 | `spec-reviewer` | sonnet | spec gate, read-only |
-| `executor-back` | sonnet | implements, with `backend-dev` (toolkit) and the skills bound to the project's standards slots |
-| `executor-front` | sonnet | implements, with `frontend-dev` (toolkit) and the skills bound to the project's standards slots |
-| `executor-generic` | sonnet | implements, skill passed in the prompt |
-| `verifier` | sonnet | test / build / typecheck / lint |
+| `executor` | sonnet | implements one feature; the prompt's `KIND: back\|front\|generic` picks the skills: `backend-dev` or `frontend-dev` (toolkit) plus the skills bound to the project's standards slots, or the `SKILL:` lines for a generic feature |
+| `verifier` | sonnet | test / build / typecheck / lint; **fallback only**: normal verification is `harness verify` (code, no agent) |
+| `quality-gate` | sonnet | reviews the feature's diff against the skills' standards, once, at the end (`quality=off` skips it) |
 | `verifier-flow` | sonnet | validates a flow by running the app: routes (curl) and E2E (Playwright), via the `flow-validator` skill. Opt-in |
 
 **Model ceiling: Sonnet.** No subagent goes up to Opus or any model above Sonnet, under any circumstance — not even after a failure. When calling `Agent`, do not pass a `model` other than `sonnet` (or `haiku`, if you want it cheaper). When a feature fails, it escalates to the orchestrator and the user, never to a bigger model.
@@ -61,7 +81,7 @@ Never use `subagent_type: "fork"` for executors: a fork inherits the parent's mo
 
 ## Lanes: one pipeline per feature (the default)
 
-The unit of work is **one feature = one lane**. A lane is that feature's own pipeline: `spec-writer` -> `spec-reviewer` (gate) -> executor -> `verifier` -> commit. The turn starts every lane at the step its feature is at (`--lanes slug:step,...`, up to `--wave` lanes) and each lane advances **by itself**:
+The unit of work is **one feature = one lane**. A lane is that feature's own pipeline: `spec-writer` -> `spec-reviewer` (gate) -> executor -> `harness verify` (code; the `verifier` agent only as fallback) -> standards check (code) -> `quality-gate` (once, end of the feature) -> commit. The turn starts every lane at the step its feature is at (`--lanes slug:step,...`, up to `--wave` lanes) and each lane advances **by itself**:
 
 1. **One agent per feature per step. Never one agent for several features.** Every `Agent` call covers exactly ONE feature, and its prompt has exactly ONE `FEATURE: <slug>` line (executors also `SCOPE_FEATURE: <slug>`), as the first line of the prompt, and no other feature's slug anywhere in it. Never "review these two specs", "verify both", "write the specs of a and b". This holds for `spec-writer`, `spec-reviewer`, `executor-*`, `verifier` and `verifier-flow` (not for `brownfield-mapper`, which is per document). The panel's pipeline reads that line: one transcript per agent, one run of the node per feature; a batched agent shows up as ONE feature and hides the other.
 2. **Rounds, no phase barrier.** Dispatch in rounds: a round is ONE message with one `Agent` call per live lane, each lane at its OWN step (lane `a` may be at the gate while `b` executes and `c` verifies), so they all run in parallel. When the round returns, handle **each lane on its own, right away**: write its status, commit it if it is verified (one commit per feature, as soon as its `verifier` says `PASS`/`UNVERIFIED`, without waiting for the other lanes), and put it in the next round at its next step. A lane that finished its whole flow leaves the rounds; the others keep going. Never "all the specs, then all the gates, then all the executors".
@@ -172,7 +192,7 @@ On receipt: write `PATHS`, `KIND` and `SCOPE` into the ROADMAP (and, when the li
 
 **Dependency audit (after the specs, before each wave).** Skill `orchestrator-audit-dependencies`: run `harness audit <root> --write`. It looks for a forgotten `deps=` (real code imports and citations in specs) and records each suggestion in `.specs/project/loop/DEPENDENCIES.md` (`[pending]`, `[applied]`, `[refused]`, `[cycle]`). **Interactive:** show the `pending` ones with their evidence; run what the user approves with `--apply`; mark what they refuse `[refused]`. **Autopilot in chat:** run with `--apply` (it only makes execution more serial; a cycle or invalid ROADMAP goes to `VALIDATE.md`). **Headless:** `harness loop` already applies it before each turn (it picks the wave); you only read the result in `DEPENDENCIES.md`. Run it again before each wave: once feature A exists, the `import` side sees more.
 
-**Phase 4 — gate.** For each `specced` feature of size `Medium`, `Large` or `Complex`, dispatch ONE `spec-reviewer` **for that feature** (its own prompt, one `FEATURE:` line, one verdict; never one reviewer for two specs). The feature enters the gate as soon as ITS spec is back, in the next round, without waiting for the other features' specs. A `Small` feature **written by this loop** skips the gate and goes straight to execution; a `Small` feature with `origin=adopted` goes through the gate anyway.
+**Phase 4 — gate.** First run `harness spec-lint <root> <slug>` for every `specced` feature (code, no model: metadata block, valid values, requirement IDs); a `FAIL` goes back to the `spec-writer` with the lines pasted, without spending a reviewer. Then read `harness state plan <root> <slug>`: `gate=lint` stops here (the lint was the gate); `gate=agent`, `gate=both` or `gate=default` (the current rule) continue: for each `specced` feature of size `Medium`, `Large` or `Complex` (every size with `gate=agent|both`), dispatch ONE `spec-reviewer` **for that feature** (its own prompt, one `FEATURE:` line, one verdict; never one reviewer for two specs). The feature enters the gate as soon as ITS spec is back, in the next round, without waiting for the other features' specs. A `Small` feature **written by this loop** skips the gate and goes straight to execution; a `Small` feature with `origin=adopted` goes through the gate anyway.
 
 - `APPROVED` with valid `CITED` → `approved`.
 - `APPROVED` without valid `CITED` → treat as `BLOCKED`; the stamp is not valid.
@@ -187,7 +207,7 @@ Mark `building` before dispatching. Every executor prompt carries the line `SCOP
 2. Before each wave write SCOPE.json `tasks`: `{"<slug>/<Tn>": [files]}` (see `references/state.md`). Dispatch ONE executor per task of the wave, in one message, each prompt with `FEATURE: <slug>`, `SCOPE_FEATURE: <slug>` and `SCOPE_TASK: <slug>/<Tn>`, plus the path of `tasks.md`.
 3. Wave size: at most `Max parallel tasks` (ROADMAP header, default 3, 1 to 5) executors per wave inside one feature; the total across the features in flight stays inside `Max spend per turn` and `Max minutes per turn`. When the budget or minutes left are short, shrink the wave (down to one task) instead of dispatching what cannot finish.
 4. Mark each task with `harness tasks set <slug> <Tn> running` on dispatch and `done` or `failed` on its return. A `failed` task goes back to its own executor with the error, up to 2 times; the third failure is the existing quarantine rule (`tries=`). Never start the next wave before the current one is `done`.
-5. After the LAST wave dispatch ONE `verifier` for the whole feature (Phase 6), never one per task. Consolidate the `DECISION:` lines of every executor into `VALIDATE.md` (the usual grammar, with the turn).
+5. After the LAST wave run `harness verify` once for the whole feature (Phase 6), never one per task. Consolidate the `DECISION:` lines of every executor into `VALIDATE.md` (the usual grammar, with the turn).
 6. Before the commit run `harness tasks mirror <slug>` (copies the final status into `tasks.md`), then ONE commit per feature as in Phase 7.
 7. Resume: `tasks waves` returns only the not-done tasks, so a restarted turn continues at the first unfinished wave; never redo a `done` task.
 
@@ -197,11 +217,13 @@ Mark `building` before dispatching. Every executor prompt carries the line `SCOP
 
 `STATUS: DONE` → go to verification. Any other status → see `references/dispatch.md`.
 
-**Phase 6 — verification (its own phase, always runs).** Dispatch ONE `verifier` for the feature (prompt with `TOOLKIT: <path>`) as soon as ITS executor returned `DONE` (in the next round, whatever the other lanes are doing); see "Testing rule". Commit it right after its `PASS`/`UNVERIFIED`.
+**Phase 6 — verification (its own phase, always runs, as code).** As soon as ITS executor returned `DONE` (in the next round, whatever the other lanes are doing) run `harness verify <root> --feature <slug> --scope <the feature's PATHS folder>` (add `--needs-contract` for a back-end feature of a monorepo): it runs the toolkit's `craft verify` itself and prints the `FEATURE` / `VERDICT` / `RAN` / `FAIL` block, with no agent and no model tokens. Exit 0 = `PASS`, 1 = `FAIL`, 3 = `UNVERIFIED`. Exit 4 (toolkit missing) or a project where you believe checks exist that `craft verify` did not detect: dispatch the `verifier` agent as before (prompt with `TOOLKIT: <path>`). A `WARNING: contract.md missing` line means send the executor back for it before marking `verified`. See "Testing rule". Commit it right after its `PASS`/`UNVERIFIED`.
 
 - `PASS` → `verified`.
 - `UNVERIFIED` → `verified`, with an unverified mark recorded in `STATE.md` and highlighted in the report.
 - `FAIL` → return to the same executor with the error. Second failure → quarantine.
+
+**Phase 6c — code quality gate (once per feature, after verify).** When the feature is `PASS`/`UNVERIFIED` and `quality` is not `off` in its ROADMAP line (default `on`), first run `craft standards check` when the toolkit has it (`"<TOOLKIT>/bin/craft.exe" standards check --scope <PATHS folder> --skills <backend-dev for KIND back, frontend-dev for KIND front, both for KIND both>`: the deterministic rules of the skills, no agent; a `FAIL` goes back to the executor like a verify `FAIL`), then dispatch ONE `quality-gate` (prompt: `FEATURE`, `PATHS`, `TOOLKIT`, `SUBPROJECT:` lines). It reviews the feature's diff once, at the end, never per task. `APPROVED` → commit (its `warning` findings go to the report). `BLOCKED` → return to the same executor with the `FINDINGS` pasted; a second `BLOCKED` → quarantine. It runs before the commit and after the `harness verify` / regression step, so no model tokens are spent on code that does not build.
 
 **Phase 6a — regression (only with `regression=baseline`).** After the `verifier` gives `PASS` or `UNVERIFIED` and before the commit, dispatch the `verifier-flow` with `MODE: new` (same `SCRIPT`). All `ok` (or `not-covered` explained) -> `regression=ok` and move on. Any `fail` -> `regression=failed`, `tries`+1, the feature goes back to `approved` with `note=regression-failed` and the same executor receives the failed `RG-xx` (expected x obtained); the baseline is not redone (set `regression=baseline` again when re-dispatching). The feature stays `building` until `regression=ok`. Second failure -> quarantine. `verified` only with `regression=ok`.
 

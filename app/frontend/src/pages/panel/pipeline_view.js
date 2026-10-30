@@ -1,6 +1,7 @@
 /* Pipeline view of the LOOP zone: orchestrator at the left, one lane per dispatched feature grouped by WAVE, the
    fixed 6 steps per lane. Shows the state accumulated up to the selected turn (see pipeline_model.js).
-   Free canvas: background drag = pan, wheel = scroll (Shift = horizontal), Ctrl/Cmd + wheel or pinch = zoom at the
+   FIXED view (see FIXED below): the notes about pan, zoom and dragging that follow apply only when it is turned off.
+   Free canvas: background drag = pan, wheel or pinch = zoom at the
    cursor; dragging a node or lane moves the whole feature, the wave header moves every feature of the wave.
    Camera and offsets live in this module (not in the component), so switching tabs keeps them.
    The canvas is not infinite: the camera is clamped so the content can never leave the viewport (content smaller than the
@@ -15,6 +16,7 @@ import { openAgentDialog, openFeatureDialog } from './dialogs/index.js';
 import { taskGraphOf, waveModeLabel, splitNoteOf } from './feature_dialog_model.js';
 import { FeatureLabel } from './feature_label.js';
 import { ctx } from './context.js';
+import { renderAll } from '../project_panel.js';
 import { ClaudeBadge, WhoSpawnsToggle } from './claude_badge.js';
 import { clampCameraTo, fitCameraTo, sameCamera } from './camera_clamp.js';
 import { LoopTimeline } from './loop_timeline.js';
@@ -33,6 +35,8 @@ const PENDING_STATE = 'PENDING';
 const TASK_ROW_H = 22, TASK_BLOCK_PAD = 8;
 
 /** Module store: survives tab switches and re-renders. offsets = manual displacement over the automatic layout, by feature id / 'orch'. */
+/** The loop's diagram (waves, stages, features) is FIXED: always fitted and centered, never panned, zoomed or dragged. Clicking a node still selects it. */
+const FIXED = true;
 const view = { camera: { x: 0, y: 0, z: 1 }, offsets: {}, dragging: false, auto: true, viewport: null, content: null, waveMembers: {} };
 let repaint = null, suppressNextClick = false;
 const repaintNow = () => { if (repaint) repaint(); };
@@ -40,7 +44,7 @@ const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 // ---------- camera ----------
 /** Camera moved by the user (pan, zoom, drag): the default fit-and-center view stops following the viewport. */
-function takeControl() { view.auto = false; }
+function takeControl() { if (!FIXED) view.auto = false; }
 /** The camera with the content kept in view (unchanged while the viewport or the content is unknown). */
 function clampCamera(camera) {
   const element = view.viewport;
@@ -68,13 +72,14 @@ function fitToViewport({ user = false } = {}) {
 }
 function resetLayout() { view.offsets = {}; view.auto = true; if (!fitToViewport({ user: true })) repaintNow(); }
 
-/** Wheel scrolls (Shift = horizontal); Ctrl/Cmd + wheel (a trackpad pinch arrives with ctrlKey) zooms at the cursor. */
+/** Wheel zooms at the cursor (a trackpad pinch too); Shift + wheel pans sideways. */
 function onWheel(event) {
+  if (FIXED) return; // the page scrolls as usual over the fixed diagram
   event.preventDefault();
   const element = view.viewport;
   if (!element) return;
-  if (!event.ctrlKey && !event.metaKey) {
-    const deltaX = event.shiftKey ? event.deltaY : event.deltaX, deltaY = event.shiftKey ? 0 : event.deltaY;
+  if (event.shiftKey) { // Shift + wheel pans sideways; a plain wheel zooms
+    const deltaX = event.deltaY, deltaY = 0;
     takeControl();
     setCamera({ ...view.camera, x: view.camera.x - deltaX, y: view.camera.y - deltaY });
     return;
@@ -92,7 +97,7 @@ function dragKeysOf(target) {
   return [target];
 }
 function beginDrag(event) {
-  if (event.button !== 0) return;
+  if (FIXED || event.button !== 0) return;
   const holder = event.target.closest('[data-pl-drag]');
   const keys = dragKeysOf(holder ? holder.getAttribute('data-pl-drag') : null);
   const startX = event.clientX, startY = event.clientY, camera = view.camera, startOffsets = {};
@@ -148,7 +153,13 @@ function buildGraph(turn) {
   const G = GEOMETRY, stepList = steps(), state = stateAt(turn), changed = changedStepsAt(turn), selected = activeNode();
   const laneWidth = G.LANE_PAD * 2 + (stepList.length - 1) * G.STEP_GAP + G.NODE_W, width = G.LANE_X + laneWidth;
   const allFeatures = featuresInState(state), dispatched = allFeatures.filter((feature) => state[feature.id]);
-  const waveNumbers = [...new Set(dispatched.map((feature) => feature.wave))].sort((a, b) => a - b);
+  const everyWave = [...new Set(dispatched.map((feature) => feature.wave))].sort((a, b) => a - b);
+  const isConcluded = (n) => dispatched.filter((feature) => feature.wave === n).every((feature) => featureStatusAt(feature.id, turn) === 'DONE');
+  // Focus folds the waves already concluded into one line, as long as something is still open (all concluded = show everything)
+  const folding = pipe.focus && everyWave.some((n) => !isConcluded(n));
+  const foldedWaves = folding ? everyWave.filter(isConcluded) : [];
+  const waveNumbers = everyWave.filter((n) => !foldedWaves.includes(n));
+  const folded = foldedWaves.length ? { waves: foldedWaves, features: dispatched.filter((feature) => foldedWaves.includes(feature.wave)).length } : null;
   const lanes = [], nodes = [], edges = [], waves = [], starts = [];
   view.waveMembers = {};
   let y = 0;
@@ -197,7 +208,7 @@ function buildGraph(turn) {
     [orchestrator.x, orchestrator.y, orchestrator.x + G.ORCH_W, orchestrator.y + G.ORCH_H]];
   const bounds = { x0: Math.min(...boxes.map((box) => box[0])), y0: Math.min(...boxes.map((box) => box[1])),
     x1: Math.max(...boxes.map((box) => box[2])), y1: Math.max(height, ...boxes.map((box) => box[3])) + (next.length ? TEASER_HEIGHT : 0) };
-  return { width, height, lanes, nodes, edges, waves, orchestrator, next, nextWave, selected, turn, changedCount: changed.size, bounds };
+  return { width, height, lanes, nodes, edges, waves, orchestrator, next, nextWave, selected, turn, folded, changedCount: changed.size, bounds };
 }
 
 function orchestratorSummary(turn) {
@@ -243,12 +254,21 @@ function StepNode({ node }) {
   </div>`;
 }
 
+/** "Waves 1-2 concluded": what Focus folded away, one click to bring it back. */
+function FoldedNote({ graph }) {
+  const folded = graph.folded;
+  if (!folded) return null;
+  const first = folded.waves[0], last = folded.waves[folded.waves.length - 1];
+  return html`<button type="button" class="pl-folded mono" onPointerDown=${stopPropagation} onClick=${() => { pipe.focus = false; renderAll(); }}
+    title="Show every wave"><span class="pl-folded-dot"></span>${(first === last ? 'WAVE ' + first : 'WAVES ' + first + '–' + last) + ' · ' + folded.features + ' DONE, FOLDED'} <span class="pl-folded-show">SHOW ▸</span></button>`;
+}
+
 function Diagram({ graph }) {
   const orchestrator = graph.orchestrator, summary = orchestratorSummary(graph.turn), orchestratorSelected = !!graph.selected && !!graph.selected.orch;
   return html`<div class="pl-layer" style=${{ transform: `translate(${view.camera.x}px,${view.camera.y}px) scale(${view.camera.z})` }}>
     <div class="pl-content" style=${{ width: graph.width + 'px', height: graph.height + 'px' }}>
       <${Edges} graph=${graph} />
-      ${graph.waves.map((wave) => html`<div key=${wave.n} class="pl-wave" data-pl-drag=${WAVE_DRAG_PREFIX + wave.n} title="Drag to move the whole wave" style=${{ left: wave.x + 'px', top: wave.y + 'px' }}>
+      ${graph.waves.map((wave) => html`<div key=${wave.n} class="pl-wave" data-pl-drag=${WAVE_DRAG_PREFIX + wave.n} style=${{ left: wave.x + 'px', top: wave.y + 'px' }}>
         <span class="pl-wave-name">WAVE ${wave.n}</span><span style=${{ color: wave.color }}>${wave.label}</span></div>`)}
       ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-lane' + (lane.quarantined ? ' quarantined' : '')} data-pl-drag=${lane.id}
         style=${{ left: lane.x + 'px', top: lane.y + 'px', width: lane.w + 'px', height: lane.h + 'px' }} onClick=${() => openFeatureDialog({ feature: lane.id })}>
@@ -269,8 +289,9 @@ function Diagram({ graph }) {
 }
 
 function Toolbar() {
+  if (FIXED) return null;
   return html`<div class="pl-toolbar" onPointerDown=${stopPropagation}>
-    <div class="pl-hints"><kbd>wheel</kbd>scroll<kbd>Ctrl + wheel</kbd>zoom<kbd>drag</kbd>move</div>
+    <div class="pl-hints"><kbd>wheel</kbd>zoom<kbd>Shift + wheel</kbd>pan<kbd>drag</kbd>move</div>
     <button type="button" class="pl-tool" title="Zoom out" onClick=${() => zoomFromCenter(1 / ZOOM_BUTTON_FACTOR)}>−</button>
     <span class="pl-zoom">${Math.round(view.camera.z * 100)}%</span>
     <button type="button" class="pl-tool" title="Zoom in" onClick=${() => zoomFromCenter(ZOOM_BUTTON_FACTOR)}>+</button>
@@ -310,6 +331,7 @@ function OpenFeatureButton({ slug }) {
 function ListMode({ graph }) {
   return html`<div class="pl-list">
     <div class="pl-list-note"><${WhoSpawnsToggle} /></div>
+    ${graph.folded ? html`<${FoldedNote} graph=${graph} />` : null}
     ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-card' + (lane.quarantined ? ' quarantined' : '')}>
       <div class="pl-card-head" onClick=${() => openFeatureDialog({ feature: lane.id })}><span class="pl-lane-stage">W${lane.wave} · ${lane.stage == null ? 'STAGE ?' : 'STAGE ' + lane.stage}</span><${FeatureLabel} slug=${lane.id} className="pl-lane-id" />
         <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span><${OpenFeatureButton} slug=${lane.id} /></div>
@@ -363,6 +385,7 @@ export function PipelineView() {
   return html`<div class="pl-shell">
     <div class=${'pl-viewport' + (view.dragging ? ' dragging' : '')} ref=${viewportRef} onPointerDown=${beginDrag} onClickCapture=${swallowClickAfterDrag}>
       <${Diagram} graph=${graph} />
+      <${FoldedNote} graph=${graph} />
       <${Toolbar} />
     </div>
     <${Legend} turn=${turn} />

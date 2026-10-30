@@ -102,6 +102,8 @@ pub struct ClaudeJobCommand {
     pub work_dir: Option<String>,
     pub before_start: Option<BeforeStart>,
     pub parallel_key: Option<String>,
+    /// Extra environment of the claude process (for example `LOOP_PRIMARY_SPECS`, which the guard reads).
+    pub extra_env: Vec<(String, String)>,
     /// Runs in the job thread when `before_start` failed (undo what the request persisted).
     pub on_prepare_failed: Option<OnPrepareFailed>,
 }
@@ -271,7 +273,8 @@ impl ClaudeJobService<'_> {
             let layer = self.start_egress_layer(&folder);
             let _kind = call_kind(&job_type);
             let argv = command.argv.clone();
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.app.claude.run_prompt(&argv, &folder, &command.stdin_text, timeout, &[])));
+            let outcome =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.app.claude.run_prompt(&argv, &folder, &command.stdin_text, timeout, &command.extra_env)));
             let mut value = outcome.unwrap_or_else(|_| error_result("internal failure: panic"));
             egress_proxy::release(layer.as_ref());
             if let Some(finalize) = command.finalize.take() {

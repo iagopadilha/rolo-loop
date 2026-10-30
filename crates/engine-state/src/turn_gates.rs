@@ -5,6 +5,7 @@
 use crate::auto_answers::CRITICAL_DECISION_PREFIX;
 use crate::loop_io::{git, read, save_json, save_meta};
 use crate::loop_state::{feature_folder_name, loop_path, next_work, parse_roadmap, state_file, Fields, JSON_FOLDER_NAME, LOOP_FOLDER_NAME};
+use crate::result_vocabulary::E2eResult;
 use crate::system_map::{self, SYSTEM_DOCUMENT};
 use crate::worktree_state::roadmap_score;
 use crate::{audit_deps, decisions, subprojects};
@@ -60,17 +61,42 @@ pub fn audit_before_turn(work: &str) -> Vec<String> {
 
 /// With --e2e, `done` requires the final phase result on the line of EACH verified feature: e2e=ok, or e2e=not-covered when there is
 /// no surface to test. `e2e=failed` with `done` is a contradiction. Returns the list of problems.
+/// `e2e=pending` (the verifier's UNVERIFIED) is the same as no mark: work is left.
 pub fn e2e_unmarked(specs: &str) -> Vec<String> {
     let features = parse_roadmap(&roadmap(specs)).0;
     let mut problems = Vec::new();
+    let skipped = crate::e2e_evidence::skipped_features(specs); // the user chose to continue without that layer
     for (slug, f) in features.iter() {
-        if f.status() == "verified" && !f.has("e2e") {
-            problems.push(format!("{slug} without e2e="));
-        } else if f.get("e2e") == Some("failed") && f.status() != "blocked" {
+        let result = f.get("e2e").and_then(E2eResult::parse);
+        if skipped.contains(slug) && result != Some(E2eResult::Failed) {
+            continue;
+        }
+        if f.status() == "verified" && result.is_none_or(E2eResult::is_pending) {
+            problems.push(if f.has("e2e") { format!("{slug} with e2e=pending (unverified)") } else { format!("{slug} without e2e=") });
+        } else if result == Some(E2eResult::Failed) && f.status() != "blocked" {
             problems.push(format!("{slug} with e2e=failed"));
         }
     }
     problems
+}
+
+/// Verified features still without a final E2E result (`e2e=` absent or pending), in ROADMAP order. These are work left even when every
+/// feature is verified.
+pub fn e2e_pending(specs: &str) -> Vec<String> {
+    let features = parse_roadmap(&roadmap(specs)).0;
+    features
+        .iter()
+        .filter(|(_, f)| f.status() == "verified" && f.get("e2e").and_then(E2eResult::parse).is_none_or(E2eResult::is_pending))
+        .map(|(slug, _)| slug.clone())
+        .collect()
+}
+
+/// `(checked, total)` of the final E2E phase over the verified features: "E2E 3 of 8 done".
+pub fn e2e_progress(specs: &str) -> (usize, usize) {
+    let features = parse_roadmap(&roadmap(specs)).0;
+    let verified: Vec<_> = features.iter().filter(|(_, f)| f.status() == "verified").collect();
+    let pending = verified.iter().filter(|(_, f)| f.get("e2e").and_then(E2eResult::parse).is_none_or(E2eResult::is_pending)).count();
+    (verified.len() - pending, verified.len())
 }
 
 /// True for a back-end (kind back/both) feature whose paths fall in a subproject of a confirmed monorepo and that has no contract.md.
@@ -292,6 +318,42 @@ mod tests {
         let (_d, _w, specs) =
             project("## Stage 1\n- [a] status=verified\n- [b] status=verified e2e=ok\n- [c] status=building e2e=failed\n- [d] status=blocked e2e=failed\n");
         assert_eq!(e2e_unmarked(&specs), vec!["a without e2e=", "c with e2e=failed"]);
+    }
+
+    #[test]
+    fn e2e_words_of_the_verifier_count_as_results() {
+        let (_d, _w, specs) = project(
+            "## S\n- [a] status=verified e2e=pass\n- [b] status=verified e2e=unverified\n- [c] status=verified e2e=not-covered\n- [d] status=verified\n- [e] status=blocked e2e=fail\n",
+        );
+        assert_eq!(e2e_unmarked(&specs), vec!["b with e2e=pending (unverified)", "d without e2e="]);
+        assert_eq!(e2e_pending(&specs), vec!["b", "d"]);
+        assert_eq!(e2e_progress(&specs), (2, 4));
+    }
+
+    #[test]
+    fn skipped_layer_is_exempt_from_the_unmarked_check_but_failed_still_stops() {
+        let (_d, _w, specs) = project(
+            "## Stage 1
+- [a] status=verified
+- [b] status=verified
+- [c] status=verified e2e=failed
+",
+        );
+        assert_eq!(e2e_unmarked(&specs).len(), 3);
+        let mark = crate::e2e_evidence::SKIP_LAYER_OPTION;
+        let answers = ["a", "b", "c"]
+            .map(|s| {
+                format!(
+                    "
+## Answer t [pending]
+Question: q [layer-stop:{s}]
+User answer: {mark}
+"
+                )
+            })
+            .concat();
+        std::fs::write(std::path::Path::new(&specs).join("ANSWERS.md"), answers).unwrap();
+        assert_eq!(e2e_unmarked(&specs), vec!["c with e2e=failed"]);
     }
 
     #[test]

@@ -44,6 +44,7 @@ pub const PLANNING_REPLY_LIMIT: usize = 20000;
 /// What the rules do not pre-approve is denied (nobody answers a prompt in -p).
 pub const PLANNING_PERMISSION_MODE: &str = "dontAsk";
 const PLANNING_RULES_PATH: &str = ".specs/project/RULES.md"; // not previewed, but the chat fills it from what the user says cannot be done
+pub const PLANNING_IMPORT_COVERAGE_PATH: &str = ".specs/project/IMPORT-COVERAGE.md"; // the spec import asks the chat to write the coverage table here
 const PLANNING_SUGGESTED_REPOS_PATH: &str = ".specs/project/REPOS-SUGGESTED.json"; // repos the chat proposes from the catalog; the user confirms in the panel
 const PLANNING_CREDENTIALS_NOTE: &str = "[Test credentials: the file .specs/project/loop/internal/credential-names.json lists every $NAME of TEST-ENVIRONMENT.md with its source and whether it is set, NEVER the values. Read it to know what exists. Never ask the user for a password, token or any value and never write one in a document or in chat: write only the $NAME in TEST-ENVIRONMENT.md and tell the user to fill the value in the panel's Test environment tab.]";
 const PLANNING_MCP_NOTE: &str = "\n[MCP read access: besides the files you may use ONLY these read tools: {}. Use them to find sample data (real ids, routes, payload shapes) for TEST-ENVIRONMENT.md and FLOWS.md and to check how the data is built. Never write through them. Never copy a secret, token or personal data from a result into a document.]";
@@ -60,7 +61,17 @@ pub fn planning_editable_paths() -> Vec<String> {
     let mut paths: Vec<String> = PLANNING_DOCUMENTS.iter().map(|(_, p)| p.to_string()).collect();
     paths.push(PLANNING_RULES_PATH.into());
     paths.push(PLANNING_SUGGESTED_REPOS_PATH.into());
+    paths.push(PLANNING_IMPORT_COVERAGE_PATH.into());
     paths
+}
+
+/// P2. The real constraint, stated to the AI every turn: the permission mode is fixed by the app and the user has no control to change it, so the
+/// AI must never ask for that. What it cannot write it hands to the user as text.
+pub fn planning_permission_note() -> String {
+    let files = planning_editable_paths().join(", ");
+    format!(
+        "[Permissions of this chat: fixed by the app, with no setting the user can change. You may write ONLY these files: {files}. Anything else is refused. Never tell the user to change a permission mode, to allow an edit or to run a command for you: if you need a file outside that list, say which file and what it should contain, so the user can create it themselves.]"
+    )
 }
 
 pub fn planning_allowed_tools() -> Vec<String> {
@@ -289,6 +300,8 @@ impl PlanningService<'_> {
         if !mcp_tools.is_empty() {
             status.push_str(&PLANNING_MCP_NOTE.replace("{}", &mcp_tools.join(", ")));
         }
+        status.push_str("\n\n");
+        status.push_str(&planning_permission_note());
         let stdin_text = if session.is_empty() { format!("{PLANNING_FIRST_PROMPT}\n{status}\n\n{message}") } else { format!("{status}\n\n{message}") };
         Ok(Prepared { argv: Some(argv), stdin_text: Some(stdin_text) })
     }
@@ -501,6 +514,9 @@ mod tests {
         assert_eq!(described, vec![json!({"id": "q1", "text": "Which db?", "recommended": "sqlite | maybe"}), json!({"id": "q2", "text": "Auth?", "recommended": ""})]);
         assert!(planning_allowed_tools().contains(&"Edit(/.specs/project/REPOS-SUGGESTED.json)".to_string()));
         assert_eq!(planning_disallowed_tools().len(), 4);
+        assert!(planning_allowed_tools().contains(&"Edit(/.specs/project/IMPORT-COVERAGE.md)".to_string()));
+        let note = planning_permission_note();
+        assert!(note.contains("IMPORT-COVERAGE.md") && note.contains("Never tell the user to change a permission mode"));
         assert_eq!(PlanningService::validate_text(&json!("  hi  ")).unwrap(), "hi");
         assert_eq!(PlanningService::validate_text(&json!("")).unwrap_err().message, "empty text");
         assert_eq!(
