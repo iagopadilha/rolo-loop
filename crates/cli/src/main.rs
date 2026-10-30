@@ -7,6 +7,7 @@ mod doctor_cmd;
 mod forward;
 mod grant_cmd;
 mod install_cmd;
+mod metrics_cmd;
 mod paths;
 mod resume_cmd;
 mod serve_cmd;
@@ -72,6 +73,8 @@ enum Command {
     Rules(forward::Forwarded),
     /// Sends a test or custom notice through the configured channels
     Notify(forward::Forwarded),
+    /// Size of the instructions each agent and the orchestrator skill carry (bytes, rough tokens)
+    Metrics(metrics_cmd::Args),
     /// Verification as code: runs the toolkit's craft verify and prints the verifier's return block
     Verify(verify_cmd::Args),
     /// Pushes the feature branch and opens the PR at the end of the flow
@@ -113,6 +116,7 @@ fn main() {
         Command::Inventory(a) => forward::inventory(a),
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
+        Command::Metrics(args) => metrics_cmd::run(args),
         Command::Verify(args) => verify_cmd::run(args),
         Command::Deliver(a) => forward::deliver(a),
         Command::Loop(a) => forward::run_loop(a),

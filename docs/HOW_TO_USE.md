@@ -12,7 +12,7 @@ agent-maestro turns a goal into a roadmap, and an approved roadmap into an unatt
 
 ## Migrating the installed plugin
 
-The plugin id changed from `claude-maestro` to `agent-maestro` (the repository and its URL keep the old name). An install made under the old id keeps working: `harness` still finds it. To move to the new id, run in Claude Code:
+The plugin id changed from `claude-maestro` to `agent-maestro` (the GitHub repository is `agent-maestro`). An install made under the old id keeps working: `harness` still finds it. To move to the new id, run in Claude Code:
 
 ```
 /plugin uninstall claude-maestro@claude-maestro

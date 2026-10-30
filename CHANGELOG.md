@@ -6,6 +6,13 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Added
 
+- Lean agent pipeline (Anthropic, "When to fold subagents into your main agent loop", 2026-10-22): one strong loop, context and tools on demand, more agents only where planned or measured.
+  - One `executor` agent replaces `executor-back`, `executor-front` and `executor-generic`; the prompt carries `KIND:` and the skills. The old names stay mapped in the guard and in the panel for old installs and run history.
+  - `harness verify <root> --feature <slug>`: verification as code (the toolkit's `craft verify`), so the `verifier` agent is only a fallback when the toolkit is missing.
+  - New `quality-gate` agent: reviews the feature's diff once, at the end, against the standards of the skills; `BLOCKED` goes back to the executor once, a second time to quarantine. The deterministic rules run first in code (`craft standards check`, claude-craft-kit).
+  - Optional planning fields on a ROADMAP line: `split`, `gate`, `quality`, `models`, `reads`, `tools`. All default to today's behavior and a bad value is a warning, never a stop: `harness state plan <root> [slug]`.
+  - `harness metrics`: size of every agent file and of the orchestrator skill, the measurement before any claim of savings. Agent files shrank from 87329 to 56392 bytes in total.
+  - Guard: a bare `npm install` / `pnpm install` / `yarn install` / `bun install` (flags only, no package) is a routine install and is not blocked.
 - Panel: STANDARD and LEGACY buttons for the Conformance of each repository in the Workspace dialog (S5), same code as `PUT repos/{name}/conformance` (the primary uses `POST conformance`); the server's refusal is shown as is.
 - Panel: importing a spec feature whose folder already exists asks Merge or Replace and sends `on_existing` (P3).
 - Panel: a "Permissions" button and dialog list the permissions journal (`state.permissions_log`) and release a host or a cost limit with a reason, like `harness grant`. New route `POST /p/{project_id}/api/access/grant` (token); the journal redacts values and reasons.
