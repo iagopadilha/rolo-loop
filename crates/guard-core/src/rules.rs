@@ -268,10 +268,10 @@ ci!(OUTBOUND_HINT, r"(ticket|issue|jira|confluence|slack|mail|message|sms|chat|c
 ci!(OUTBOUND_VERB, r"(create|update|delete|add|send|post|reply|comment|transition|edit|publish)");
 ci!(INSTALL, r"\b(npm|pnpm|yarn|bun)\s+(i|install|add|ci|update|upgrade)\b|\bdotnet\s+(restore|add\s+package)\b|\bpip\s+install\b");
 // A routine install restores what a lockfile or manifest ALREADY declares (no package name, no custom feed): the whole command must be
-// that and nothing else. `npm install left-pad`, `pip install x`, `dotnet add package x` stay refused by INSTALL.
+// that and nothing else; a bare `npm install` (flags only) is routine too. `npm install left-pad`, `pip install x`, `dotnet add package x` stay refused by INSTALL.
 ci!(
     ROUTINE_INSTALL,
-    r"^\s*(?:npm\s+ci(?:\s+--[a-z-]+)*|(?:pnpm|yarn)\s+install\s+--frozen-lockfile|dotnet\s+restore(?:\s+[^\s\x22\x27;&|<>$-][^\s\x22\x27;&|<>$]*|\s+\x22[^\x22;&|<>$]*\x22)?|(?:python[0-9.]*\s+-m\s+)?pip[0-9.]*\s+install\s+(?:-r|--requirement)\s+[^\s:;&|<>$-][^\s:;&|<>$]*|cargo\s+fetch(?:\s+--locked)?|poetry\s+install|go\s+mod\s+download)\s*$"
+    r"^\s*(?:npm\s+ci(?:\s+--[a-z-]+)*|(?:npm|pnpm|yarn|bun)\s+(?:install|i)(?:\s+--[a-z-]+)*|dotnet\s+restore(?:\s+[^\s\x22\x27;&|<>$-][^\s\x22\x27;&|<>$]*|\s+\x22[^\x22;&|<>$]*\x22)?|(?:python[0-9.]*\s+-m\s+)?pip[0-9.]*\s+install\s+(?:-r|--requirement)\s+[^\s:;&|<>$-][^\s:;&|<>$]*|cargo\s+fetch(?:\s+--locked)?|poetry\s+install|go\s+mod\s+download)\s*$"
 );
 ci!(
     SECRET_HINT,
@@ -407,6 +407,12 @@ mod tests {
             "npm ci --ignore-scripts",
             "pnpm install --frozen-lockfile",
             "yarn install --frozen-lockfile",
+            "npm install",
+            "npm i",
+            "npm install --legacy-peer-deps",
+            "pnpm install",
+            "yarn install",
+            "bun install",
             "dotnet restore",
             "dotnet restore src/App.sln",
             "dotnet restore \"my dir/App.csproj\"",
@@ -420,7 +426,7 @@ mod tests {
         }
         for blocked in [
             "npm install left-pad",
-            "npm i",
+            "npm install --registry=https://feed.example",
             "npm ci left-pad",
             "pnpm add x",
             "yarn add x",
