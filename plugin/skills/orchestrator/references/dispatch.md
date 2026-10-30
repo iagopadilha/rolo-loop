@@ -4,11 +4,11 @@
 
 Decision order:
 
-1. `KIND` of the spec — `back` → `executor-back`; `front` → `executor-front`; `generic` → `executor-generic`.
+1. `KIND` of the spec — the one agent is `executor` for every kind. Put the line `KIND: back|front|generic` in the prompt: it tells the executor which skill to load (`back` → `backend-dev`, `front` → `frontend-dev`, `generic` → the `SKILL:` lines of the prompt).
 2. `KIND: both` — **split into two dispatches**, one per layer, each with the subset of `PATHS` that belongs to it. If the two subsets are disjoint, they may run in parallel. If the feature cannot be cut that way, run serially: back first, front after.
 3. `PATHS` breaks ties when `KIND` is doubtful. API, domain, service, repository, migration directories → back. Component, page, hook, UI route, style directories → front. Infra, script, CI, config, docs → generic.
 
-When dispatching `executor-generic`, include in the prompt a line `SKILL: <name>` when a useful domain skill exists (for example `migration` for a schema migration; never `github` — git belongs to the orchestrator). With no suitable skill, omit the line.
+When `KIND: generic`, include in the prompt a line `SKILL: <name>` when a useful domain skill exists (for example `migration` for a schema migration; never `github` — git belongs to the orchestrator). With no suitable skill, omit the line.
 
 ## What always goes in the executor prompt
 

@@ -59,10 +59,13 @@ pub const SHORT_NAME_MSG: &str =
 pub const SQL_WRITE_REASON: &str = "read only through MCP: write the change as a .sql script (or a migration) and ask the user (write the script in the feature folder sql/ and return STATUS: NEEDS_CONFIRM: apply <script> on DEV, then answer)";
 
 /// `(agent_type, profile)` of `--profile auto`.
-pub const AGENT_PROFILES: [(&str, &str); 8] = [
+pub const AGENT_PROFILES: [(&str, &str); 10] = [
     ("spec-writer", "spec"),
     ("spec-reviewer", "spec"),
     ("brownfield-mapper", "spec"),
+    ("executor", "executor"),
+    ("quality-gate", "verifier"),
+    // Legacy executor names (plugin before the single `executor`): kept so an old install and old run history still resolve.
     ("executor-back", "executor"),
     ("executor-front", "executor"),
     ("executor-generic", "executor"),

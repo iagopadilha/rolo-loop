@@ -21,7 +21,7 @@ The plugin id changed from `claude-maestro` to `agent-maestro` (the repository a
 /plugin install agent-maestro@agent-maestro
 ```
 
-Then, in a terminal, run `harness install` and `harness doctor`. Agents are now addressed as `agent-maestro:executor-back` and so on.
+Then, in a terminal, run `harness install` and `harness doctor`. Agents are now addressed as `agent-maestro:executor` and so on.
 
 ## First project
 

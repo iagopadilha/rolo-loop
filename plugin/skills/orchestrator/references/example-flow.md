@@ -11,7 +11,7 @@ A walkthrough of one real use of the orchestrator on a made-up project, so you c
 | You | decide: conformance, roadmap, rules, answers to blocking questions | run git by hand inside the loop |
 | `orchestrator` (the chat) | plans, dispatches, writes state, commits, talks to you | write specs, code or tests itself |
 | `spec-writer`, `spec-reviewer` | write the spec; review it (the gate) | touch code |
-| `executor-back`, `executor-front`, `executor-generic` | implement one feature inside its declared `PATHS` | run git, write tests, leave `PATHS` |
+| `executor` (`KIND: back`, `front` or `generic`) | implement one feature inside its declared `PATHS` | run git, write tests, leave `PATHS` |
 | `verifier` | build, typecheck, lint of the feature | fix code |
 | guard hook | blocks pushes, protected state, secrets, production writes for subagents | |
 | Loop Harness app (`app/`) | the engine repeats turns unattended, validates state, notifies you; the local panel shows it all and takes your clicks | decide anything, approve for you |

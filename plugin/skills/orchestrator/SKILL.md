@@ -70,9 +70,7 @@ Most guard refusals in an E2E run are about HOW a call is written, not about a m
 | `brownfield-mapper` | sonnet | docs in `docs/codebase/` (project root, versioned; legacy `.specs/codebase/`); **how many agents depends on repo size** (Phase 1, `harness scale`) |
 | `spec-writer` | sonnet | spec of one feature in `.specs/features/<slug>/` |
 | `spec-reviewer` | sonnet | spec gate, read-only |
-| `executor-back` | sonnet | implements, with `backend-dev` (toolkit) and the skills bound to the project's standards slots |
-| `executor-front` | sonnet | implements, with `frontend-dev` (toolkit) and the skills bound to the project's standards slots |
-| `executor-generic` | sonnet | implements, skill passed in the prompt |
+| `executor` | sonnet | implements one feature; the prompt's `KIND: back\|front\|generic` picks the skills: `backend-dev` or `frontend-dev` (toolkit) plus the skills bound to the project's standards slots, or the `SKILL:` lines for a generic feature |
 | `verifier` | sonnet | test / build / typecheck / lint |
 | `verifier-flow` | sonnet | validates a flow by running the app: routes (curl) and E2E (Playwright), via the `flow-validator` skill. Opt-in |
 

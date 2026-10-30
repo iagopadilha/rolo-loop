@@ -9,7 +9,7 @@ import { selectAgent } from './roadmap_sidebar.js';
 
 const PIPE = { NW: 236, NH: 112, ORCHW: 150, GAPY: 10, GAPX: 34, PADX: 12, PADY: 8, LANE_TOP: 32, LANE_BOT: 10, LANE_GAP: 8 };
 /** What each role does, in plain words (the second line of the node). */
-const ROLE_WORDS = { 'spec-writer': 'writes the spec', 'spec-reviewer': 'reviews the spec', 'executor-back': 'implements (back end)', 'executor-front': 'implements (front end)',
+const ROLE_WORDS = { 'spec-writer': 'writes the spec', 'spec-reviewer': 'reviews the spec', executor: 'implements (back end, front end, infra)', 'quality-gate': 'reviews the code against the standards', 'executor-back': 'implements (back end)', 'executor-front': 'implements (front end)',
   'executor-generic': 'implements (infra, script)', verifier: 'verifies (build, types, lint)', 'verifier-flow': 'validates the flow (E2E)', 'brownfield-mapper': 'maps the existing code', orchestrator: 'plans and dispatches' };
 const WAITING_TASK = { queued: 'waiting for the previous step', idle: 'waiting for the previous step' };
 /** One line for 'what is it doing now': decision, summary or last action; else the state in words. */
@@ -21,7 +21,7 @@ const currentTask = (a) => {
 };
 const SCALE_MAX = 1.2;
 const MARKERS = { gray: '#4A4664', amber: '#B3A8FF', red: '#F07A6E', green: '#4FD1A1', white: '#EDEBF7' };
-const STAGE_COL = { 'spec-writer': 1, 'spec-reviewer': 2, 'executor-back': 3, 'executor-front': 3, 'executor-generic': 3, verifier: 4, 'verifier-flow': 4 };
+const STAGE_COL = { 'spec-writer': 1, 'spec-reviewer': 2, executor: 3, 'executor-back': 3, 'executor-front': 3, 'executor-generic': 3, 'quality-gate': 4, verifier: 4, 'verifier-flow': 4 };
 const dg = { view: { s: 1, x: 0, y: 0 }, manual: false, wrap: null, stage: null, w: 0, h: 0 };
 export const retColor = (r) => (/^(APPROVED|PASS|DONE)$/i.test(r) ? '#4FD1A1' : /^(BLOCKED|FAIL|TOO_BIG)$/i.test(r) ? '#F07A6E' : '#B3A8FF');
 export const isBad = (a) => a.state === 'failed' || a.state === 'blocked' || /^(BLOCKED|FAIL)$/i.test(String(a.return_status || ''));

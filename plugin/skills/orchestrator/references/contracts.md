@@ -55,7 +55,7 @@ Anti-rubber-stamp rule, applied by the orchestrator: `APPROVED` is only valid wi
 
 `BLOCKED` goes back to the `spec-writer` with the `FINDINGS` pasted into the prompt. A second rejection of the same spec goes to quarantine.
 
-## `executor-back` / `executor-front` / `executor-generic`
+## `executor` (`KIND: back|front|generic`)
 
 ```
 FEATURE: <slug>

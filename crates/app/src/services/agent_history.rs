@@ -92,11 +92,7 @@ pub fn get_inferred_role(feature: &Map<String, Value>) -> String {
     match status {
         "pending" | "speccing" => "spec-writer".into(),
         "specced" => "spec-reviewer".into(),
-        _ => match feature.get("kind").and_then(Value::as_str) {
-            Some("back") => "executor-back".into(),
-            Some("front") => "executor-front".into(),
-            _ => "executor-generic".into(),
-        },
+        _ => "executor".into(),
     }
 }
 
@@ -427,8 +423,8 @@ mod tests {
         let feature = |status: &str, kind: &str, note: &str| json!({"status": status, "kind": kind, "note": note}).as_object().cloned().unwrap();
         assert_eq!(get_inferred_role(&feature("pending", "back", "")), "spec-writer");
         assert_eq!(get_inferred_role(&feature("specced", "back", "")), "spec-reviewer");
-        assert_eq!(get_inferred_role(&feature("building", "front", "")), "executor-front");
-        assert_eq!(get_inferred_role(&feature("building", "both", "")), "executor-generic");
+        assert_eq!(get_inferred_role(&feature("building", "front", "")), "executor");
+        assert_eq!(get_inferred_role(&feature("building", "both", "")), "executor");
         assert_eq!(get_inferred_role(&feature("building", "back", "Verifying now")), "verifier");
     }
 
@@ -461,7 +457,7 @@ mod tests {
             service.build_state_agents(&w, &json!({"running": false, "status": "done"}), &[json!({"id": "a", "status": "building", "kind": "back", "note": null})], &[2]);
         assert_eq!(
             (state_agents[0]["state"].clone(), state_agents[0]["cost_usd"].clone(), state_agents[1]["id"].clone(), state_agents[1]["state"].clone()),
-            (json!("done"), json!(1), json!("a:executor-back"), json!("idle"))
+            (json!("done"), json!(1), json!("a:executor"), json!("idle"))
         );
         let history = service.build_history(&ProjectContext::new(crate::domain::project::Project {
             id: "x".into(),

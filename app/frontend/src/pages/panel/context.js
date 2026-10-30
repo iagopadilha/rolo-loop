@@ -23,7 +23,7 @@ export const STATUS = {
 export const ROLE_DESC = {
   orchestrator: 'roadmap · dispatch · commit · checkpoint',
   'spec-writer': 'writes the spec of one feature', 'spec-reviewer': 'spec gate · read-only',
-  'executor-back': 'implements · back end', 'executor-front': 'implements · front end',
+  executor: 'implements', 'quality-gate': 'reviews the code against the standards', 'executor-back': 'implements · back end', 'executor-front': 'implements · front end',
   'executor-generic': 'implements · infra, script, config', 'brownfield-mapper': 'maps the existing code',
   verifier: 'build · typecheck · lint', 'verifier-flow': 'validates the flow by running the app',
 };
