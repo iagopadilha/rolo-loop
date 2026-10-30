@@ -96,6 +96,18 @@ NOTES: up to 2 lines, or "-"
 - `UNVERIFIED` → the repo has no test, build, typecheck or lint. The feature advances, but is marked unverified in `STATE.md` and shown that way in the report. Never present `UNVERIFIED` as approved.
 - `FAIL` → goes back to the same executor with the `FAIL` block in the prompt. Second failure → quarantine.
 
+## `quality-gate`
+
+```
+FEATURE: <slug>
+VERDICT: APPROVED|BLOCKED
+FINDINGS:
+- <path>:<line> <rule-id> <blocker|warning>: <problem>. <fix>.
+NOTES: up to 2 lines, or "-"
+```
+
+`BLOCKED` goes back to the same executor with the `FINDINGS` pasted into the prompt. A second `BLOCKED` goes to quarantine. `warning` lines only go to the report.
+
 ## `verifier-flow`
 
 Full format in `<TOOLKIT>/skills/flow-validator/SKILL.md` (Report section). Summary:

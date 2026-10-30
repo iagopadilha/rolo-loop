@@ -71,7 +71,7 @@ fn step_by_role(role: &str) -> Option<usize> {
     match role {
         "spec-writer" => Some(STEP_SPEC),
         "spec-reviewer" => Some(STEP_REVIEW),
-        "verifier" | "verifier-flow" => Some(STEP_VERIFY),
+        "verifier" | "verifier-flow" | "quality-gate" => Some(STEP_VERIFY),
         _ => None,
     }
 }

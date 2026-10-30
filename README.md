@@ -8,7 +8,7 @@ agent-maestro lets you describe a goal, approve a plan and leave a loop to work 
 
 ## What is in the box
 
-- A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and eight sub-agents (`spec-writer`, `spec-reviewer`, `executor-back`, `executor-front`, `executor-generic`, `verifier`, `verifier-flow`, `brownfield-mapper`).
+- A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and seven sub-agents (`spec-writer`, `spec-reviewer`, `executor`, `quality-gate`, `verifier`, `verifier-flow`, `brownfield-mapper`).
 - `harness`, one Windows binary: the loop engine, the local panel server and the command line.
 - `guard`, the hook binary Claude Code runs before every tool call.
 - The panel: a small Preact app served by `harness` on `127.0.0.1`.

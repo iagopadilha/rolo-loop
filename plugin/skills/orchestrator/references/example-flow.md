@@ -13,6 +13,7 @@ A walkthrough of one real use of the orchestrator on a made-up project, so you c
 | `spec-writer`, `spec-reviewer` | write the spec; review it (the gate) | touch code |
 | `executor` (`KIND: back`, `front` or `generic`) | implement one feature inside its declared `PATHS` | run git, write tests, leave `PATHS` |
 | `verifier` | build, typecheck, lint of the feature | fix code |
+| `quality-gate` | reviews the feature's diff against the skills' standards | edit any file |
 | guard hook | blocks pushes, protected state, secrets, production writes for subagents | |
 | Loop Harness app (`app/`) | the engine repeats turns unattended, validates state, notifies you; the local panel shows it all and takes your clicks | decide anything, approve for you |
 
