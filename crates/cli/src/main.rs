@@ -11,6 +11,7 @@ mod metrics_cmd;
 mod paths;
 mod resume_cmd;
 mod serve_cmd;
+mod spec_lint_cmd;
 mod state_cmd;
 mod verify_cmd;
 
@@ -73,6 +74,9 @@ enum Command {
     Rules(forward::Forwarded),
     /// Sends a test or custom notice through the configured channels
     Notify(forward::Forwarded),
+    /// The code half of the spec gate: metadata block, valid values, requirement IDs (no model)
+    #[command(name = "spec-lint")]
+    SpecLint(spec_lint_cmd::Args),
     /// Size of the instructions each agent and the orchestrator skill carry (bytes, rough tokens)
     Metrics(metrics_cmd::Args),
     /// Verification as code: runs the toolkit's craft verify and prints the verifier's return block
@@ -116,6 +120,7 @@ fn main() {
         Command::Inventory(a) => forward::inventory(a),
         Command::Rules(a) => forward::rules(a),
         Command::Notify(a) => forward::notify(a),
+        Command::SpecLint(args) => spec_lint_cmd::run(args),
         Command::Metrics(args) => metrics_cmd::run(args),
         Command::Verify(args) => verify_cmd::run(args),
         Command::Deliver(a) => forward::deliver(a),

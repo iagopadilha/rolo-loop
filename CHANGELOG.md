@@ -11,6 +11,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
   - `harness verify <root> --feature <slug>`: verification as code (the toolkit's `craft verify`), so the `verifier` agent is only a fallback when the toolkit is missing.
   - New `quality-gate` agent: reviews the feature's diff once, at the end, against the standards of the skills; `BLOCKED` goes back to the executor once, a second time to quarantine. The deterministic rules run first in code (`craft standards check`, claude-craft-kit).
   - Optional planning fields on a ROADMAP line: `split`, `gate`, `quality`, `models`, `reads`, `tools`. All default to today's behavior and a bad value is a warning, never a stop: `harness state plan <root> [slug]`.
+  - `harness spec-lint <root> <slug>`: the code half of the spec gate (metadata block, valid values, requirement IDs); the `spec-reviewer` agent runs per the feature's `gate` field.
   - `harness metrics`: size of every agent file and of the orchestrator skill, the measurement before any claim of savings. Agent files shrank from 87329 to 56392 bytes in total.
   - Guard: a bare `npm install` / `pnpm install` / `yarn install` / `bun install` (flags only, no package) is a routine install and is not blocked.
 - Panel: STANDARD and LEGACY buttons for the Conformance of each repository in the Workspace dialog (S5), same code as `PUT repos/{name}/conformance` (the primary uses `POST conformance`); the server's refusal is shown as is.
