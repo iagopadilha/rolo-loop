@@ -80,13 +80,9 @@ With no dependency, `DEPS: none`. A forgotten dependency makes two features run 
 - Include `<path>/docs/codebase/<DOC>.md` in `PATHS` only when the feature really changes what that document says.
 - A front-end feature that consumes an API depends (`DEPS`) on the back-end feature that changes that API.
 
-## Reserved for the loop: not yours, and a guard block is final
+## Reserved for the loop
 
-This applies only inside the loop (your prompt came from the `/orchestrator` skill); in a normal conversation with the user these actions stay allowed as usual.
-
-- **Not yours in the loop, so do not even try them:** `git add`/`commit`/`push`/`checkout`/`switch`/`stash`/`reset` (the orchestrator commits each feature at its own checkpoint step; push and PR happen once, at the end, in the engine's `harness deliver`); anything of `harness` (`deliver`, `loop`, `serve`, `state`, `rules`, `audit`, `graph`); writing `.specs/project/` state (ROADMAP, STATE, RULES, FLOWS, `loop/**`) or `LOOP.json`; sending anything out of the machine (ticket, issue, message or any MCP tool that writes); installing or adding dependencies unless the spec says so; touching a file outside your `PATHS` (or, for spec and mapper agents, outside `.specs/features/<your slug>/` and `docs/codebase/` **of the loop's worktree, your current folder**, never the user's original repo folder); and any repo other than the loop's worktrees.
-- **If you need one of them,** do not attempt it: ask for it in your return (`NOTES`; executor `STATUS: NEEDS_CONFIRM`; reviewer or verifier `BLOCKED` or `UNVERIFIED` with the reason) and finish your work without it.
-- **A guard block is final.** When the guard (a `PreToolUse` hook) blocks a command or a write, never retry it and never try a variant (other flags, `-C`, `python -c`, a script, a subshell, another tool, a copy of the file): that is the same attempt again and it only burns the turn. Stop that action, carry on with the rest of your work, and say in your return what was blocked and why it was needed.
+In the loop the orchestrator owns git (commit, push, checkout, stash, reset), `harness` (except the read-only `inventory`), the state in `.specs/project/` (ROADMAP, STATE, RULES, FLOWS, `loop/**`, `LOOP.json`), anything that leaves the machine, installs of new dependencies, files outside your scope and every repo other than the loop's worktrees. Do not attempt them: ask in your return (`NOTES`; executor `NEEDS_CONFIRM`; reviewer/verifier `BLOCKED`/`UNVERIFIED`) and finish the rest. **A guard block is final:** never retry it or try a variant (other flags, `python -c`, a subshell, a copy of the file); say what was blocked and why it was needed.
 
 ## Decisions to report (important and critical only)
 
