@@ -32,7 +32,9 @@ pub fn lint(text: &str) -> Vec<String> {
     let scope = metadata(text, "SCOPE");
     match &scope {
         None => problems.push("no SCOPE (Small|Medium|Large|Complex) in the metadata block".into()),
-        Some(v) if !SCOPES.contains(&v.to_lowercase().split_whitespace().next().unwrap_or("")) => problems.push(format!("SCOPE {v:?} is not Small, Medium, Large or Complex")),
+        Some(v) if !SCOPES.contains(&v.to_lowercase().split_whitespace().next().unwrap_or("")) => {
+            problems.push(format!("SCOPE {v:?} is not Small, Medium, Large or Complex"))
+        }
         _ => {}
     }
     match metadata(text, "KIND") {

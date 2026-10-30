@@ -58,12 +58,7 @@ pub fn run(args: Args) -> i32 {
         return 4;
     }
     let scope = args.scope.clone().unwrap_or_else(|| args.root.clone());
-    let output = Command::new(&craft)
-        .current_dir(&args.root)
-        .args(["verify", "--scope"])
-        .arg(&scope)
-        .args(["--timeout", &args.timeout.to_string()])
-        .output();
+    let output = Command::new(&craft).current_dir(&args.root).args(["verify", "--scope"]).arg(&scope).args(["--timeout", &args.timeout.to_string()]).output();
     let output = match output {
         Ok(o) => o,
         Err(error) => {

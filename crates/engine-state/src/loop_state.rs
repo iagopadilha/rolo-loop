@@ -1219,11 +1219,16 @@ fn plan_report(features: &Features, only: Option<&str>) -> String {
         }
         let (mut plan, warnings) = crate::plan_fields::resolve(fields);
         plan["slug"] = json!(slug);
-        out.push_str(&format!("{}
-", py_json_dumps(&plan, false)));
+        out.push_str(&format!(
+            "{}
+",
+            py_json_dumps(&plan, false)
+        ));
         for warning in warnings {
-            out.push_str(&format!("WARNING: [{slug}] {warning}
-"));
+            out.push_str(&format!(
+                "WARNING: [{slug}] {warning}
+"
+            ));
         }
     }
     out
