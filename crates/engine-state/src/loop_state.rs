@@ -1209,13 +1209,33 @@ pub fn write_loop_json(work: &str, args: &[String]) -> (i32, String) {
 
 pub const USAGE: &str = include_str!("loop_state_usage.txt");
 
+/// `harness state plan <folder> [slug]`: the resolved planning fields (defaults filled in) of every feature or of one, as JSON lines,
+/// plus a `WARNING:` line per field that could not be understood. Always exit 0: planning fields never block the loop.
+fn plan_report(features: &Features, only: Option<&str>) -> String {
+    let mut out = String::new();
+    for (slug, fields) in &features.0 {
+        if only.is_some_and(|wanted| wanted != slug) {
+            continue;
+        }
+        let (mut plan, warnings) = crate::plan_fields::resolve(fields);
+        plan["slug"] = json!(slug);
+        out.push_str(&format!("{}
+", py_json_dumps(&plan, false)));
+        for warning in warnings {
+            out.push_str(&format!("WARNING: [{slug}] {warning}
+"));
+        }
+    }
+    out
+}
+
 /// `loop_state.py <command> <folder> ...` (the `harness state` subcommand). Returns `(exit_code, stdout)`.
 pub fn run_cli(args: &[String], repo_context: &dyn Fn(&str) -> (Vec<String>, String)) -> (i32, String) {
     if args.len() >= 2 && args[0] == "loop" {
         let (code, message) = write_loop_json(&nt_abspath(&args[1]), args);
         return (code, format!("{message}\n"));
     }
-    if args.len() < 2 || !["validate", "disjoint", "graph", "next", "migrate"].contains(&args[0].as_str()) {
+    if args.len() < 2 || !["validate", "disjoint", "graph", "next", "migrate", "plan"].contains(&args[0].as_str()) {
         return (2, format!("{USAGE}\n"));
     }
     let command = args[0].as_str();
@@ -1229,6 +1249,9 @@ pub fn run_cli(args: &[String], repo_context: &dyn Fn(&str) -> (Vec<String>, Str
         return (0, format!("{}\n", graph(&text)));
     }
     let (features, mut errors) = parse_roadmap(&text);
+    if command == "plan" {
+        return (0, plan_report(&features, args.get(2).map(String::as_str)));
+    }
     let (repo_names, primary_name) = repo_context(&work);
     if command == "next" {
         let wave = match args.iter().position(|a| a == "--wave") {

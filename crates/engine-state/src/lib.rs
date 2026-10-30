@@ -37,6 +37,7 @@ pub mod loop_command;
 pub mod loop_io;
 pub mod loop_opts;
 pub mod loop_state;
+pub mod plan_fields;
 pub mod loop_summary;
 pub mod map_dry_check;
 pub mod mcp_access;
