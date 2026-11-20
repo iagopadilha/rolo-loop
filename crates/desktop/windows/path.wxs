@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Agents Maestro MSI fragment (tauri.conf.json bundle.windows.wix.fragmentPaths / componentRefs): puts <install>\plugin\bin (harness, guard)
+<!-- Agent Maestro MSI fragment (tauri.conf.json bundle.windows.wix.fragmentPaths / componentRefs): puts <install>\plugin\bin (harness, guard)
      on the system PATH while the product is installed. The per-user config.json is written by the app at its first start. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <Component Id="MaestroPath" Guid="08E2B7E1-C9D6-4ACA-A608-D5816359D56D">
         <Environment Id="MaestroPathEntry" Name="PATH" Value="[INSTALLDIR]plugin\bin" Part="last" Action="set" System="yes" Permanent="no" />
-        <RegistryValue Root="HKLM" Key="Software\Agents Maestro" Name="PathEntry" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Agent Maestro" Name="PathEntry" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
   </Fragment>

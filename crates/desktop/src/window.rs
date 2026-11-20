@@ -5,7 +5,7 @@
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const MAIN_LABEL: &str = "main";
-const TITLE: &str = "Agents Maestro";
+const TITLE: &str = "Agent Maestro";
 const DEFAULT_SIZE: (f64, f64) = (1280.0, 820.0);
 const MIN_SIZE: (f64, f64) = (760.0, 520.0);
 const EXTERNAL_SCHEMES: [&str; 3] = ["http", "https", "mailto"];

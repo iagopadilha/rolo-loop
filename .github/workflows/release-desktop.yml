@@ -60,7 +60,7 @@ jobs:
           projectPath: crates/desktop
           tauriScript: cargo tauri
           tagName: v__VERSION__
-          releaseName: Agents Maestro v__VERSION__
+          releaseName: Agent Maestro v__VERSION__
           releaseBody: "Windows installers: the -setup.exe (per user, no admin) or the .msi (per machine). See docs/INSTALLER.md."
           releaseDraft: true
           includeUpdaterJson: true

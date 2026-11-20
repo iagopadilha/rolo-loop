@@ -14,10 +14,10 @@ const OPEN_ID: &str = "open";
 const QUIT_ID: &str = "quit";
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, OPEN_ID, "Open Agents Maestro", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, OPEN_ID, "Open Agent Maestro", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, QUIT_ID, "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit_item])?;
-    let mut builder = TrayIconBuilder::with_id("main").tooltip("Agents Maestro").menu(&menu).show_menu_on_left_click(false);
+    let mut builder = TrayIconBuilder::with_id("main").tooltip("Agent Maestro").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
@@ -51,8 +51,8 @@ pub fn quit(app: &AppHandle) {
     }
     let handle = app.clone();
     app.dialog()
-        .message("A loop or a Claude job is still running. Quit Agents Maestro anyway?\n\nThe loop keeps its state in the project files: open the app again to follow or resume it.")
-        .title("Agents Maestro")
+        .message("A loop or a Claude job is still running. Quit Agent Maestro anyway?\n\nThe loop keeps its state in the project files: open the app again to follow or resume it.")
+        .title("Agent Maestro")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Keep running".into()))
         .show(move |confirmed| {

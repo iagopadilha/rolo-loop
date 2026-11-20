@@ -6,6 +6,15 @@ Unattended build loops for Claude Code, run on your own subscription.
 
 agent-maestro lets you describe a goal, approve a plan and leave a loop to work through it. A planner splits the work into features; sub-agents write the spec, review it, implement and verify each feature inside an isolated git worktree; a guard hook keeps every tool call inside the lines you drew. You watch it all from a local web panel and answer when the loop asks.
 
+<p align="center">
+  <img src="docs/media/loop-dark.png" alt="The loop: features by turn, the inspector and the agents" width="49%">
+  <img src="docs/media/projects-light.png" alt="Projects" width="49%">
+</p>
+<p align="center">
+  <img src="docs/media/settings-providers-light.png" alt="Settings: AI providers in priority order" width="49%">
+  <img src="docs/media/tour-light.png" alt="The guided tour" width="49%">
+</p>
+
 ## What is in the box
 
 - A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and seven sub-agents (`spec-writer`, `spec-reviewer`, `executor`, `quality-gate`, `verifier`, `verifier-flow`, `brownfield-mapper`).
@@ -21,7 +30,7 @@ agent-maestro lets you describe a goal, approve a plan and leave a loop to work 
 4. When something needs you (a choice, a blocked action), the loop stops and asks in the panel.
 5. Deliver pushes the feature branch and opens the pull request. It is the only push there is.
 
-More in [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md). The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the panel API in [docs/API.md](docs/API.md), and how the skill finds the app in [docs/SKILL_BRIDGE.md](docs/SKILL_BRIDGE.md).
+More in [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md); every setting in [docs/CONFIG.md](docs/CONFIG.md). The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the panel API in [docs/API.md](docs/API.md), and how the skill finds the app in [docs/SKILL_BRIDGE.md](docs/SKILL_BRIDGE.md).
 
 ## Requirements
 
@@ -46,16 +55,14 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 
 ## Install
 
-Download `Agents Maestro_<version>_x64-setup.exe` from the releases and run it (per user, no admin; an `.msi` exists for managed machines). It installs the app (Start menu: **Agents Maestro**), puts `harness` on your PATH and carries the plugin. Then, in Claude Code:
+Download `Agent Maestro_<version>_x64-setup.exe` from the releases and run it (per user, no admin; an `.msi` exists for managed machines). It installs the app (Start menu: **Agent Maestro**), puts `harness` on your PATH and carries the plugin. Then, in Claude Code:
 
 ```
-/plugin marketplace add iagopadilha/agent-maestro
+/plugin marketplace add "%LOCALAPPDATA%\Agent Maestro"
 /plugin install agent-maestro@agent-maestro
-harness install
-harness doctor
 ```
 
-and `harness doctor` in a new terminal. Details, signing and updates: [docs/INSTALLER.md](docs/INSTALLER.md).
+(or `/plugin marketplace add iagopadilha/agent-maestro` from GitHub) and `harness doctor` in a new terminal. The first start opens a guided tour of the settings. Details, signing and updates: [docs/INSTALLER.md](docs/INSTALLER.md).
 
 ## Build from source
 

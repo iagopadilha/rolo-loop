@@ -6,6 +6,14 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Added
 
+- Settings v3, minimal and grouped: General, AI providers, Agents, Quality gate, Skills and MCP, Notifications, Network, Claude account, Projects and data, System. Every value is saved at once in `config.json`; secrets are encrypted per Windows user (DPAPI, `secrets.json`) and only shown masked. See `docs/CONFIG.md`.
+- AI providers in priority order with automatic fallback: Claude subscription, `claude setup-token` token, Anthropic API key (pay per use), Anthropic-compatible gateway (LiteLLM, Bedrock/Vertex proxies, local models) and Claude Code compatible local agents with their own flags; models per role; Test button.
+- Notifications: SMTP (with an Amazon SES preset) or HTTP e-mail API, webhooks with Slack, Teams, Discord or a custom JSON body template, method and headers; per-event choice; a test per channel.
+- Agents page with a preview of what a loop runs, a model per agent and the optional agents on/off; the loop gets them every turn (`--policy`).
+- Quality gate v2: spec adherence and security added to standards, naming, size and patterns, each one block, warn or off.
+- First-run guided tour across the real screens (agents, skills and MCP, quality gate, AI providers, notifications, first project); restart it in Settings > General.
+- One button system (32/36/40 px, primary, secondary, ghost, danger, visible focus) on every screen.
+- README screenshots from `harness demo` (`tools/e2e/readme_screens.js`, which fails on any personal data in the visible text).
 - UI v2 of the panel: sidebar shell with Ctrl+K quick switcher, projects table with system strip, loop timeline (timeline / graph / list) with inspector, feature page (`#feature=<slug>`) with an Ask panel, v2 dialogs and settings, splash. Light, dark and system themes (`maestro.theme`), applied before first paint. Displayed paths mask the user home folder; the panel makes no external request.
 - `tools/e2e/ui_v2_check.js`: layout, contrast, overflow and leak checks over themes and viewports.
 - Lean agent pipeline (Anthropic, "When to fold subagents into your main agent loop", 2026-10-22): one strong loop, context and tools on demand, more agents only where planned or measured.
@@ -66,7 +74,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Simple access release (C1 to C3): `engine_state::access_grant::grant_access(kind, value, reason)` and `harness grant --kind host|cost_limit --value ... --reason ...` release a network entry or raise the cost limit, copy the change into the running worktree, and refuse production hosts, a missing reason and a lower limit. Every grant and every refusal is a line (what, why, who, when, backup) in `.specs/project/loop/json/PERMISSIONS-LOG.json`.
 - `state.permissions_log` in the panel state payload: the permissions journal, read-only (see `docs/API.md`).
 
-- Agents Maestro desktop app (`crates/desktop`, Tauri 2): runs the panel server in-process and shows it in a frameless window with macOS-style traffic lights, a drag band and a collapsible sidebar (Ctrl+Alt+S); single instance, remembered window size, tray icon, closing the window keeps a running loop alive. `harness serve` opens projects in it when it is installed (`--no-desktop` keeps the browser).
+- Agent Maestro desktop app (`crates/desktop`, Tauri 2): runs the panel server in-process and shows it in a frameless window with macOS-style traffic lights, a drag band and a collapsible sidebar (Ctrl+Alt+S); single instance, remembered window size, tray icon, closing the window keeps a running loop alive. `harness serve` opens projects in it when it is installed (`--no-desktop` keeps the browser).
 - Windows installers: NSIS `-setup.exe` (per user) and `.msi` (per machine), with `harness` on PATH, the guard and the plugin (the install folder is a local Claude Code marketplace). `harness install --desktop-exe --path add|remove`. Release workflow `release-desktop.yml`. See `docs/INSTALLER.md`.
 
 ### Fixed

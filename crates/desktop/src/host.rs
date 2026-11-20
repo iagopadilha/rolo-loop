@@ -169,13 +169,13 @@ mod tests {
         let app_root = dir.path().join("app");
         std::fs::create_dir_all(&app_root).unwrap();
         let mut config: Map<String, Value> = serde_json::from_value(json!({"idle_hours": 2, "app_root_dir": "C:/gone"})).unwrap();
-        assert!(merge_desktop_keys(&mut config, "C:/Apps/Agents Maestro.exe", 47801, &app_root, Path::new("")));
-        assert_eq!(config["desktop_exe"], "C:/Apps/Agents Maestro.exe");
+        assert!(merge_desktop_keys(&mut config, "C:/Apps/Agent Maestro.exe", 47801, &app_root, Path::new("")));
+        assert_eq!(config["desktop_exe"], "C:/Apps/Agent Maestro.exe");
         assert_eq!(config["desktop_port"], 47801);
         assert_eq!(config["app_root_dir"], app_root.display().to_string());
         assert_eq!(config["idle_hours"], 2);
         assert!(config.get("orchestrator_skill_dir").is_none());
-        assert!(!merge_desktop_keys(&mut config, "C:/Apps/Agents Maestro.exe", 47801, &app_root, Path::new("")));
+        assert!(!merge_desktop_keys(&mut config, "C:/Apps/Agent Maestro.exe", 47801, &app_root, Path::new("")));
     }
 
     #[test]

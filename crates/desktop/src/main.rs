@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-//! Agents Maestro desktop app: hosts the panel server (`crates/app`) in this process, or attaches to a running `harness serve`, and shows it
-//! in a frameless window. `Agents Maestro.exe [--project <folder>]`.
+//! Agent Maestro desktop app: hosts the panel server (`crates/app`) in this process, or attaches to a running `harness serve`, and shows it
+//! in a frameless window. `Agent Maestro.exe [--project <folder>]`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
@@ -62,8 +62,8 @@ fn main() {
                 Err(failure) => {
                     let handle = app.handle().clone();
                     app.dialog()
-                        .message(format!("Agents Maestro could not start.\n\n{failure}"))
-                        .title("Agents Maestro")
+                        .message(format!("Agent Maestro could not start.\n\n{failure}"))
+                        .title("Agent Maestro")
                         .kind(MessageDialogKind::Error)
                         .show(move |_| handle.exit(1));
                 }
