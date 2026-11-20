@@ -125,7 +125,7 @@ pub fn loop_json_correction_prompt(turn: i64, branch: &str) -> String {
 /// The process environment minus the secret-looking variables that came from the app `.env` (see `turn_environment`). The first turn of a
 /// run prints their NAMES (never a value).
 pub fn turn_environment_for(ctx: &AppCtx, reported: &mut bool) -> Vec<(String, String)> {
-    let built = turn_environment::build(&ctx.env.vars(), &ctx.env.env_file_candidates());
+    let built = turn_environment::build_for(&ctx.env);
     if !*reported {
         *reported = true;
         if !built.removed.is_empty() {
