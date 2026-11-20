@@ -13,6 +13,7 @@ cfg = { path = "../cfg" }
 pycompat = { path = "../pycompat" }
 mcp-policy = { path = "../mcp-policy" }
 egress-policy = { path = "../egress-policy" }
+winproc = { path = "../winproc" }
 fancy-regex = { workspace = true }
 regex = { workspace = true }
 serde_json = { workspace = true }

@@ -42,11 +42,17 @@ const focusId = (id) => { const el = document.getElementById(id); if (el) el.foc
 const closeMenus = () => { for (const menu of document.querySelectorAll('details.hub-menu[open]')) menu.open = false; };
 
 // ---------- projects ----------
+// A project whose progress the server is still reading (a huge folder) comes as progress_pending: ask again shortly, once.
+const PENDING_RETRY_MS = 2000;
+let pendingRetry = null;
 async function loadProjects() {
   const r = await appApi.get('projects', 10000);
   hb.projects = list(r && r.projects); hb.error = null;
   setShellProjects(hb.projects);
   draw();
+  if (!pendingRetry && hb.projects.some((p) => p.progress_pending)) {
+    pendingRetry = setTimeout(() => { pendingRetry = null; loadProjects().catch(() => {}); }, PENDING_RETRY_MS);
+  }
 }
 
 /** What the Status cell says: { label, kind, title }. A running loop adds its turn (from GET overview). */
@@ -55,6 +61,7 @@ function statusOf(p) {
   const turn = lp && lp.turn != null ? ` · T${lp.turn}` : '';
   const feats = lp ? list(lp.feature).join(', ') : '';
   if (p.folder_exists === false) return { label: 'Folder missing', kind: 'bad', title: 'The project folder is not on disk any more.' };
+  if (p.progress_pending && !lp) return { label: 'Reading…', kind: 'idle', title: 'The app is still reading this project folder.' };
   const loopStatus = lp && lp.question ? 'awaiting_user' : (lp && lp.status) || ps.loop_status;
   if (LOOP_LABEL[loopStatus]) return { label: LOOP_LABEL[loopStatus] + (loopStatus === 'running' || loopStatus === 'awaiting_user' ? turn : ''), kind: dotKind(loopStatus), title: feats };
   return { label: MODE_LABEL[ps.mode] || 'No loop', kind: dotKind(ps.mode === 'done' ? 'done' : ''), title: '' };

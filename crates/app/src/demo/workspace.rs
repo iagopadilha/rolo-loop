@@ -129,8 +129,9 @@ impl DemoGitRepository {
     }
 
     pub fn run(&self, args: &[&str]) -> Result<String, String> {
-        let output =
-            Command::new("git").arg("-C").arg(&self.repo_dir).args(args).env("GIT_TERMINAL_PROMPT", "0").output().map_err(|e| format!("git cannot start: {e}"))?;
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&self.repo_dir).args(args).env("GIT_TERMINAL_PROMPT", "0");
+        let output = winproc::hide_console(&mut command, 0).output().map_err(|e| format!("git cannot start: {e}"))?;
         if !output.status.success() {
             let text = String::from_utf8_lossy(if output.stderr.is_empty() { &output.stdout } else { &output.stderr }).trim().to_string();
             return Err(format!("git {} failed: {}", args.join(" "), text.chars().take(300).collect::<String>()));

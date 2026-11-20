@@ -102,7 +102,58 @@ pub struct ProjectProgressService<'a> {
     pub app: &'a App,
 }
 
+/// A summary younger than this is served without computing it again.
+pub const SUMMARY_FRESH: Duration = Duration::from_secs(5);
+/// The hub list never waits longer than this for the summaries (a project in a huge folder can take seconds).
+pub const SUMMARY_WAIT: Duration = Duration::from_millis(1500);
+
 impl App {
+    /// Progress summaries for the hub list, by project id: each stale one is computed on its own thread; the list waits at most
+    /// [`SUMMARY_WAIT`]. A slower project gives its last known summary, or `None` (the front shows it as still loading); its result is
+    /// kept for the next poll. One project computing never starts a second computation of itself.
+    pub fn progress_summaries_within_budget(&self, ids: &[String]) -> std::collections::HashMap<String, Option<Value>> {
+        use std::collections::HashMap;
+        let mut out: HashMap<String, Option<Value>> = HashMap::new();
+        let (sender, receiver) = std::sync::mpsc::channel::<(String, Value)>();
+        let mut waiting = 0usize;
+        for id in ids {
+            let cached = self.progress_summaries.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned();
+            if let Some((summary, at)) = &cached {
+                if at.elapsed() < SUMMARY_FRESH {
+                    out.insert(id.clone(), Some(summary.clone()));
+                    continue;
+                }
+            }
+            if self.progress_refreshing.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone()) {
+                waiting += 1;
+                let (app, id, sender) = (self.shared(), id.clone(), sender.clone());
+                let _ = std::thread::Builder::new().name("progress-summary".into()).spawn(move || {
+                    let summary = match app.project_service().get_project_context(&id) {
+                        Ok(context) => app.progress().build_progress_summary(&context),
+                        Err(_) => Value::Null, // one unreadable project does not take the list down
+                    };
+                    app.progress_summaries.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), (summary.clone(), Instant::now()));
+                    app.progress_refreshing.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+                    let _ = sender.send((id, summary));
+                });
+            }
+            out.insert(id.clone(), cached.map(|(summary, _)| summary));
+        }
+        drop(sender);
+        let deadline = Instant::now() + SUMMARY_WAIT;
+        while waiting > 0 {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else { break };
+            match receiver.recv_timeout(left) {
+                Ok((id, summary)) => {
+                    waiting -= 1;
+                    out.insert(id, Some(summary));
+                }
+                Err(_) => break,
+            }
+        }
+        out
+    }
+
     pub fn progress(&self) -> ProjectProgressService<'_> {
         ProjectProgressService { app: self }
     }

@@ -73,18 +73,24 @@ pub fn register(router: &mut Router, app: &Arc<App>) {
 }
 
 // ------------------------------------------------ hub
+/// The list answers in at most `SUMMARY_WAIT` (+ the folder checks): a project whose progress is slow to read (a huge folder) comes with
+/// its last known summary or `progress_summary: null, progress_pending: true`, and the next poll gets it.
 fn list_projects(app: &App, _: &Request) -> Response {
-    let items: Vec<Value> = app
-        .project_service()
-        .list_projects()
+    let projects = app.project_service().list_projects();
+    let ids: Vec<String> = projects.iter().map(|p| p.id.clone()).collect();
+    let mut summaries = app.progress_summaries_within_budget(&ids);
+    let items: Vec<Value> = projects
         .iter()
         .map(|project| {
             let mut item = project_to_dict(project);
             item["folder_exists"] = json!(std::path::Path::new(&project.repo_path).is_dir());
-            item["progress_summary"] = match app.project_service().get_project_context(&project.id) {
-                Ok(context) => app.progress().build_progress_summary(&context),
-                Err(_) => Value::Null, // one unreadable project does not take the list down
-            };
+            match summaries.remove(&project.id).flatten() {
+                Some(summary) => item["progress_summary"] = summary,
+                None => {
+                    item["progress_summary"] = Value::Null;
+                    item["progress_pending"] = json!(true);
+                }
+            }
             item
         })
         .collect();

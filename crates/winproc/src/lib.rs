@@ -342,6 +342,41 @@ pub fn write_user_path(value: &str, expandable: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+/// `CREATE_NO_WINDOW`: a console child gets no console window of its own.
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// The creation flag that keeps a console child from opening a window: [`CREATE_NO_WINDOW`] when this process has no console window
+/// (the desktop app, a detached loop, a hook run by one of them), 0 when it runs in a terminal (the child then shares that terminal, so a
+/// command-line user still sees its output).
+#[cfg(windows)]
+pub fn hidden_console_flags() -> u32 {
+    // SAFETY: no arguments; it only returns the console window handle of this process, or null.
+    let window = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
+    if window.is_null() {
+        CREATE_NO_WINDOW
+    } else {
+        0
+    }
+}
+
+#[cfg(not(windows))]
+pub fn hidden_console_flags() -> u32 {
+    0
+}
+
+/// Sets `extra_flags | `[`hidden_console_flags`] as the Windows creation flags of `command` (nothing elsewhere). Every program this
+/// workspace starts goes through here, so no terminal window ever flashes on the user's screen.
+pub fn hide_console(command: &mut std::process::Command, extra_flags: u32) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(extra_flags | hidden_console_flags());
+    }
+    #[cfg(not(windows))]
+    let _ = extra_flags;
+    command
+}
+
 #[cfg(not(windows))]
 pub fn read_user_path() -> std::io::Result<(String, bool)> {
     Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
