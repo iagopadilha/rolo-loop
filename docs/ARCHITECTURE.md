@@ -17,11 +17,16 @@ crates/
   winproc               the only crate with unsafe code: console control, process start time, random bytes
   app                   domain, repositories, services, HTTP API, server, demo
   cli                   the `harness` executable
+  desktop               the Agents Maestro desktop app (Tauri): hosts the app server in-process, frameless window, tray, installers
 ```
 
 ## Layers of the `app` crate
 
 `domain` (pure types) <- `repositories` (files and git) <- `services` (use cases; `App` owns them) <- `api` (router, controllers, HTTP server). `composition` builds the `App`, the router and the server and starts them.
+
+## Desktop app
+
+`crates/desktop` starts the same server `harness serve` runs (composition `open_and_register` / `serve` / `finish`) on a thread, or attaches to a live one (`app.json`), and opens a frameless WebView2 window on `http://127.0.0.1:<port>/`. The page is the same front end as in a browser; inside the app it detects `window.__TAURI__` and draws macOS-style traffic lights, a drag band and a collapsible sidebar. The only IPC the page gets is its own window's minimize, zoom, close and drag (`crates/desktop/capabilities/panel.json`). Engine children run `plugin/bin/harness.exe` (`LOOP_APP_EXE` or the bundled one), never the GUI binary. Every child process starts with a hidden console (`winproc::hide_console`, `winproc::spawn_hidden_flags`): no terminal window ever shows. Installers: [INSTALLER.md](INSTALLER.md).
 
 ## State
 

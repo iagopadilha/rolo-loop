@@ -11,7 +11,7 @@ agent-maestro lets you describe a goal, approve a plan and leave a loop to work 
 - A Claude Code plugin: the `orchestrator` skill, three satellite skills (audit dependencies, create a block rule, show the progress graph), the `repo-catalog` skill and seven sub-agents (`spec-writer`, `spec-reviewer`, `executor`, `quality-gate`, `verifier`, `verifier-flow`, `brownfield-mapper`).
 - `harness`, one Windows binary: the loop engine, the local panel server and the command line.
 - `guard`, the hook binary Claude Code runs before every tool call.
-- The panel: a small Preact app served by `harness` on `127.0.0.1`.
+- The panel: a small Preact app served on `127.0.0.1`, shown by the desktop app (or a browser with `harness serve --no-desktop`).
 
 ## How it works
 
@@ -39,11 +39,14 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 ## Limits, honestly
 
 - Loops spend your Claude subscription usage; long loops can reach a usage window and then wait for the reset.
+- The loop runs on the `claude` command only (one account): a usage limit waits for the reset.
 - Only the feature branch is ever pushed. Protected branches are never touched by the loop.
 - The guard is text analysis of commands, not a sandbox: a program that builds its target at run time is judged only by the run-time network layer, not by the guard. Read the residual-risk notes in `plugin/skills/orchestrator/hooks/README.md`.
 - Windows only for now.
 
 ## Install
+
+Download `Agents Maestro_<version>_x64-setup.exe` from the releases and run it (per user, no admin; an `.msi` exists for managed machines). It installs the app (Start menu: **Agents Maestro**), puts `harness` on your PATH and carries the plugin. Then, in Claude Code:
 
 ```
 /plugin marketplace add iagopadilha/agent-maestro
@@ -52,13 +55,14 @@ harness install
 harness doctor
 ```
 
-The release archive carries `harness.exe` and `guard.exe` in the plugin's `bin/` folder.
+and `harness doctor` in a new terminal. Details, signing and updates: [docs/INSTALLER.md](docs/INSTALLER.md).
 
 ## Build from source
 
 ```
 cargo build --release
 cargo test --workspace
+cd crates/desktop && cargo tauri build     # the desktop app and its installers (needs tauri-cli 2.12)
 ```
 
 The differential tools in `tools/` compare this build with the reference implementation (they need the reference clone, named in each tool's header).

@@ -4,14 +4,14 @@ Agents Maestro ships as a Windows desktop app (Tauri 2, `crates/desktop`) with t
 
 | File | Built by | Installs to | Admin | Use it when |
 |---|---|---|---|---|
-| `Agents Maestro_<version>_x64-setup.exe` | NSIS | `%LOCALAPPDATA%\Programs\Agents Maestro` (per user) | no | the normal download; the in-app updater uses it |
+| `Agents Maestro_<version>_x64-setup.exe` | NSIS | `%LOCALAPPDATA%\Agents Maestro` (per user) | no | the normal download; the in-app updater uses it |
 | `Agents Maestro_<version>_x64_en-US.msi` | WiX | `%ProgramFiles%\Agents Maestro` (per machine) | yes | managed machines (Intune, GPO, `msiexec /qn`) |
 
 Both install the same files:
 
 ```
 <install folder>/
-  Agents Maestro.exe               the app: runs the panel server in-process and shows it in its own window
+  agents-maestro.exe               the app ("Agents Maestro" in the Start menu): runs the panel server in-process and shows it in its own window
   .claude-plugin/marketplace.json  the folder is a local Claude Code marketplace
   plugin/                          skills, agents, hooks
     bin/harness.exe                the command line (on PATH after install)
@@ -31,9 +31,9 @@ What else each installer does:
 ## After installing
 
 1. Open **Agents Maestro** from the Start menu.
-2. In Claude Code, add the plugin from the install folder (shown in Settings > System):
+2. In Claude Code, add the plugin from the install folder:
    ```
-   /plugin marketplace add "%LOCALAPPDATA%\Programs\Agents Maestro"
+   /plugin marketplace add "%LOCALAPPDATA%\Agents Maestro"
    /plugin install claude-maestro@claude-maestro
    ```
 3. `harness doctor` in a new terminal.

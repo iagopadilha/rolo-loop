@@ -66,6 +66,16 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Simple access release (C1 to C3): `engine_state::access_grant::grant_access(kind, value, reason)` and `harness grant --kind host|cost_limit --value ... --reason ...` release a network entry or raise the cost limit, copy the change into the running worktree, and refuse production hosts, a missing reason and a lower limit. Every grant and every refusal is a line (what, why, who, when, backup) in `.specs/project/loop/json/PERMISSIONS-LOG.json`.
 - `state.permissions_log` in the panel state payload: the permissions journal, read-only (see `docs/API.md`).
 
+- Agents Maestro desktop app (`crates/desktop`, Tauri 2): runs the panel server in-process and shows it in a frameless window with macOS-style traffic lights, a drag band and a collapsible sidebar (Ctrl+Alt+S); single instance, remembered window size, tray icon, closing the window keeps a running loop alive. `harness serve` opens projects in it when it is installed (`--no-desktop` keeps the browser).
+- Windows installers: NSIS `-setup.exe` (per user) and `.msi` (per machine), with `harness` on PATH, the guard and the plugin (the install folder is a local Claude Code marketplace). `harness install --desktop-exe --path add|remove`. Release workflow `release-desktop.yml`. See `docs/INSTALLER.md`.
+
+### Fixed
+
+- No console window ever flashes: every child process starts with a hidden console (background children no longer use `DETACHED_PROCESS`, which disabled `CREATE_NO_WINDOW`).
+- The hub list answers within 1.5 s even when a project is slow to read; the checklist reuses the subproject detection (a home-folder project went from 9 s per poll to 0.09 s).
+- HTTP keep-alive for the panel's polling GETs (no more sockets piling up in TIME_WAIT).
+- A project under an 8.3 short path (`%TEMP%`) is registered by its long path, so the guard no longer refuses the planning chat's edits.
+
 ### Fixed
 
 - Guard false positives: `mkdir -p docs/codebase` (the folder itself, no trailing slash) passes for map agents; git-bash drive paths (`cd /c/...`) resolve to the real drive; read-only git subcommands (`check-ignore`, `check-attr`, `ls-tree`, `cat-file`, `rev-list`, `merge-base`, `name-rev`, `show-ref`, `for-each-ref`, `diff-tree`) are no longer treated as writes. Tests keep `python -I`, production hosts and credential paths blocked.
