@@ -35,6 +35,11 @@ impl Assembled {
     pub fn project_url(&self, project_id: &str) -> String {
         format!("{}p/{project_id}/", self.server.url())
     }
+
+    /// A claude job, a loop, a chat reply or a relaunch is running (what keeps the app on).
+    pub fn is_busy(&self) -> bool {
+        AppBusy(self.app.clone()).is_busy()
+    }
 }
 
 pub fn build_application(env: &Env, overrides: &Overrides) -> Assembled {
