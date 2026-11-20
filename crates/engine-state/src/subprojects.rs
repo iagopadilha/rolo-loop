@@ -272,6 +272,28 @@ fn candidates_by_workspaces(root: &str, patterns: &[String]) -> Vec<String> {
 }
 
 /// Script detection (DET-01..DET-05). Returns `{monorepo, projects, reason, warnings}`; never raises.
+/// How long [`detect_cached`] reuses a detection: the panel polls the checklist every few seconds, and on a big folder (a whole home
+/// folder) one detection walks thousands of folders.
+pub const DETECTION_REUSE: std::time::Duration = std::time::Duration::from_secs(120);
+static DETECTIONS: std::sync::Mutex<Vec<(String, std::time::Instant, Value)>> = std::sync::Mutex::new(Vec::new());
+const DETECTIONS_KEPT: usize = 32;
+
+/// [`detect`], reusing a detection of the same folder made less than `max_age` ago (the panel's polling path; actions call [`detect`]).
+pub fn detect_cached(root: &str, max_age: std::time::Duration) -> Value {
+    let key = nt_abspath(root).to_lowercase();
+    if let Some((_, _, found)) = DETECTIONS.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, at, _)| *k == key && at.elapsed() < max_age) {
+        return found.clone();
+    }
+    let detected = detect(root);
+    let mut kept = DETECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+    kept.retain(|(k, at, _)| *k != key && at.elapsed() < max_age);
+    if kept.len() >= DETECTIONS_KEPT {
+        kept.remove(0);
+    }
+    kept.push((key, std::time::Instant::now(), detected.clone()));
+    detected
+}
+
 pub fn detect(root: &str) -> Value {
     let root = nt_abspath(root);
     let rootp = Path::new(&root);

@@ -329,7 +329,7 @@ impl ProjectProgressService<'_> {
             return Ok(Some(description));
         }
         let (key, folder) = service.resolve_target(context, None)?;
-        let detected = subprojects::detect(&folder);
+        let detected = subprojects::detect_cached(&folder, subprojects::DETECTION_REUSE);
         let mut entry = Map::new();
         entry.insert("monorepo".into(), json!(t(detected.get("monorepo"))));
         entry.insert("confirmed".into(), json!(false));
