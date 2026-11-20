@@ -261,6 +261,97 @@ pub fn clear_interrupt() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// The PATH text with `dir` added at the end (`add`) or every copy of it removed; `None` when nothing changes. Entries compare without case
+/// and without a trailing backslash; empty entries are dropped only when something changes.
+pub fn path_with_entry(path: &str, dir: &str, add: bool) -> Option<String> {
+    let key = |entry: &str| entry.trim().trim_end_matches(['\\', '/']).to_lowercase();
+    let wanted = key(dir);
+    if wanted.is_empty() {
+        return None;
+    }
+    let entries: Vec<&str> = path.split(';').filter(|e| !e.trim().is_empty()).collect();
+    let present = entries.iter().any(|e| key(e) == wanted);
+    match (add, present) {
+        (true, true) | (false, false) => None,
+        (true, false) => Some(entries.iter().copied().chain(std::iter::once(dir.trim())).collect::<Vec<_>>().join(";")),
+        (false, true) => Some(entries.into_iter().filter(|e| key(e) != wanted).collect::<Vec<_>>().join(";")),
+    }
+}
+
+#[cfg(windows)]
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// The per-user PATH as stored in `HKCU\Environment`: the text (unexpanded) and whether it is `REG_EXPAND_SZ`. A missing value is
+/// `("", true)`.
+#[cfg(windows)]
+pub fn read_user_path() -> std::io::Result<(String, bool)> {
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ};
+    let (subkey, name) = (wide("Environment"), wide("Path"));
+    let mut key: HKEY = std::ptr::null_mut();
+    // SAFETY: the key handle is closed below; the buffers outlive the calls and their sizes are passed in bytes.
+    unsafe {
+        let opened = RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut key);
+        if opened != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(opened as i32));
+        }
+        let mut size: u32 = 0;
+        let mut kind: u32 = 0;
+        let probe = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut kind, std::ptr::null_mut(), &mut size);
+        if probe == ERROR_FILE_NOT_FOUND {
+            RegCloseKey(key);
+            return Ok((String::new(), true));
+        }
+        let mut buffer = vec![0u16; (size as usize).div_ceil(2) + 1];
+        let mut bytes = (buffer.len() * 2) as u32;
+        let read = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut kind, buffer.as_mut_ptr().cast(), &mut bytes);
+        RegCloseKey(key);
+        if read != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(read as i32));
+        }
+        let length = buffer.iter().take((bytes as usize) / 2).position(|c| *c == 0).unwrap_or((bytes as usize) / 2);
+        Ok((String::from_utf16_lossy(&buffer[..length]), kind == windows_sys::Win32::System::Registry::REG_EXPAND_SZ))
+    }
+}
+
+/// Writes the per-user PATH with the type it had (`expandable` = `REG_EXPAND_SZ`, else `REG_SZ`) and tells running programs (Explorer,
+/// new terminals) that the environment changed.
+#[cfg(windows)]
+pub fn write_user_path(value: &str, expandable: bool) -> std::io::Result<()> {
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_EXPAND_SZ, REG_SZ};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE};
+    let (subkey, name, data, area) = (wide("Environment"), wide("Path"), wide(value), wide("Environment"));
+    let mut key: HKEY = std::ptr::null_mut();
+    // SAFETY: the key handle is closed below; `data` is a NUL-terminated UTF-16 buffer whose byte size is passed; the broadcast only reads `area`.
+    unsafe {
+        let opened = RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_SET_VALUE, &mut key);
+        if opened != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(opened as i32));
+        }
+        let written = RegSetValueExW(key, name.as_ptr(), 0, if expandable { REG_EXPAND_SZ } else { REG_SZ }, data.as_ptr().cast(), (data.len() * 2) as u32);
+        RegCloseKey(key);
+        if written != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(written as i32));
+        }
+        let mut result: usize = 0;
+        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, area.as_ptr() as isize, SMTO_ABORTIFHUNG, 5000, &mut result);
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn read_user_path() -> std::io::Result<(String, bool)> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
+}
+
+#[cfg(not(windows))]
+pub fn write_user_path(_value: &str, _expandable: bool) -> std::io::Result<()> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
+}
+
 #[cfg(not(windows))]
 pub fn process_start_time(_pid: u32) -> Option<u64> {
     None
@@ -321,5 +412,17 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!pid_alive(root));
         let _ = child.wait();
+    }
+
+    #[test]
+    fn path_entries_are_added_once_and_removed_everywhere() {
+        let path = r"C:\Windows;%USERPROFILE%\bin;;C:\Tools\";
+        assert_eq!(path_with_entry(path, r"C:\Apps\Maestro\plugin\bin", true).unwrap(), r"C:\Windows;%USERPROFILE%\bin;C:\Tools\;C:\Apps\Maestro\plugin\bin");
+        assert_eq!(path_with_entry(path, r"c:\tools", true), None);
+        assert_eq!(path_with_entry(path, r"C:\Tools", false).unwrap(), r"C:\Windows;%USERPROFILE%\bin");
+        assert_eq!(path_with_entry(r"C:\A;c:\a\;C:\B", r"C:\A", false).unwrap(), r"C:\B");
+        assert_eq!(path_with_entry(path, r"C:\Nope", false), None);
+        assert_eq!(path_with_entry("", r"C:\A", true).unwrap(), r"C:\A");
+        assert_eq!(path_with_entry(path, "  ", true), None);
     }
 }

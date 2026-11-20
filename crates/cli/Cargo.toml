@@ -17,6 +17,7 @@ app = { path = "../app" }
 pycompat = { path = "../pycompat" }
 cfg = { path = "../cfg" }
 engine-state = { path = "../engine-state" }
+winproc = { path = "../winproc" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
