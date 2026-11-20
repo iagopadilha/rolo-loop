@@ -799,8 +799,10 @@ impl Runner {
             }
             // the user's answers to the commands the guard asked about (apply a migration, start the app on DEV): the agents read the file the flag names
             let approvals_flag = if crate::approvals::write_turn_notes(work) { " --approvals" } else { "" };
+            // the agents, models and quality checks the user set in Settings (the skill reads the file the flag names)
+            let policy_flag = if crate::loop_policy::write_turn_policy(work, &self.ctx.config) { " --policy" } else { "" };
             let prompt = format!(
-                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}{approvals_flag}",
+                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}{approvals_flag}{policy_flag}",
                 opts.wave,
                 if opts.e2e { " --e2e" } else { "" },
                 plan_flags(work, opts.wave, &opts.primary_name)

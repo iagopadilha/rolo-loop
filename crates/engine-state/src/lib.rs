@@ -36,6 +36,7 @@ pub mod limit_waits;
 pub mod loop_command;
 pub mod loop_io;
 pub mod loop_opts;
+pub mod loop_policy;
 pub mod loop_state;
 pub mod loop_summary;
 pub mod map_dry_check;
