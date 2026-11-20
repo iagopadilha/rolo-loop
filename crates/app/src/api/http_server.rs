@@ -2,7 +2,10 @@
 //! The app's HTTP server: 127.0.0.1 only, Host check (DNS rebinding), token on the methods that change state, body limit per route and serving of the
 //! front end (SPA) with the token injected. It knows no business rule: everything goes through the [`Router`].
 //!
-//! Plain `std::net`: one thread per connection, one request per connection (`Connection: close`), like the old server.
+//! Plain `std::net`: one thread per connection. A successful GET without a body keeps the connection open for the next request (HTTP/1.1
+//! keep-alive, idle [`KEEP_ALIVE_IDLE_SECONDS`]): the panel polls every couple of seconds, and one connection per request leaves hundreds of
+//! sockets in TIME_WAIT (Windows then refuses new ones: ERR_NO_BUFFER_SPACE). Anything else (a body, an error, `Connection: close`) is answered
+//! with `Connection: close` and closed gracefully, as before.
 
 use super::router::{Body, Found, Request, Response, Router};
 use crate::services::App;
@@ -18,6 +21,10 @@ use std::time::Duration;
 const BODY_DISCARD_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const HEADER_LIMIT_BYTES: usize = 64 * 1024;
 const SOCKET_TIMEOUT_SECONDS: u64 = 30;
+/// How long a kept-alive connection waits for its next request.
+const KEEP_ALIVE_IDLE_SECONDS: u64 = 5;
+/// Requests served on one connection before it is closed anyway.
+const KEEP_ALIVE_MAX_REQUESTS: usize = 500;
 /// "/" (hub) and "/p/<id>/" (project panel) serve the same index.html.
 static SPA_PAGE: LazyLock<Re> = LazyLock::new(|| Re::new(r"^/(p/[^/]+/?)?\z"));
 static TOKEN_TAG: LazyLock<Re> = LazyLock::new(|| Re::ci(r#"<meta\s+name=["']monitor-token["'][^>]*>"#));
@@ -184,11 +191,18 @@ impl AppHttpServer {
         let _ = stream.set_read_timeout(Some(Duration::from_secs(SOCKET_TIMEOUT_SECONDS)));
         let _ = stream.set_write_timeout(Some(Duration::from_secs(SOCKET_TIMEOUT_SECONDS)));
         let _ = stream.set_nodelay(true);
-        let response = match read_head(&mut stream) {
-            Some((method, target, headers, leftover)) => self.serve_request(&mut stream, &method, &target, headers, leftover),
-            None => return,
-        };
-        self.send(&mut stream, response);
+        for served in 1..=KEEP_ALIVE_MAX_REQUESTS {
+            let Some((method, target, headers, leftover)) = read_head(&mut stream) else { return };
+            let reusable = can_keep_alive(&method, &headers, &leftover) && served < KEEP_ALIVE_MAX_REQUESTS && !self.stopping.load(Ordering::SeqCst);
+            let response = self.serve_request(&mut stream, &method, &target, headers, leftover);
+            let keep = reusable && response.status < 400;
+            self.send(&mut stream, response, keep);
+            if !keep {
+                break;
+            }
+            // the next request of this connection, or the end of it after a short idle
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(KEEP_ALIVE_IDLE_SECONDS)));
+        }
         // Graceful close: the answer goes first (FIN), then whatever the client still sends is read and dropped. Closing with unread data would send a
         // reset, and on Windows a reset can overtake the answer (an early 403 or 413 would then never reach the client).
         let _ = stream.shutdown(Shutdown::Write);
@@ -203,16 +217,17 @@ impl AppHttpServer {
         }
     }
 
-    fn send(&self, stream: &mut TcpStream, response: Response) {
+    fn send(&self, stream: &mut TcpStream, response: Response, keep_alive: bool) {
         let (body, content_type) = match response.body {
             Body::Bytes(bytes, content_type) => (bytes, content_type),
             Body::Json(value) => (pycompat::json::py_json_dumps(&value, false).into_bytes(), "application/json; charset=utf-8".to_string()),
         };
         let head = format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\n{}\r\n",
             response.status,
             reason(response.status),
-            body.len()
+            body.len(),
+            if keep_alive { format!("Connection: keep-alive\r\nKeep-Alive: timeout={KEEP_ALIVE_IDLE_SECONDS}\r\n") } else { "Connection: close\r\n".to_string() }
         );
         let _ = stream.write_all(head.as_bytes()).and_then(|_| stream.write_all(&body)).and_then(|_| stream.flush());
     }
@@ -297,6 +312,17 @@ impl AppHttpServer {
             Err(_) => Response::error(404, "file not found"),
         }
     }
+}
+
+/// A request after which the same connection can carry the next one: a GET without a body (nothing unread on the socket) and no
+/// `Connection: close`.
+fn can_keep_alive(method: &str, headers: &[(String, String)], leftover: &[u8]) -> bool {
+    let header = |name: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_ascii_lowercase());
+    method == "GET"
+        && leftover.is_empty()
+        && header("content-length").map_or(true, |v| v == "0")
+        && header("transfer-encoding").is_none()
+        && header("connection").map_or(true, |v| !v.contains("close"))
 }
 
 /// `(method, target, headers, bytes already read past the head)`; `None` when the client sent nothing usable.
@@ -406,7 +432,7 @@ mod tests {
             stream.read_to_string(&mut out).unwrap();
             out
         };
-        let get = |path: &str, host: &str| ask(format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        let get = |path: &str, host: &str| ask(format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"));
         let local = format!("127.0.0.1:{port}");
         assert!(get("/api/ping", &local).contains("200 OK") && get("/api/ping", &local).ends_with("{\"ok\": true}"));
         assert!(get("/api/ping", "evil.example:80").contains("403 Forbidden") && get("/api/ping", "evil.example:80").contains("invalid Host"));
@@ -424,6 +450,30 @@ mod tests {
         assert!(post("secret", "[1]").contains("body must be a JSON object") && post("secret", "{oops").contains("body is not valid JSON"));
         assert!(ask(format!("DELETE /api/ping HTTP/1.1\r\nHost: {local}\r\nX-Monitor-Token: secret\r\n\r\n")).contains("405"));
         assert!(post("secret", &format!("{{\"k\": \"{}\"}}", "x".repeat(70_000))).contains("413"));
+        // keep-alive: two GETs on one connection, each answer read by its Content-Length; a POST closes it
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let read_answer = |stream: &mut TcpStream| -> String {
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                head.push(byte[0]);
+            }
+            let head = String::from_utf8(head).unwrap();
+            let length: usize = head.lines().find_map(|l| l.strip_prefix("Content-Length: ")).unwrap().trim().parse().unwrap();
+            let mut body = vec![0u8; length];
+            stream.read_exact(&mut body).unwrap();
+            head + &String::from_utf8(body).unwrap()
+        };
+        for _ in 0..2 {
+            stream.write_all(format!("GET /api/ping HTTP/1.1\r\nHost: {local}\r\n\r\n").as_bytes()).unwrap();
+            let answer = read_answer(&mut stream);
+            assert!(answer.contains("Connection: keep-alive") && answer.ends_with("{\"ok\": true}"));
+        }
+        stream.write_all(format!("POST /api/echo HTTP/1.1\r\nHost: {local}\r\nX-Monitor-Token: secret\r\nContent-Length: 2\r\n\r\n{{}}").as_bytes()).unwrap();
+        assert!(read_answer(&mut stream).contains("Connection: close"));
+        let mut rest = String::new();
+        assert_eq!(stream.read_to_string(&mut rest).unwrap_or(0), 0);
         server.request_shutdown();
         handle.join().unwrap();
     }
