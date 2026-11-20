@@ -179,11 +179,9 @@ pub fn launch_app(repo: &str, work: &str, program: &Path, open_browser: bool) ->
         command.arg("--no-browser"); // the app opens the browser once, only when it starts
     }
     command.stdin(std::process::Stdio::null()).stdout(log.try_clone()?).stderr(log).current_dir(program.parent().unwrap_or(Path::new(".")));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
-    }
+    // A hidden console of its own (not DETACHED_PROCESS: Windows ignores CREATE_NO_WINDOW with it, and every console program the child
+    // starts would then open a window), in its own process group (the parent's Ctrl+C never reaches it).
+    winproc::spawn_hidden_flags(&mut command);
     let child = command.spawn()?;
     Ok((i64::from(child.id()), offset))
 }

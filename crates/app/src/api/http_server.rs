@@ -320,9 +320,9 @@ fn can_keep_alive(method: &str, headers: &[(String, String)], leftover: &[u8]) -
     let header = |name: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_ascii_lowercase());
     method == "GET"
         && leftover.is_empty()
-        && header("content-length").map_or(true, |v| v == "0")
+        && !matches!(header("content-length"), Some(v) if v != "0")
         && header("transfer-encoding").is_none()
-        && header("connection").map_or(true, |v| !v.contains("close"))
+        && !matches!(header("connection"), Some(v) if v.contains("close"))
 }
 
 /// `(method, target, headers, bytes already read past the head)`; `None` when the client sent nothing usable.

@@ -377,6 +377,18 @@ pub fn hide_console(command: &mut std::process::Command, extra_flags: u32) -> &m
     command
 }
 
+/// Flags of a long-lived background child (a loop, a claude job, the panel server): `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`, always.
+/// Never `DETACHED_PROCESS`: Windows ignores `CREATE_NO_WINDOW` with it, and every console program the child starts (git, node, a shell)
+/// would then open a visible window.
+pub fn spawn_hidden_flags(command: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW | 0x0000_0200); // CREATE_NEW_PROCESS_GROUP
+    }
+    command
+}
+
 #[cfg(not(windows))]
 pub fn read_user_path() -> std::io::Result<(String, bool)> {
     Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
