@@ -1,0 +1,62 @@
+/* Desktop app window chrome (util/desktop.js, components/window_controls.js). Everything is scoped to html[data-desktop]: a browser
+   never matches these rules. The window has no title bar: the top 52px band (sidebar top + page header) moves the window, the traffic
+   lights sit at its left like a macOS window.
+   Placement of the lights and the sidebar toggle:
+     >= 1180px, sidebar open   band at the top of the sidebar: lights + toggle
+     900-1179px (icon sidebar) band at the top of the 84px icon column: lights; header: toggle
+     sidebar collapsed (>= 900) header: lights + toggle
+     < 900px (drawer)          header: lights + the existing hamburger; the drawer opens under the band */
+
+html[data-desktop]{--side-w-icons:84px;}
+html[data-desktop] .sh-header,html[data-desktop] .sh-titlebar{-webkit-user-select:none;user-select:none;}
+html[data-desktop] .sh-header :is(input,textarea,select){-webkit-user-select:text;user-select:text;}
+
+/* ---------- band at the top of the sidebar ---------- */
+html[data-desktop] .sh-titlebar{flex:none;height:var(--head-h);box-sizing:border-box;margin:-16px -12px -6px;padding:0 12px 0 20px;display:flex;align-items:center;gap:14px;}
+
+/* ---------- traffic lights ---------- */
+.tl-group{display:inline-flex;align-items:center;gap:8px;flex:none;}
+.tl{width:12px;height:12px;padding:0;margin:0;border:0;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2);display:inline-flex;align-items:center;justify-content:center;color:rgba(0,0,0,.6);cursor:default;}
+.tl svg{display:block;opacity:0;transition:opacity .12s ease;}
+.tl-group:hover .tl svg,.tl:focus-visible svg{opacity:1;}
+.tl-close{background:#FF5F57;} .tl-min{background:#FEBC2E;} .tl-zoom{background:#28C840;}
+.tl:active{filter:brightness(.82);}
+.tl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+html[data-window-inactive] .tl-group:not(:hover) .tl{background:#DCDCDC;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12);}
+html[data-theme="dark"][data-window-inactive] .tl-group:not(:hover) .tl{background:#4A4A4D;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);}
+@media (prefers-reduced-motion:reduce){.tl svg{transition:none;}}
+
+/* ---------- sidebar toggle ---------- */
+.tl-toggle{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:none;color:var(--fg2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
+.tl-toggle:hover{background:var(--hover-wash2);color:var(--fg);}
+.tl-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+/* ---------- header lead (lights + toggle when the sidebar does not show them) ---------- */
+.sh-lead{display:none;align-items:center;gap:14px;flex:none;}
+html[data-desktop] .sh-lead .tl-group{display:none;}
+
+/* sidebar collapsed (900px and up): no sidebar, the header carries the lights */
+@media (min-width:900px){
+  html[data-desktop][data-side="collapsed"] .sh-side{display:none;}
+  html[data-desktop][data-side="collapsed"] .sh-lead{display:inline-flex;}
+  html[data-desktop][data-side="collapsed"] .sh-lead .tl-group{display:inline-flex;}
+  html[data-desktop][data-side="collapsed"] .sh-header{padding-left:20px;}
+}
+
+/* 900-1179: icon column with the lights on top; the toggle moves to the header */
+@media (min-width:900px) and (max-width:1179px){
+  html[data-desktop] .sh-titlebar{margin:-12px -8px -6px;padding:0;justify-content:center;}
+  html[data-desktop] .sh-titlebar .tl-toggle{display:none;}
+  html[data-desktop] .sh-lead{display:inline-flex;}
+}
+
+/* under 900: the sidebar is a drawer; the header carries the lights next to the hamburger and the drawer opens under the band */
+@media (max-width:899px){
+  html[data-desktop] .sh-lead{display:inline-flex;}
+  html[data-desktop] .sh-lead .tl-group{display:inline-flex;}
+  html[data-desktop] .sh-lead .tl-toggle{display:none;}
+  html[data-desktop] .sh-header{padding-left:20px;}
+  html[data-desktop] .sh-side{top:var(--head-h);}
+  html[data-desktop] .sh-scrim{top:var(--head-h);}
+  html[data-desktop] .sh-titlebar{display:none;}
+}

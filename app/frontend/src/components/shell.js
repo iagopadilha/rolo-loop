@@ -7,6 +7,8 @@ import { list, maskHome, txt } from '../util/format.js';
 import { appApi } from '../api/api_client.js';
 import { getTheme, setTheme, onThemeChange } from '../util/theme.js';
 import { navigate, currentRoute } from '../pages/panel/router.js';
+import { isDesktop } from '../util/desktop.js';
+import { TrafficLights, SidebarToggle } from './window_controls.js';
 
 const openSettings = () => navigate('/settings');
 
@@ -134,6 +136,7 @@ export function Sidebar({ page, project, account, activity, commands }) {
   return html`<${Fragment}>
     <div class=${'sh-scrim' + (state.drawer ? ' is-on' : '')} onClick=${closeDrawer} aria-hidden="true"></div>
     <aside class=${'sh-side' + (state.drawer ? ' is-open' : '')} id="shell-sidebar" aria-label="Sidebar">
+      ${isDesktop() ? html`<div class="sh-titlebar" data-drag><${TrafficLights} where="side" /><${SidebarToggle} where="side" /></div>` : null}
       <a class="sh-brand" href="/" title="Projects" aria-label="Agents Maestro: back to the projects">
         <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Agents Maestro</span><span class="sh-brand-sub">Deterministic AI Harness</span></span></a>
       <button type="button" class="sh-search" id="btn-search" onClick=${openSwitcher} aria-keyshortcuts="Control+K Meta+K" title=${'Search projects and pages (' + SHORTCUT + ')'}>
@@ -288,7 +291,9 @@ export function ShellHeader({ id = 'header', cls = '', crumbs, mid, end }) {
   const items = list(crumbs);
   const midNode = typeof mid === 'function' ? mid(compact) : mid;
   const endNode = typeof end === 'function' ? end(compact) : end;
-  return html`<header id=${id} class=${'sh-header ' + cls}>
+  const desktop = isDesktop();
+  return html`<header id=${id} class=${'sh-header ' + cls} data-drag=${desktop ? '' : null}>
+    ${desktop ? html`<div class="sh-lead"><${TrafficLights} where="head" /><${SidebarToggle} where="head" /></div>` : null}
     <button type="button" class="sh-burger" id="btn-menu" aria-label="Open the menu" aria-controls="shell-sidebar" aria-expanded=${String(!!state.drawer)} onClick=${toggleDrawer}><${Icon} name="menu" /></button>
     <nav class="sh-crumbs" aria-label="Breadcrumb">${items.map((c, i) => {
       const last = i === items.length - 1;
