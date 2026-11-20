@@ -53,6 +53,7 @@ pub mod prod_database_script;
 pub mod project_policy;
 pub mod project_repos;
 pub mod project_scripts;
+pub mod providers;
 pub mod readiness_checks;
 pub mod repo_catalog;
 pub mod repos;
@@ -81,3 +82,8 @@ pub mod worktree_state;
 pub mod worktrees;
 
 pub use notify::truthy as notify_truthy;
+
+/// One secret of the app's encrypted store (`cfg::secrets`), for the providers and the notice channels.
+pub fn secret_store_value(data_dir: &std::path::Path, name: &str) -> Option<String> {
+    cfg::secrets::get(data_dir, name)
+}

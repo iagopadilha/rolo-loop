@@ -66,6 +66,7 @@ pub mod repo_readiness;
 pub mod repo_registry;
 pub mod roadmap;
 pub mod roadmap_view;
+pub mod settings_v3;
 pub mod setup_commit;
 pub mod skills_catalog;
 pub mod spec_file;

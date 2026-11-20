@@ -64,6 +64,7 @@ impl AppCtx {
 
     pub fn discover_in(env: &Env, repo_root: PathBuf) -> Self {
         let config = read_user_config(&env.user_data_dir());
+        crate::providers::install(&config);
         let locator = Locator::new(env.clone(), repo_root.clone());
         let configured = config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("");
         let skill_dir = locator.locate_orchestrator_skill_dir(configured);

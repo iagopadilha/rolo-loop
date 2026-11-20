@@ -7,6 +7,7 @@ pub mod loop_commands;
 pub mod loop_read;
 pub mod multi_repo;
 pub mod projects;
+pub mod settings_v3;
 
 use super::router::{Request, Response, RouteOptions, Router};
 use crate::services::App;
@@ -33,6 +34,7 @@ pub fn build_router(app: &Arc<App>) -> Router {
     loop_commands::register(&mut router, app);
     multi_repo::register(&mut router, app);
     app_hub::register(&mut router, app);
+    settings_v3::register(&mut router, app);
     router
 }
 
