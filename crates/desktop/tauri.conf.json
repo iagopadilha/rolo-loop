@@ -3,7 +3,7 @@
   "productName": "Agents Maestro",
   "identifier": "dev.iagopadilha.agentsmaestro",
   "build": {
-    "frontendDist": "dist"
+    "frontendDist": "fallback"
   },
   "app": {
     "withGlobalTauri": true,
