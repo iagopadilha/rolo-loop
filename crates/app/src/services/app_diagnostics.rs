@@ -219,6 +219,9 @@ impl AppDiagnosticsService<'_> {
                 .filter(|c| c["required"] == true && c["configured"] != true)
                 .map(|c| format!("required notify channel {} is not configured", c["name"].as_str().unwrap_or(""))),
         );
+        if self.app.config.ctx.config.contains_key("claude_fallback_binaries") {
+            warnings.push("config.json has claude_fallback_binaries: it is no longer used (the loop runs on the claude command only); remove the key".into());
+        }
         let mcp = self.describe_mcp_policy();
         warnings.extend(mcp["warnings"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from));
         let mut env = self.app.env.clone();
