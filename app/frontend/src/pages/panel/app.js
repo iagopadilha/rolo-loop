@@ -36,7 +36,7 @@ function ClosedCard({ c }) {
   </div>`;
 }
 
-function MenuHelp() { return html`<button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agents Maestro?</button>`; }
+function MenuHelp() { return html`<button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agent Maestro?</button>`; }
 
 // ---------- pages and sidebar (real state only) ----------
 /** Registry route name -> page. `feature` keys on the slug so another feature remounts the page. */

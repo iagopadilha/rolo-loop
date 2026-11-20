@@ -6,14 +6,31 @@ import { Page } from '../components/page.js';
 import { SkillsToolsSection } from '../components/skills_tools_section.js';
 import { currentRoute, navigate } from './panel/router.js';
 import { AppearanceSection, ClaudeSection, NetworkSettings, ProjectsSection } from './settings_sections.js';
-import { NotificationsSection, SystemSection } from './settings_system.js';
+import { SystemSection } from './settings_system.js';
+import { ProvidersSection } from './settings_providers.js';
+import { AgentsSection, QualitySection } from './settings_agents.js';
+import { NotificationsV3Section } from './settings_notify.js';
+import { startTour } from '../components/tour.js';
+import { SettingsGroup, SettingsRow } from '../components/settings_ui.js';
+
+/** General: the look of the app and the guided tour. */
+function GeneralSection() {
+  return html`<${AppearanceSection} />
+    <${SettingsGroup} id="st-tour" title="Guided tour" desc="A step-by-step walk through the screens: what each setting is for and how to start your first loop.">
+      <${SettingsRow} label="Start the tour again" desc="It opens on the projects screen and moves through Settings with you.">
+        <button type="button" class="btn btn-sm" id="st-tour-restart" onClick=${() => startTour(0)}>Start tour</button><//>
+    <//>`;
+}
 
 const SECTIONS = [
-  { id: 'appearance', label: 'Appearance', sub: 'Theme of the app.', view: AppearanceSection },
-  { id: 'claude', label: 'Claude', sub: 'Account, usage, command and model.', view: ClaudeSection },
+  { id: 'general', label: 'General', sub: 'Theme and the guided tour.', view: GeneralSection },
+  { id: 'providers', label: 'AI providers', sub: 'Which AI runs the loop, in what order, with which models.', view: ProvidersSection },
+  { id: 'agents', label: 'Agents', sub: 'The agents of the pipeline, their models and what a loop runs.', view: AgentsSection },
+  { id: 'quality', label: 'Quality gate', sub: 'What the last review of every feature checks.', view: QualitySection },
+  { id: 'mcp', label: 'Skills and MCP', sub: 'Skills and MCP tools every agent of the loop may use.', view: SkillsToolsSection },
+  { id: 'notifications', label: 'Notifications', sub: 'Windows, e-mail and webhook notices, and which events send them.', view: NotificationsV3Section },
   { id: 'network', label: 'Network', sub: 'Hosts the agents may reach.', view: NetworkSettings },
-  { id: 'mcp', label: 'Skills and tools', sub: 'What every agent of the loop receives: skills and MCP tools.', view: SkillsToolsSection },
-  { id: 'notifications', label: 'Notifications', sub: 'Channels and a test message.', view: NotificationsSection },
+  { id: 'claude', label: 'Claude account', sub: 'Account, usage, command and the orchestrator model.', view: ClaudeSection },
   { id: 'projects', label: 'Projects and data', sub: 'Data folders and limits.', view: ProjectsSection },
   { id: 'system', label: 'System', sub: 'Checks, version and guard.', view: SystemSection },
 ];

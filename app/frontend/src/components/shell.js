@@ -137,8 +137,8 @@ export function Sidebar({ page, project, account, activity, commands }) {
     <div class=${'sh-scrim' + (state.drawer ? ' is-on' : '')} onClick=${closeDrawer} aria-hidden="true"></div>
     <aside class=${'sh-side' + (state.drawer ? ' is-open' : '')} id="shell-sidebar" aria-label="Sidebar">
       ${isDesktop() ? html`<div class="sh-titlebar" data-drag><${TrafficLights} where="side" /><${SidebarToggle} where="side" /></div>` : null}
-      <a class="sh-brand" href="/" title="Projects" aria-label="Agents Maestro: back to the projects">
-        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Agents Maestro</span><span class="sh-brand-sub">Deterministic AI Harness</span></span></a>
+      <a class="sh-brand" href="/" title="Projects" aria-label="Agent Maestro: back to the projects">
+        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Agent Maestro</span><span class="sh-brand-sub">Deterministic AI Harness</span></span></a>
       <button type="button" class="sh-search" id="btn-search" onClick=${openSwitcher} aria-keyshortcuts="Control+K Meta+K" title=${'Search projects and pages (' + SHORTCUT + ')'}>
         <${Icon} name="search" size=${14} /><span class="sh-label sh-grow">Search</span><kbd class="sh-kbd sh-label">${SHORTCUT}</kbd></button>
       <nav class="sh-nav" aria-label="Workspace">
@@ -323,7 +323,7 @@ export function useSplash(ready) {
 export function Splash({ text }) {
   return html`<div class="sh-splash" id="splash" role="status" aria-live="polite">
     <${Logo} size=${84} />
-    <div class="sh-splash-titles"><span class="sh-splash-title">Agents Maestro</span><span class="sh-splash-sub">Deterministic AI Harness</span></div>
+    <div class="sh-splash-titles"><span class="sh-splash-title">Agent Maestro</span><span class="sh-splash-sub">Deterministic AI Harness</span></div>
     <div class="sh-splash-bar" aria-hidden="true"><div></div></div>
     <span class="sh-splash-text">${text}</span></div>`;
 }

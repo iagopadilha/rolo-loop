@@ -14,6 +14,7 @@ import { openWhyOnFirstVisit, openWhy, WhyButton } from '../components/why_panel
 import { currentRoute, onRoute, navigate } from './panel/router.js';
 import { SettingsPage } from './settings_page.js';
 import { checksOf, failText, maskIn, sendTestNotification } from './settings_system.js';
+import { maybeStartTour } from '../components/tour.js';
 import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects } from '../components/shell.js';
 
 /** Status words of a project that has no loop (progress_summary.mode) and of a loop (progress_summary.loop_status). */
@@ -393,7 +394,7 @@ export function Hub() {
             <${OverflowMenu}>
               <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
               ${hb.confirmShutdown ? null : html`<div id="hub-shutdown"><${Shutdown} /></div>`}
-              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agents Maestro?</button>
+              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agent Maestro?</button>
             <//>`
           : html`<div class="header-actions" id="hub-actions">
             <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
@@ -429,6 +430,7 @@ export function startHub(root) {
   root.replaceChildren();
   onRoute(() => draw());
   document.title = 'projects · Agent Maestro';
+  maybeStartTour(); // first run: the guided tour (it waits for the splash)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.sh-sw') || document.querySelector('dialog[open]')) return; // the switcher and the dialogs own Esc

@@ -135,7 +135,7 @@ if (require.main === module) (async () => {
   const cells = [];
   for (const [pname, url] of pages) for (const theme of THEMES) for (const [w, h] of viewports) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: theme });
-    await ctx.addInitScript((t) => { try { localStorage.setItem("maestro.theme", t); localStorage.setItem("harness.why.seen.v1", "true"); } catch (e) {} }, theme);
+    await ctx.addInitScript((t) => { try { localStorage.setItem("maestro.theme", t); localStorage.setItem("harness.why.seen.v1", "true"); } catch (e) {} window.__MAESTRO_NO_TOUR = true; }, theme);
     if (desktop) await ctx.addInitScript(stubDesktopWindow);
     const page = await ctx.newPage();
     const findings = [];
