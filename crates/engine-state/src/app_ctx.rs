@@ -32,7 +32,10 @@ pub fn repo_root(env: &Env) -> PathBuf {
     }
     let exe = std::env::current_exe().unwrap_or_default();
     for ancestor in exe.ancestors().skip(1) {
-        if ancestor.join("plugin").is_dir() {
+        // a cargo profile folder (`target/debug`, `target/release`) can hold a stale copy of `plugin/` and `app/` (the desktop crate's
+        // build copies its bundle resources there): the repository above it is the real root
+        let in_cargo_target = ancestor.parent().and_then(|p| p.file_name()).is_some_and(|n| n.eq_ignore_ascii_case("target"));
+        if ancestor.join("plugin").is_dir() && !in_cargo_target {
             return ancestor.to_path_buf();
         }
     }
@@ -114,7 +117,7 @@ mod tests {
         let bin = dir.path().join("plugin").join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let harness = bin.join(format!("harness{}", std::env::consts::EXE_SUFFIX));
-        let gui = dir.path().join("Agents Maestro.exe");
+        let gui = dir.path().join("Agent Maestro.exe");
         let none = Env::from_pairs::<[(&str, &str); 0], &str, &str>([]);
         // no bundled harness yet: the current executable
         assert_eq!(app_exe(&none, dir.path(), &gui), gui);
