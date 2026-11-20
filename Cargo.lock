@@ -572,6 +572,7 @@ dependencies = [
  "regex",
  "serde_json",
  "tempfile",
+ "winproc",
 ]
 
 [[package]]

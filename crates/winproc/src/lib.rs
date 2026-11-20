@@ -242,6 +242,55 @@ pub fn random_bytes(count: usize) -> Vec<u8> {
     buffer
 }
 
+/// Extra entropy of every secret this app protects: another program running as the same user cannot unprotect them by accident.
+const SECRET_ENTROPY: &[u8] = b"agent-maestro/secrets/v1";
+
+#[cfg(windows)]
+fn dpapi(data: &[u8], protect: bool) -> std::io::Result<Vec<u8>> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
+    let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+    let entropy = CRYPT_INTEGER_BLOB { cbData: SECRET_ENTROPY.len() as u32, pbData: SECRET_ENTROPY.as_ptr() as *mut u8 };
+    let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    // SAFETY: both input blobs point at live buffers of the given sizes (read only); DPAPI allocates `output` with LocalAlloc, which is
+    // copied and then freed with LocalFree exactly once.
+    unsafe {
+        let ok = if protect {
+            CryptProtectData(&input, std::ptr::null(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+        } else {
+            CryptUnprotectData(&input, std::ptr::null_mut(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let bytes = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+        LocalFree(output.pbData.cast());
+        Ok(bytes)
+    }
+}
+
+/// Encrypts `data` for the current Windows user (DPAPI): only this user on this machine can read it back.
+#[cfg(windows)]
+pub fn protect_for_user(data: &[u8]) -> std::io::Result<Vec<u8>> {
+    dpapi(data, true)
+}
+
+/// Reverses [`protect_for_user`]; fails for another user, another machine or a tampered blob.
+#[cfg(windows)]
+pub fn unprotect_for_user(data: &[u8]) -> std::io::Result<Vec<u8>> {
+    dpapi(data, false)
+}
+
+#[cfg(not(windows))]
+pub fn protect_for_user(_data: &[u8]) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "secrets are protected with Windows DPAPI"))
+}
+
+#[cfg(not(windows))]
+pub fn unprotect_for_user(_data: &[u8]) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "secrets are protected with Windows DPAPI"))
+}
+
 #[cfg(not(windows))]
 pub fn random_bytes(count: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; count];
@@ -459,6 +508,18 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!pid_alive(root));
         let _ = child.wait();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn secrets_round_trip_for_this_user_only() {
+        let sealed = protect_for_user(b"sk-test-value").unwrap();
+        assert!(!sealed.windows(13).any(|w| w == b"sk-test-value"));
+        assert_eq!(unprotect_for_user(&sealed).unwrap(), b"sk-test-value");
+        let mut tampered = sealed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0xFF;
+        assert!(unprotect_for_user(&tampered).is_err());
     }
 
     #[test]

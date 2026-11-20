@@ -148,6 +148,29 @@ pub fn read_text_sig(path: &Path) -> Option<String> {
 
 /// Loads every candidate `.env`; a variable already present is never overwritten.
 /// Returns the files read.
+/// Key of `config.json` where the Settings page keeps plain values for the engine (`{"LOOP_SMTP_HOST": "smtp.example.com"}`).
+pub const SETTINGS_ENVIRONMENT_KEY: &str = "environment";
+
+/// The values the Settings page stored: `config.json` `environment` (plain) and the secrets store (decrypted for this user), in that order.
+/// They sit BELOW the real environment and the `.env` files, so an existing setup keeps working and a real variable always wins.
+pub fn settings_values(env: &Env) -> Vec<(String, String)> {
+    let data_dir = env.user_data_dir();
+    let mut values: Vec<(String, String)> = Vec::new();
+    if let Some(text) = read_text_sig(&data_dir.join("config.json")) {
+        if let Some(map) = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get(SETTINGS_ENVIRONMENT_KEY).and_then(|e| e.as_object()).cloned()) {
+            for (key, value) in map {
+                if let Some(text) = value.as_str().filter(|t| !t.is_empty()) {
+                    if crate::secrets::is_valid_name(&key) {
+                        values.push((key, text.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    values.extend(crate::secrets::all(&data_dir));
+    values
+}
+
 pub fn load_all(env: &mut Env) -> Vec<PathBuf> {
     let mut used = Vec::new();
     for path in env.env_file_candidates() {
@@ -161,6 +184,12 @@ pub fn load_all(env: &mut Env) -> Vec<PathBuf> {
                 }
                 used.push(path);
             }
+        }
+    }
+    // the Settings page values and the secrets store, below everything above (they never count as a `.env` file)
+    for (key, value) in settings_values(env) {
+        if env.get(&key).is_none() {
+            env.set(&key, &value);
         }
     }
     used
@@ -178,7 +207,7 @@ pub fn app_env_value(env: &Env, name: &str) -> String {
             }
         }
     }
-    String::new()
+    settings_values(env).into_iter().find(|(k, _)| k == name).map(|(_, v)| v).unwrap_or_default()
 }
 
 /// Like [`app_env_value`] but tells a variable that is not there (`None`) from one set to an empty value.
@@ -204,6 +233,24 @@ pub fn app_env_list(env: &Env, name: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_values_sit_below_the_environment_and_the_env_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("config.json"), r#"{"environment": {"LOOP_SMTP_HOST": "smtp.settings", "LOOP_NOTIFY_TO": "", "bad name": "x"}}"#).unwrap();
+        let data_text = data.display().to_string();
+        let mut env = Env::from_pairs([(DATA_DIR_VARIABLE, data_text.as_str()), ("LOOP_NOTIFY_CHANNELS", "email")]);
+        load_all(&mut env);
+        assert_eq!(env.text("LOOP_SMTP_HOST"), "smtp.settings");
+        assert_eq!(env.text("LOOP_NOTIFY_CHANNELS"), "email");
+        assert!(env.get("LOOP_NOTIFY_TO").is_none() && env.get("bad name").is_none());
+        let real_wins = Env::from_pairs([(DATA_DIR_VARIABLE, data_text.as_str()), ("LOOP_SMTP_HOST", "smtp.real")]);
+        assert_eq!(app_env_value(&real_wins, "LOOP_SMTP_HOST"), "smtp.real");
+        let only_settings = Env::from_pairs([(DATA_DIR_VARIABLE, data_text.as_str())]);
+        assert_eq!(app_env_value(&only_settings, "LOOP_SMTP_HOST"), "smtp.settings");
+    }
 
     #[test]
     fn parses_pairs_quotes_comments_and_export() {
