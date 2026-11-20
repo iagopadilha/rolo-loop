@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
+mod tray;
 mod window;
 
 use host::Host;
@@ -56,6 +57,7 @@ fn main() {
                     let panel_url = host.url().to_string();
                     app.manage(Arc::new(host));
                     window::create(app.handle(), &first_url, &panel_url)?;
+                    tray::create(app.handle())?;
                 }
                 Err(failure) => {
                     let handle = app.handle().clone();
@@ -69,7 +71,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Mac-like: closing the window while a loop or a job runs keeps the app (and the loop) alive; a second launch shows it again
+            // Mac-like: closing the window while a loop or a job runs keeps the app (and the loop) alive in the tray
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.app_handle().try_state::<Arc<Host>>().is_some_and(|host| host.is_busy()) {
                     api.prevent_close();
