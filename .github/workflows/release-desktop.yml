@@ -1,0 +1,66 @@
+name: release-desktop
+
+# A tag v<version> builds the Windows installers (NSIS setup.exe + MSI) and attaches them to a DRAFT release.
+# Secrets (all optional; without them the build is unsigned and has no updater artifacts):
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD   updater signatures (+ latest.json)
+#   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
+#   ARTIFACT_SIGNING_ENDPOINT, ARTIFACT_SIGNING_ACCOUNT, ARTIFACT_SIGNING_PROFILE   Authenticode via Azure Artifact Signing
+# See docs/INSTALLER.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      HAS_AZURE_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version "^2.12" --locked
+      - name: Tests before packaging
+        run: cargo test --workspace
+      - name: Updater artifacts when the signing key exists
+        if: env.HAS_UPDATER_KEY == 'true'
+        shell: pwsh
+        run: |
+          $conf = Get-Content crates/desktop/tauri.conf.json -Raw | ConvertFrom-Json
+          $conf.bundle.createUpdaterArtifacts = $true
+          $conf | ConvertTo-Json -Depth 20 | Set-Content crates/desktop/tauri.conf.json -Encoding utf8
+      - name: Authenticode signing when Azure Artifact Signing is configured
+        if: env.HAS_AZURE_SIGNING == 'true'
+        shell: pwsh
+        run: |
+          dotnet tool install --global sign --prerelease
+          $conf = Get-Content crates/desktop/tauri.conf.json -Raw | ConvertFrom-Json
+          $sign = 'sign code artifact-signing -ase "${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}" -asa "${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}" -ascp "${{ secrets.ARTIFACT_SIGNING_PROFILE }}" %1'
+          $conf.bundle.windows | Add-Member -NotePropertyName signCommand -NotePropertyValue $sign -Force
+          $conf | ConvertTo-Json -Depth 20 | Set-Content crates/desktop/tauri.conf.json -Encoding utf8
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        with:
+          projectPath: crates/desktop
+          tauriScript: cargo tauri
+          tagName: v__VERSION__
+          releaseName: Agents Maestro v__VERSION__
+          releaseBody: "Windows installers: the -setup.exe (per user, no admin) or the .msi (per machine). See docs/INSTALLER.md."
+          releaseDraft: true
+          includeUpdaterJson: true

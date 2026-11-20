@@ -3,7 +3,11 @@
   "productName": "Agents Maestro",
   "identifier": "dev.iagopadilha.agentsmaestro",
   "build": {
-    "frontendDist": "fallback"
+    "frontendDist": "fallback",
+    "beforeBuildCommand": {
+      "script": "node ../../tools/desktop/stage.mjs",
+      "cwd": "."
+    }
   },
   "app": {
     "withGlobalTauri": true,
@@ -14,12 +18,56 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "publisher": "Iago Boardman Padilha",
     "copyright": "MIT License",
     "category": "DeveloperTool",
     "shortDescription": "Unattended build loops for Claude Code",
     "longDescription": "Agents Maestro runs spec-driven build loops for Claude Code on your own subscription, with a guard hook on every tool call and a local panel to follow and answer the loop.",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": false,
+    "resources": {
+      "../../target/desktop-stage/plugin/": "plugin/",
+      "../../target/desktop-stage/.claude-plugin/": ".claude-plugin/",
+      "../../app/frontend/": "app/frontend/",
+      "../../app/templates/": "app/templates/"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "minimumWebview2Version": "110.0.1587.40",
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "PortugueseBR"
+        ],
+        "displayLanguageSelector": true,
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "language": [
+          "en-US",
+          "pt-BR"
+        ],
+        "upgradeCode": "3BF6896A-16A2-4AE0-A62B-5B011256DCDB",
+        "fragmentPaths": [
+          "windows/path.wxs"
+        ],
+        "componentRefs": [
+          "MaestroPath"
+        ]
+      }
+    }
   }
 }
