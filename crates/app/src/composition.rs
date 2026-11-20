@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 //! Composition root: builds the app (services), its router and server, wires the idle monitor, and runs it (`harness serve`).
+//!
+//! A host that owns the window (the desktop app) drives the same steps itself: [`open_and_register`], then [`serve`] on its own thread,
+//! then [`finish`] when it exits. [`start_application`] is the three in a row.
 
 use crate::api::controllers::build_router;
 use crate::api::http_server::AppHttpServer;
@@ -77,7 +80,8 @@ pub fn delete_app_registry(assembled: &Assembled) {
     }
 }
 
-fn open_in_browser(url: &str) {
+/// Opens `url` in the default browser (detached; no console window on Windows).
+pub fn open_in_browser(url: &str) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -89,8 +93,9 @@ fn open_in_browser(url: &str) {
     }
 }
 
-/// Opens the port, registers the app, opens the initial project (if any), prints APP_URL/MONITOR_URL and serves until stopped.
-pub fn start_application(assembled: &Assembled, initial_project_path: &str) -> std::io::Result<()> {
+/// Opens the port, writes `app.json`, opens the initial project (if any) and returns its URL (the app URL without one). Logs `app_started`
+/// and starts the idle watch; nothing is printed.
+pub fn open_and_register(assembled: &Assembled, initial_project_path: &str) -> std::io::Result<String> {
     let config = &assembled.app.config;
     let app_url = assembled.server.open_port(config.port_range, config.fixed_port)?;
     assembled.app.set_app_url(&app_url);
@@ -101,21 +106,37 @@ pub fn start_application(assembled: &Assembled, initial_project_path: &str) -> s
             assembled.app.project_service().open_existing_project(initial_project_path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.message))?;
         initial_url = assembled.project_url(&project.id);
     }
-    use std::io::Write;
-    println!("MONITOR_URL={initial_url}");
-    println!("APP_URL={app_url}");
-    let _ = std::io::stdout().flush();
     assembled.app.log.info("app_started", &[("url", json!(app_url)), ("pid", json!(std::process::id()))]);
     assembled.monitor.watch_idle_in_background();
-    if config.open_browser {
-        let url = initial_url.clone();
-        std::thread::spawn(move || open_in_browser(&url));
-    }
+    Ok(initial_url)
+}
+
+/// Serves requests until a shutdown is requested (idle, `POST /api/app/shutdown` or [`AppHttpServer::request_shutdown`]).
+pub fn serve(assembled: &Assembled) {
     assembled.server.serve_until_stopped();
+}
+
+/// After [`serve`] returned: stops the idle watch, releases the projects, removes our own `app.json` and logs `app_stopped`.
+pub fn finish(assembled: &Assembled) {
     assembled.monitor.stop();
     assembled.app.project_service().release_projects_on_shutdown();
     delete_app_registry(assembled);
     assembled.app.log.info("app_stopped", &[("pid", json!(std::process::id()))]);
+}
+
+/// `harness serve`: [`open_and_register`], prints APP_URL/MONITOR_URL, opens the browser when configured, [`serve`], [`finish`].
+pub fn start_application(assembled: &Assembled, initial_project_path: &str) -> std::io::Result<()> {
+    let initial_url = open_and_register(assembled, initial_project_path)?;
+    use std::io::Write;
+    println!("MONITOR_URL={initial_url}");
+    println!("APP_URL={}", assembled.server.url());
+    let _ = std::io::stdout().flush();
+    if assembled.app.config.open_browser {
+        let url = initial_url.clone();
+        std::thread::spawn(move || open_in_browser(&url));
+    }
+    serve(assembled);
+    finish(assembled);
     Ok(())
 }
 
