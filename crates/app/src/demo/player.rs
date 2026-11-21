@@ -424,7 +424,9 @@ impl DemoStoryPlayer {
         let _ = write_text_atomically(&Path::new(&self.work_dir).join(item.file.replace('/', "\\")), &render_feature_file(slug));
         let commit = self.git.commit_paths(&[item.file.to_string()], &format!("feat({slug}): {}", item.title.to_lowercase())).unwrap_or_default();
         let index = FEATURES.iter().position(|f| f.slug == slug).expect("a feature of the story");
-        self.features[index] = FeatureState { status: "verified".into(), tries: self.features[index].tries, commit: Some(commit), note: None };
+        // one feature of the story ends verified without automatic verification, so the panel shows its "not tested" mark
+        let note = (slug == "invoice-pdf").then(|| "unverified".to_string());
+        self.features[index] = FeatureState { status: "verified".into(), tries: self.features[index].tries, commit: Some(commit), note };
         self.touch(slug);
         self.write_roadmap();
     }

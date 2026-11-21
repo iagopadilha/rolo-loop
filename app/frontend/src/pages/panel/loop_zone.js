@@ -63,7 +63,7 @@ function TurnHeader({ turn }) {
   const facts = [isNum(turn.duration_s) ? 'took ' + dur(turn.duration_s) : '', isNum(turn.cost_usd) ? cost(turn.cost_usd) : '', steps == null ? '' : `${steps} step${steps === 1 ? '' : 's'}`].filter(Boolean);
   return html`<div class="lp-title-block">
     <h1 class="lp-title"><span>${'Turn ' + turn.n}</span>${turn.label ? html` <span class="lp-step">${turn.label}</span>` : null}</h1>
-    <div class="lp-summary" aria-live="polite">${`${sum.verified} of ${sum.total} verified · ${cost(spent)}${max != null ? ' of ' + cost(max) : ''} · ${agents} ${agents === 1 ? 'agent' : 'agents'} running`}</div>
+    <div class="lp-summary" aria-live="polite">${`${sum.verified} of ${sum.total} verified${sum.untested ? ` (${sum.untested} not tested)` : ''} · ${cost(spent)}${max != null ? ' of ' + cost(max) : ''} · ${agents} ${agents === 1 ? 'agent' : 'agents'} running`}</div>
     <div class="lp-facts" aria-label=${'Facts of turn ' + turn.n}>${facts.length ? `This turn ${facts.join(' · ')}` : 'No figures recorded for this turn.'}</div>
   </div>`;
 }

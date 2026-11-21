@@ -17,7 +17,7 @@ const ROLE = {
   'quality-gate': 'Reviews the finished diff: spec, security, standards, naming, size and patterns. Blocks or warns per check.',
 };
 const STEPS = [
-  ['Spec', 'spec-writer'], ['Gate', 'spec-reviewer'], ['Build', 'executor'], ['Verify', 'verifier'], ['Quality', 'quality-gate'], ['Commit', null],
+  ['Spec', 'spec-writer'], ['Review', 'spec-reviewer'], ['Build', 'executor'], ['Verify', 'verifier'], ['Quality', 'quality-gate'], ['Commit', null],
 ];
 const LEVEL_LABEL = { block: 'Block', warn: 'Warn', off: 'Off' };
 
@@ -47,10 +47,10 @@ export function AgentsSection() {
     <${SettingsGroup} id="ag-preview" title="What a loop runs" desc="Each feature goes through these steps, one lane per feature, several lanes at once.">
       <${SettingsBlock}><${Pipeline} agents=${data.agents} /><//>
     <//>
-    <${SettingsGroup} id="ag-list" title="Agents" desc="The model each agent runs with and the optional ones you can turn off. Default keeps the agent's own model.">
+    <${SettingsGroup} id="ag-list" title="Agents" desc="Required agents always run; you choose their model. Optional agents come on by default and can be turned off: their step then shows as skipped in the loop. Default keeps the agent's own model.">
       ${!data.folder_found ? html`<${SettingsBlock}><${Note} kind="warn">The plugin's agents folder was not found: install the plugin (Settings > System).<//><//>` : null}
       ${data.agents.map((a) => html`<${SettingsRow} key=${a.name} rowKey=${a.name} label=${a.name} desc=${ROLE[a.name] || a.description} labelFor=${'ag-model-' + a.name}
-        tags=${a.optional ? [{ text: 'optional' }] : [{ text: 'pipeline' }]}>
+        tags=${a.optional ? [{ text: 'optional · on by default' }] : [{ text: 'required' }]}>
         <div class="st-actions">
           <${SelectField} id=${'ag-model-' + a.name} label=${'Model of ' + a.name} value=${a.model || ''} disabled=${!a.enabled}
             options=${Object.keys(MODEL_LABEL).map((m) => ({ value: m, label: m ? MODEL_LABEL[m] : 'Default (' + (a.default_model || 'inherit') + ')' }))} onChange=${(v) => save(a.name, { model: v })} />

@@ -9,19 +9,25 @@ import { renderAll, requestRender } from '../project_panel.js';
 
 // ---------- visual constants (design palette) ----------
 // colors are theme tokens (styles/v2/tokens.css), so they follow light/dark; never append hex alpha to them (use color-mix)
-export const STEP_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--accent)', QUEUED: 'var(--info)', FAIL: 'var(--danger)', BLOCKED: 'var(--danger)', PENDING: 'var(--line4)' };
+export const STEP_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--accent)', QUEUED: 'var(--info)', FAIL: 'var(--danger)', BLOCKED: 'var(--danger)', PENDING: 'var(--line4)', SKIPPED: 'var(--fg2)' };
 export const FEATURE_COLOR = { DONE: 'var(--ok)', RUNNING: 'var(--accent)', QUARANTINE: 'var(--danger)', ATTENTION: 'var(--warn)', 'IN PROGRESS': 'var(--info)', 'NOT DISPATCHED': 'var(--line4)' };
 const COLOR_AMBER = 'var(--accent)', COLOR_GREEN = 'var(--ok)', COLOR_RED = 'var(--danger)', COLOR_IDLE = 'var(--line4)';
 const PENDING = 'PENDING';
-/** The fixed flow shown for every feature when the server sends no steps. */
+/** A step with no run recorded before a later step that is done (an optional step turned off, e.g. Quality): passed over, not waiting. */
+const SKIPPED = 'SKIPPED';
+/** The one pipeline every feature goes through, in every view (the server sends the same list; this is the fallback). */
 const DEFAULT_STEPS = [
-  { key: 'spec', agent: 'spec-writer', role: 'writes the spec (PATHS + criteria)' },
-  { key: 'review', agent: 'spec-reviewer', role: 'reviews the spec' },
-  { key: 'gate', agent: 'gate', role: 'approves for execution' },
-  { key: 'exec', agent: 'executor', role: 'implements' },
+  { key: 'spec', agent: 'spec-writer', role: 'writes the spec (paths + acceptance criteria)' },
+  { key: 'review', agent: 'spec-reviewer', role: 'reviews and approves the spec' },
+  { key: 'build', agent: 'executor', role: 'implements the spec' },
   { key: 'verify', agent: 'verifier', role: 'build · types · lint · tests' },
+  { key: 'quality', agent: 'quality-gate', role: 'reviews the code: spec, security, standards' },
   { key: 'commit', agent: 'commit', role: 'git checkpoint' },
 ];
+/** The name of each step on screen: the same words in the timeline, the list, the graph, the inspector and the feature page. */
+export const STEP_LABEL = { spec: 'Spec', review: 'Review', build: 'Build', exec: 'Build', verify: 'Verify', quality: 'Quality', commit: 'Commit', gate: 'Review' };
+/** The on-screen name of a step (`{key, agent}`). */
+export const stepName = (step) => (step && (STEP_LABEL[step.key] || String(step.key || step.agent || '').replace(/^./, (c) => c.toUpperCase()))) || '';
 const RUNNING_REFRESH_MS = 10000;
 const REQUEST_TIMEOUT_MS = 30000;
 
@@ -166,6 +172,10 @@ export function stateAt(n) {
       slot.runs.push({ turn: turn.n, st: event.status, out: event.out, agent_id: event.agent_id, agent: event.agent });
     }
   }
+  for (const cells of Object.values(state)) {
+    const lastDone = cells.map((cell) => cell.st).lastIndexOf('DONE');
+    cells.forEach((cell, index) => { if (index < lastDone && cell.st === PENDING && !cell.runs.length) cell.st = SKIPPED; });
+  }
   cache.states.set(limit, state);
   return state;
 }
@@ -174,7 +184,7 @@ export function stateAt(n) {
 export function featureStatusAt(id, n) {
   const at = n == null ? curN() : n, stepsOfFeature = stateAt(at)[id];
   if (!stepsOfFeature) return 'NOT DISPATCHED';
-  if (stepsOfFeature.every((step) => step.st === 'DONE')) return 'DONE';
+  if (stepsOfFeature.every((step) => step.st === 'DONE' || step.st === SKIPPED)) return 'DONE';
   if (at === liveN() && pipe.data && pipe.data.quarantine.includes(id)) return 'QUARANTINE';
   if (stepsOfFeature.some((step) => step.st === 'RUNNING')) return 'RUNNING';
   if (stepsOfFeature.some((step) => step.st === 'FAIL' || step.st === 'BLOCKED')) return 'ATTENTION';
@@ -250,9 +260,10 @@ export function loopSummary(n) {
   const extra = Object.keys(state).filter((id) => !features.some((feature) => feature.id === id));
   const ids = [...features.map((feature) => feature.id), ...extra];
   const verified = ids.filter((id) => loopStatusAt(id, at) === 'DONE').length;
+  const untested = features.filter((feature) => feature.untested && loopStatusAt(feature.id, at) === 'DONE').length;
   const running = Object.values(state).reduce((total, cells) => total + cells.filter((cell) => cell.st === 'RUNNING').length, 0);
   const spent = turnsData().filter((turn) => at == null || turn.n <= at).reduce((total, turn) => total + (isNum(turn.cost_usd) ? turn.cost_usd : 0), 0);
-  return { verified, total: ids.length, running, spent };
+  return { verified, untested, total: ids.length, running, spent };
 }
 
 /** The step of a feature worth looking at in turn `at`: the one running, else the last one that has run, else the first. */

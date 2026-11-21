@@ -67,10 +67,10 @@ export function agentRowsOf(turns, detailAgents) {
     claude: agent.claude, auth_method: agent.auth_method, auth_email: agent.auth_email, cc_account: agent.cc_account }));
 }
 
-/** The five steps of the timeline when the endpoint did not send them (older back end): derived from the roadmap status. */
+/** The six steps of the timeline when the endpoint did not send them (older back end): derived from the roadmap status. */
 export function fallbackSteps(status) {
-  const order = ['spec', 'gate', 'build', 'verify', 'commit'];
-  const reached = { pending: 0, speccing: 0, specced: 1, approved: 1, building: 2, verified: 5, blocked: 2 }[status];
+  const order = ['spec', 'review', 'build', 'verify', 'quality', 'commit'];
+  const reached = { pending: 0, speccing: 0, specced: 1, approved: 1, building: 2, verified: 6, blocked: 2 }[status];
   if (reached == null) return order.map((step) => ({ step, state: 'pending' }));
   return order.map((step, index) => ({ step, state: index < reached ? 'done' : index === reached ? (status === 'blocked' ? 'failed' : 'running') : 'pending' }));
 }
