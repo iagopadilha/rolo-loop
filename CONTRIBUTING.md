@@ -1,6 +1,6 @@
-# Contributing to agent-maestro
+# Contributing to rolo-loop
 
-Thanks for helping. This repository holds the agent-maestro plugin (orchestrator skill, agents, guard hook) and the `harness` binary (engine, local panel, CLI).
+Thanks for helping. This repository holds the rolo-loop plugin (orchestrator skill, agents, guard hook) and the `harness` binary (engine, local panel, CLI).
 
 ## Ground rules
 

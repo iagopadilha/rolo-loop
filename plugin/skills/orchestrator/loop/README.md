@@ -1,7 +1,7 @@
 # The loop runtime lives in the `harness` executable
 
 The unsupervised loop engine (`harness loop`, `harness state`, `harness notify`, `harness deliver`, `harness summary`, `harness rules`,
-`harness audit`, `harness graph`, `harness scale`) and its tests are part of the agent-maestro application, next to this plugin in the
+`harness audit`, `harness graph`, `harness scale`) and its tests are part of the rolo-loop application, next to this plugin in the
 same repository (`crates/engine-state`).
 
 Run everything through the CLI (`<repo>` = the project folder):

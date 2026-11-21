@@ -1,4 +1,4 @@
-/* "Why Agent Maestro?" dialog: opens from the "?" button and by itself on the first visit (remembered in localStorage). */
+/* "Why Rolo Loop?" dialog: opens from the "?" button and by itself on the first visit (remembered in localStorage). */
 import { html } from '../util/preact.js';
 import { openDialog } from './dialog.js';
 import { readStored, writeStored } from '../util/storage.js';
@@ -41,11 +41,11 @@ function FlowDiagram() {
   </svg>`;
 }
 
-/** Body of the "Why Agent Maestro?" dialog. */
+/** Body of the "Why Rolo Loop?" dialog. */
 function WhyContent() {
   const p = (text) => html`<p class="dlg-text">${text}</p>`;
   return html`
-    ${p('Agent Maestro is a local control panel for the spec-driven loop on top of Claude Code. It runs on your machine and uses your own Claude subscription through the claude CLI: no API key. The panel makes no request outside your computer.')}
+    ${p('Rolo Loop is a local control panel for the spec-driven loop on top of Claude Code. It runs on your machine and uses your own Claude subscription through the claude CLI: no API key. The panel makes no request outside your computer.')}
     ${p('A loop produces dozens of files: the roadmap, the state, decisions to validate, your answers, one spec per feature, the turns and the transcript of every agent. Opening them one by one does not show the whole. The app gathers them in one place: the timeline of features and turns, the specs, the questions from the loop, what to validate, the cost and the limits.')}
     <${FlowDiagram} />
     <ul class="why-list">
@@ -62,7 +62,7 @@ function WhyContent() {
 export function openWhy() {
   writeStored(SEEN_KEY, true);
   openDialog({
-    title: 'Why Agent Maestro?', width: 720, cls: 'dlg-why',
+    title: 'Why Rolo Loop?', width: 720, cls: 'dlg-why',
     content: html`<${WhyContent} />`,
     actions: [{ text: 'Got it', cls: 'btn-primary' }],
   });
@@ -75,5 +75,5 @@ export function openWhyOnFirstVisit() {
 
 /** The "?" button that opens the dialog. */
 export function WhyButton() {
-  return html`<button type="button" class="btn btn-ghost btn-help" aria-label="Why Agent Maestro?" title="Why Agent Maestro?" onClick=${openWhy}>?</button>`;
+  return html`<button type="button" class="btn btn-ghost btn-help" aria-label="Why Rolo Loop?" title="Why Rolo Loop?" onClick=${openWhy}>?</button>`;
 }

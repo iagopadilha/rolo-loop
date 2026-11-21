@@ -6,6 +6,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ### Added
 
+- The project is now **Rolo Loop** (repository `iagopadilha/rolo-loop`, plugin id `rolo-loop`, desktop app and installers "Rolo Loop"). Its mark is Rolo, the hamster in the wheel (pixel art): app icon, favicon, sidebar, README; on the loading screen Rolo runs in the wheel. Colors unchanged. Installs under the old plugin ids (`agent-maestro`, `claude-maestro`) keep working. `tools/brand_assets.py` regenerates every brand file from the art.
 - Settings v3, minimal and grouped: General, AI providers, Agents, Quality gate, Skills and MCP, Notifications, Network, Claude account, Projects and data, System. Every value is saved at once in `config.json`; secrets are encrypted per Windows user (DPAPI, `secrets.json`) and only shown masked. See `docs/CONFIG.md`.
 - AI providers in priority order with automatic fallback: Claude subscription, `claude setup-token` token, Anthropic API key (pay per use), Anthropic-compatible gateway (LiteLLM, Bedrock/Vertex proxies, local models) and Claude Code compatible local agents with their own flags; models per role; Test button.
 - Notifications: SMTP (with an Amazon SES preset) or HTTP e-mail API, webhooks with Slack, Teams, Discord or a custom JSON body template, method and headers; per-event choice; a test per channel.

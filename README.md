@@ -1,10 +1,14 @@
-# agent-maestro
+<p align="center">
+  <img src="docs/media/rolo-running.svg" alt="Rolo, the hamster in the wheel" width="132">
+</p>
 
-Unattended build loops for Claude Code, run on your own subscription.
+<h1 align="center">Rolo Loop</h1>
+
+<p align="center"><strong>Unattended, spec-driven build loops for Claude Code, on your own subscription.</strong></p>
 
 > Status: under construction. This is a ground-up Rust rebuild; nothing is released yet.
 
-agent-maestro lets you describe a goal, approve a plan and leave a loop to work through it. A planner splits the work into features; sub-agents write the spec, review it, implement and verify each feature inside an isolated git worktree; a guard hook keeps every tool call inside the lines you drew. You watch it all from a local web panel and answer when the loop asks.
+**Meet Rolo.** A hamster in its wheel runs without leaving the place and starts again at every turn: that is a loop. Rolo Loop puts that wheel to work. You describe a goal and approve a plan; a planner splits the work into features; sub-agents write each feature's spec, review it, build it, verify it and pass it through a quality gate inside an isolated git worktree; a guard hook keeps every tool call inside the lines you drew. Turn after turn, until the roadmap is done. You follow it from the desktop app (or a local web panel) and answer when the loop asks.
 
 <p align="center">
   <img src="docs/media/loop-dark.png" alt="The loop: features by turn, the inspector and the agents" width="49%">
@@ -55,14 +59,14 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 
 ## Install
 
-Download `Agent Maestro_<version>_x64-setup.exe` from the releases and run it (per user, no admin; an `.msi` exists for managed machines). It installs the app (Start menu: **Agent Maestro**), puts `harness` on your PATH and carries the plugin. Then, in Claude Code:
+Download `Rolo Loop_<version>_x64-setup.exe` from the releases and run it (per user, no admin; an `.msi` exists for managed machines). It installs the app (Start menu: **Rolo Loop**), puts `harness` on your PATH and carries the plugin. Then, in Claude Code:
 
 ```
-/plugin marketplace add "%LOCALAPPDATA%\Agent Maestro"
-/plugin install agent-maestro@agent-maestro
+/plugin marketplace add "%LOCALAPPDATA%\Rolo Loop"
+/plugin install rolo-loop@rolo-loop
 ```
 
-(or `/plugin marketplace add iagopadilha/agent-maestro` from GitHub) and `harness doctor` in a new terminal. The first start opens a guided tour of the settings. Details, signing and updates: [docs/INSTALLER.md](docs/INSTALLER.md).
+(or `/plugin marketplace add iagopadilha/rolo-loop` from GitHub) and `harness doctor` in a new terminal. The first start opens a guided tour of the settings. Details, signing and updates: [docs/INSTALLER.md](docs/INSTALLER.md).
 
 ## Build from source
 

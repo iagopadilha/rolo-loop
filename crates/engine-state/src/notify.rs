@@ -168,9 +168,9 @@ fn subject_of(ctx: &Value) -> String {
         parts.push(format!("etapa {stage}"));
     }
     if parts.is_empty() || ev == "test" {
-        format!("[Agent-Maestro] {title}")
+        format!("[Rolo Loop] {title}")
     } else {
-        format!("[Agent-Maestro] {title}: {}", parts.join(" | "))
+        format!("[Rolo Loop] {title}: {}", parts.join(" | "))
     }
 }
 
@@ -973,7 +973,7 @@ mod tests {
     fn test_notice_has_the_standard_shape() {
         let ctx = json!({"event": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "features": [["a", "verified"], ["b", "pending"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Agent-Maestro] Teste de notificação");
+        assert_eq!(subject, "[Rolo Loop] Teste de notificação");
         assert!(body.contains("Detalhes da sessão\n- ID do loop: example\n- Turno: 1\n- Custo atual: US$ 0.00\n- Quando: "));
         assert!(body.contains("Teste\nEste é um aviso de TESTE do loop. Nada precisa ser feito."));
         assert!(!body.contains("Status das features"));
@@ -985,7 +985,7 @@ mod tests {
             "Waiting for your validation: feature pay. Do this: send a test mail. This is a planned pause, not an error: everything else is done. [validate-stop:pay]";
         let ctx = json!({"event": "awaiting_user", "pause_kind": "validation_checkpoint", "running": ["pay"], "reason": reason, "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert!(subject.starts_with("[Agent-Maestro] Aguardando sua validação: pay"), "{subject}");
+        assert!(subject.starts_with("[Rolo Loop] Aguardando sua validação: pay"), "{subject}");
         assert!(body.contains("Pausa planejada, não é erro nem pergunta"), "{body}");
         let plain =
             json!({"event": "awaiting_user", "running": ["pay"], "reason": "which db?", "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
@@ -1024,7 +1024,7 @@ mod tests {
     #[test]
     fn notice_names_features_stage_and_does_not_repeat_the_title() {
         let (subject, body) = build(&env(), &named_ctx());
-        assert_eq!(subject, "[Agent-Maestro] Execução interrompida com erro: b-ui | etapa 2");
+        assert_eq!(subject, "[Rolo Loop] Execução interrompida com erro: b-ui | etapa 2");
         assert!(!body.contains("Execução interrompida"), "{body}");
         assert!(
             body.contains("- Etapa: 2")
@@ -1070,7 +1070,7 @@ mod tests {
         assert_eq!(milestones(after, after), (vec![], vec![]));
         let ctx = json!({"event": "stage_closed", "verified_now": ["a"], "stage_closed": ["1"], "features": [["a", "verified"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Agent-Maestro] Etapa concluída: a");
+        assert_eq!(subject, "[Rolo Loop] Etapa concluída: a");
         assert!(body.contains("a: verificada (ainda não entregue)") && body.contains("Etapa concluída: 1"));
         assert!(!milestones_enabled(&Env::from_pairs([("LOOP_NOTIFY_MILESTONES", "off")])));
     }

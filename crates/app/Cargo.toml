@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "app"
-description = "The Maestro application layer: domain, repositories, services, the HTTP API and the panel server"
+description = "The Rolo Loop application layer: domain, repositories, services, the HTTP API and the panel server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Unsupervised /orchestrator loop: runs `claude -p` in turns until it finishes or gets stuck.
 //!
-//! Panel: by default the loop starts (or reuses) the Maestro web panel, detached and independent: it prints `[loop] monitor: <url>`, writes
+//! Panel: by default the loop starts (or reuses) the Rolo Loop web panel, detached and independent: it prints `[loop] monitor: <url>`, writes
 //! LOOP-CMD.json and the URL in meta.json, and NEVER shuts it down when it ends. `--no-monitor` or `LOOP_MONITOR=off` turns it off. The file
 //! `.specs/project/loop/internal/PAUSE` (created by the panel) makes the loop stop at awaiting_user before the next turn.
 //!

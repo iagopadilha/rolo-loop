@@ -9,6 +9,7 @@ import { getTheme, setTheme, onThemeChange } from '../util/theme.js';
 import { navigate, currentRoute } from '../pages/panel/router.js';
 import { isDesktop } from '../util/desktop.js';
 import { TrafficLights, SidebarToggle } from './window_controls.js';
+import { RoloMark } from './rolo.js';
 
 const openSettings = () => navigate('/settings');
 
@@ -70,18 +71,9 @@ export function Icon({ name, size = 16 }) {
   return html`<svg class="sh-icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
 }
 
-/** The conductor mark: a tile in the foreground color with the bust cut out in the background color. */
-function Logo({ size = 32 }) {
-  return html`<span class="sh-logo" style=${{ width: size + 'px', height: size + 'px', flexBasis: size + 'px', borderRadius: Math.round(size / 4) + 'px' }}>
-    <svg viewBox="0 0 100 100" width=${size} height=${size} aria-hidden="true" focusable="false">
-      <path d="M14 100 C14 82 26 72 42 70 L58 70 C66 71 72 74 76 80 L76 100 Z" class="sh-logo-ink" />
-      <path d="M44 54 L56 54 L57 71 L43 71 Z" class="sh-logo-ink" />
-      <path d="M32 36 C30 20 42 10 56 11 C68 12 74 22 73 32 L82 39 L73 42 C72 52 64 58 54 58 C41 58 33 49 32 36 Z" class="sh-logo-ink" />
-      <path d="M33 30 C26 16 40 2 60 7 C50 8 44 13 42 21 Z" class="sh-logo-ink" />
-      <path d="M70 82 L86 56" class="sh-logo-stroke" stroke-width="10" stroke-linecap="round" fill="none" />
-      <path d="M87 53 L97 20" class="sh-logo-stroke" stroke-width="2.4" stroke-linecap="round" fill="none" />
-      <circle cx="97" cy="20" r="4" class="sh-logo-dot" />
-    </svg></span>`;
+/** The Rolo Loop mark (Rolo, the hamster in the wheel) on its dark tile. */
+function Logo({ size = 32, running = false }) {
+  return html`<span class="sh-logo" style=${{ width: size + 'px', height: size + 'px', flexBasis: size + 'px' }}><${RoloMark} size=${size} running=${running} /></span>`;
 }
 
 // ---------- status dot of a loop status (hub rows, sidebar) ----------
@@ -137,8 +129,8 @@ export function Sidebar({ page, project, account, activity, commands }) {
     <div class=${'sh-scrim' + (state.drawer ? ' is-on' : '')} onClick=${closeDrawer} aria-hidden="true"></div>
     <aside class=${'sh-side' + (state.drawer ? ' is-open' : '')} id="shell-sidebar" aria-label="Sidebar">
       ${isDesktop() ? html`<div class="sh-titlebar" data-drag><${TrafficLights} where="side" /><${SidebarToggle} where="side" /></div>` : null}
-      <a class="sh-brand" href="/" title="Projects" aria-label="Agent Maestro: back to the projects">
-        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Agent Maestro</span><span class="sh-brand-sub">Deterministic AI Harness</span></span></a>
+      <a class="sh-brand" href="/" title="Projects" aria-label="Rolo Loop: back to the projects">
+        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Rolo Loop</span><span class="sh-brand-sub">Spec-driven loops for Claude Code</span></span></a>
       <button type="button" class="sh-search" id="btn-search" onClick=${openSwitcher} aria-keyshortcuts="Control+K Meta+K" title=${'Search projects and pages (' + SHORTCUT + ')'}>
         <${Icon} name="search" size=${14} /><span class="sh-label sh-grow">Search</span><kbd class="sh-kbd sh-label">${SHORTCUT}</kbd></button>
       <nav class="sh-nav" aria-label="Workspace">
@@ -322,8 +314,8 @@ export function useSplash(ready) {
 /** Full-window loading screen over the page. `text` is the real phase ("Loading projects…"), never a made-up status. */
 export function Splash({ text }) {
   return html`<div class="sh-splash" id="splash" role="status" aria-live="polite">
-    <${Logo} size=${84} />
-    <div class="sh-splash-titles"><span class="sh-splash-title">Agent Maestro</span><span class="sh-splash-sub">Deterministic AI Harness</span></div>
+    <${Logo} size=${120} running=${true} />
+    <div class="sh-splash-titles"><span class="sh-splash-title">Rolo Loop</span><span class="sh-splash-sub">Spec-driven loops for Claude Code</span></div>
     <div class="sh-splash-bar" aria-hidden="true"><div></div></div>
     <span class="sh-splash-text">${text}</span></div>`;
 }

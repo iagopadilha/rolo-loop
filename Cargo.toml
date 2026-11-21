@@ -7,7 +7,7 @@ version = "0.3.1"
 edition = "2021"
 license = "MIT"
 authors = ["Iago Boardman Padilha"]
-repository = "https://github.com/iagopadilha/agent-maestro"
+repository = "https://github.com/iagopadilha/rolo-loop"
 rust-version = "1.80"
 
 [workspace.dependencies]

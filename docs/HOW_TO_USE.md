@@ -1,27 +1,27 @@
-# How to use agent-maestro
+# How to use rolo-loop
 
-agent-maestro turns a goal into a roadmap, and an approved roadmap into an unattended loop that specs, implements and verifies each feature in an isolated git worktree. You steer from a local web panel. Everything runs on your machine, on your own Claude subscription through the `claude` CLI; no API key is used.
+rolo-loop turns a goal into a roadmap, and an approved roadmap into an unattended loop that specs, implements and verifies each feature in an isolated git worktree. You steer from a local web panel. Everything runs on your machine, on your own Claude subscription through the `claude` CLI; no API key is used.
 
 ## Install
 
 1. Windows 10 or 11, `git`, and the `claude` CLI signed in.
-2. In Claude Code: `/plugin marketplace add iagopadilha/claude-craft-kit`, `/plugin install claude-craft-kit@claude-craft-kit`, then the same for `agent-maestro`.
+2. In Claude Code: `/plugin marketplace add iagopadilha/claude-craft-kit`, `/plugin install claude-craft-kit@claude-craft-kit`, then the same for `rolo-loop`.
 3. Put `harness.exe` on your PATH (the release archive has it in the plugin's `bin/` folder next to `guard.exe`).
 4. Run `harness install` once. It writes `~/.loop-harness/config.json` so the orchestrator skill finds the app and the skill folder.
 5. Run `harness doctor`. It lists what is missing: the skill, the guard, `claude`, the kit, the notification channels.
 
 ## Migrating the installed plugin
 
-The plugin id changed from `claude-maestro` to `agent-maestro` (the GitHub repository is `agent-maestro`). An install made under the old id keeps working: `harness` still finds it. To move to the new id, run in Claude Code:
+The plugin id changed from `claude-maestro` to `rolo-loop` (the GitHub repository is `rolo-loop`). An install made under the old id keeps working: `harness` still finds it. To move to the new id, run in Claude Code:
 
 ```
 /plugin uninstall claude-maestro@claude-maestro
 /plugin marketplace remove claude-maestro
-/plugin marketplace add iagopadilha/agent-maestro
-/plugin install agent-maestro@agent-maestro
+/plugin marketplace add iagopadilha/rolo-loop
+/plugin install rolo-loop@rolo-loop
 ```
 
-Then, in a terminal, run `harness install` and `harness doctor`. Agents are now addressed as `agent-maestro:executor` and so on.
+Then, in a terminal, run `harness install` and `harness doctor`. Agents are now addressed as `rolo-loop:executor` and so on.
 
 ## First project
 

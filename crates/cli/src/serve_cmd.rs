@@ -137,9 +137,9 @@ mod tests {
     fn the_desktop_app_starts_only_when_installed_and_wanted() {
         let yes = |_: &Path| true;
         let no = |_: &Path| false;
-        assert_eq!(desktop_to_launch(false, Some("C:/Apps/Agent Maestro.exe"), yes), Some(PathBuf::from("C:/Apps/Agent Maestro.exe")));
-        assert_eq!(desktop_to_launch(true, Some("C:/Apps/Agent Maestro.exe"), yes), None);
-        assert_eq!(desktop_to_launch(false, Some("C:/Apps/Agent Maestro.exe"), no), None);
+        assert_eq!(desktop_to_launch(false, Some("C:/Apps/Rolo Loop.exe"), yes), Some(PathBuf::from("C:/Apps/Rolo Loop.exe")));
+        assert_eq!(desktop_to_launch(true, Some("C:/Apps/Rolo Loop.exe"), yes), None);
+        assert_eq!(desktop_to_launch(false, Some("C:/Apps/Rolo Loop.exe"), no), None);
         assert_eq!(desktop_to_launch(false, Some(" "), yes), None);
         assert_eq!(desktop_to_launch(false, None, yes), None);
     }

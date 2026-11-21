@@ -17,7 +17,7 @@ crates/
   winproc               the only crate with unsafe code: console control, process start time, random bytes
   app                   domain, repositories, services, HTTP API, server, demo
   cli                   the `harness` executable
-  desktop               the Agent Maestro desktop app (Tauri): hosts the app server in-process, frameless window, tray, installers
+  desktop               the Rolo Loop desktop app (Tauri): hosts the app server in-process, frameless window, tray, installers
 ```
 
 ## Layers of the `app` crate

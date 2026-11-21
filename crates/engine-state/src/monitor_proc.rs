@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! Ensures the web panel (the Maestro app) for the loop and writes the command to relaunch the loop.
+//! Ensures the web panel (the Rolo Loop app) for the loop and writes the command to relaunch the loop.
 //!
 //! The panel is the multi-project app (`harness serve`): one single process for every project, INDEPENDENT of the loop (it starts
 //! detached, does not read stdin and does not die when the loop ends). Order of [`ensure_monitor`]:

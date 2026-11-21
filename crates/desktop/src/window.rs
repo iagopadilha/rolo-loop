@@ -5,7 +5,7 @@
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const MAIN_LABEL: &str = "main";
-const TITLE: &str = "Agent Maestro";
+const TITLE: &str = "Rolo Loop";
 const DEFAULT_SIZE: (f64, f64) = (1280.0, 820.0);
 const MIN_SIZE: (f64, f64) = (760.0, 520.0);
 const EXTERNAL_SCHEMES: [&str; 3] = ["http", "https", "mailto"];
@@ -57,6 +57,6 @@ mod tests {
         assert!(!ok("http://127.0.0.1:47801/"));
         assert!(!ok("http://localhost:47800/"));
         assert!(!ok("https://127.0.0.1:47800/"));
-        assert!(!ok("https://github.com/iagopadilha/claude-maestro"));
+        assert!(!ok("https://github.com/iagopadilha/rolo-loop"));
     }
 }

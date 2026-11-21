@@ -23,7 +23,8 @@ a.sh-item:hover,.sh-brand:hover{text-decoration:none;}
 .sh-brand-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
 .sh-brand-name{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;}
 .sh-brand-sub{font-size:11px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sh-logo{display:inline-block;flex:0 0 auto;background:var(--fg);overflow:hidden;line-height:0;}
+.sh-logo{display:inline-block;flex:0 0 auto;background:transparent;border-radius:22%;overflow:hidden;line-height:0;}
+.sh-logo .rolo{display:block;image-rendering:pixelated;}
 .sh-logo svg{display:block;}
 .sh-logo-ink{fill:var(--bg);} .sh-logo-stroke{stroke:var(--bg);} .sh-logo-dot{fill:var(--accent);}
 .sh-search{text-align:left;height:32px;padding:0 10px;display:flex;align-items:center;gap:8px;background:var(--fill);border:0;border-radius:8px;color:var(--fg2);font:inherit;cursor:pointer;}

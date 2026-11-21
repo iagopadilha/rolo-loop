@@ -1,5 +1,5 @@
 {
-  "name": "agent-maestro",
+  "name": "rolo-loop",
   "version": "0.3.1",
   "dependencies": [
     {
@@ -12,8 +12,8 @@
   "author": {
     "name": "Iago Boardman Padilha"
   },
-  "homepage": "https://github.com/iagopadilha/agent-maestro",
-  "repository": "https://github.com/iagopadilha/agent-maestro",
+  "homepage": "https://github.com/iagopadilha/rolo-loop",
+  "repository": "https://github.com/iagopadilha/rolo-loop",
   "license": "MIT",
   "keywords": [
     "loop-engineering",

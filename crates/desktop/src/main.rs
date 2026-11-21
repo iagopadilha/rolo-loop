@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-//! Agent Maestro desktop app: hosts the panel server (`crates/app`) in this process, or attaches to a running `harness serve`, and shows it
-//! in a frameless window. `Agent Maestro.exe [--project <folder>]`.
+//! Rolo Loop desktop app: hosts the panel server (`crates/app`) in this process, or attaches to a running `harness serve`, and shows it
+//! in a frameless window. `Rolo Loop.exe [--project <folder>]`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
@@ -62,8 +62,8 @@ fn main() {
                 Err(failure) => {
                     let handle = app.handle().clone();
                     app.dialog()
-                        .message(format!("Agent Maestro could not start.\n\n{failure}"))
-                        .title("Agent Maestro")
+                        .message(format!("Rolo Loop could not start.\n\n{failure}"))
+                        .title("Rolo Loop")
                         .kind(MessageDialogKind::Error)
                         .show(move |_| handle.exit(1));
                 }

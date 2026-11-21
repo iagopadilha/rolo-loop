@@ -146,7 +146,7 @@ impl AppDiagnosticsService<'_> {
     }
 
     /// `[{"folder", "slot", "skill", "resolved"}]` for every Standards binding of the given projects (root and subprojects), resolved the way the
-    /// runtime bundle does (user skills, toolkit, Maestro plugin, installed plugins).
+    /// runtime bundle does (user skills, toolkit, Rolo Loop plugin, installed plugins).
     pub fn check_standards_bindings(&self, project_folders: &[String], toolkit_root: &str) -> Vec<Value> {
         let plugin_root = self.app.config.ctx.plugin_root_text();
         let others = runtime_isolation::installed_plugin_skill_dirs(&self.app.env);
@@ -200,7 +200,7 @@ impl AppDiagnosticsService<'_> {
         let standards_rows = if project_folders.is_empty() { vec![] } else { self.check_standards_bindings(project_folders, &toolkit_root) };
         warnings.extend(standards_rows.iter().filter(|row| row["resolved"] != true).map(|row| {
             format!(
-                "standards: slot `{}` of {} is bound to `{}`, which is not installed (looked in ~/.claude/skills, the toolkit, the Maestro plugin and the installed plugins)",
+                "standards: slot `{}` of {} is bound to `{}`, which is not installed (looked in ~/.claude/skills, the toolkit, the Rolo Loop plugin and the installed plugins)",
                 row["slot"].as_str().unwrap_or(""),
                 row["folder"].as_str().unwrap_or(""),
                 row["skill"].as_str().unwrap_or("")

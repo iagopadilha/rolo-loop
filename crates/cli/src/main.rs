@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! `harness`: command line of agent-maestro.
+//! `harness`: command line of rolo-loop.
 
 mod access_cmd;
 mod demo_cmd;
@@ -18,7 +18,7 @@ mod verify_cmd;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "harness", version, about = "agent-maestro: loop engineering for Claude Code")]
+#[command(name = "harness", version, about = "rolo-loop: loop engineering for Claude Code")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -45,7 +45,7 @@ enum Command {
     /// Stand-in for the engine commands inside `demo` (not for direct use)
     #[command(name = "demo-engine", hide = true)]
     DemoEngine(forward::Forwarded),
-    /// Where the Maestro plugin, the orchestrator skill and the dev toolkit are
+    /// Where the Rolo Loop plugin, the orchestrator skill and the dev toolkit are
     Paths(paths::Args),
     /// Typed graph state of the loop (validate, next, graph, migrate, disjoint, loop)
     State(state_cmd::Args),

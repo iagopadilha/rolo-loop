@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "guard"
-description = "The agent-maestro PreToolUse guard hook"
+description = "The rolo-loop PreToolUse guard hook"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

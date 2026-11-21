@@ -361,7 +361,7 @@ async function shutDown() {
     await appApi.post('shutdown', {}, 15000);
     if (hubPolling) hubPolling.stop();
     hb.closed = true; draw();
-    document.title = 'app shut down · Agent Maestro';
+    document.title = 'app shut down · Rolo Loop';
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
@@ -394,7 +394,7 @@ export function Hub() {
             <${OverflowMenu}>
               <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
               ${hb.confirmShutdown ? null : html`<div id="hub-shutdown"><${Shutdown} /></div>`}
-              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agent Maestro?</button>
+              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Rolo Loop?</button>
             <//>`
           : html`<div class="header-actions" id="hub-actions">
             <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
@@ -406,7 +406,7 @@ export function Hub() {
         <div class="hub-inner">
           <section class="hub-start" aria-labelledby="hub-title">
             <h1 id="hub-title" class="hub-h1">Projects</h1>
-            <p class="hub-lead">Open a folder (new, existing, or a loop stopped midway). Maestro runs the spec-driven loop of the <span class="mono">/orchestrator</span> skill and keeps every step in files you can read.</p>
+            <p class="hub-lead">Open a folder (new, existing, or a loop stopped midway). Rolo Loop runs the spec-driven loop of the <span class="mono">/orchestrator</span> skill and keeps every step in files you can read.</p>
             <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
           </section>
           <${ProjectTable} />
@@ -429,7 +429,7 @@ export function startHub(root) {
   hubRoot = root;
   root.replaceChildren();
   onRoute(() => draw());
-  document.title = 'projects · Agent Maestro';
+  document.title = 'projects · Rolo Loop';
   maybeStartTour(); // first run: the guided tour (it waits for the splash)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;

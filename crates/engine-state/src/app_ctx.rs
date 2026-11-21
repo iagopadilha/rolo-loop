@@ -117,7 +117,7 @@ mod tests {
         let bin = dir.path().join("plugin").join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let harness = bin.join(format!("harness{}", std::env::consts::EXE_SUFFIX));
-        let gui = dir.path().join("Agent Maestro.exe");
+        let gui = dir.path().join("Rolo Loop.exe");
         let none = Env::from_pairs::<[(&str, &str); 0], &str, &str>([]);
         // no bundled harness yet: the current executable
         assert_eq!(app_exe(&none, dir.path(), &gui), gui);

@@ -13,7 +13,7 @@ const visible = async (p, sel) => p.evaluate((q) => { const e = document.querySe
 const drawer = async (page, ctx) => { if (ctx.w < 900) await click(page, "#btn-menu"); };
 // the header folds its secondary actions into "..." under 1180px
 const more = async (page, ctx) => { if (ctx.w < 1180) await click(page, "#btn-more"); };
-// the panel header always keeps Finish, Back to planning, Workspace, Copy path, Shut down and "Why Agent Maestro?" in "..."
+// the panel header always keeps Finish, Back to planning, Workspace, Copy path, Shut down and "Why Rolo Loop?" in "..."
 const panelMore = (page) => click(page, "#btn-more");
 
 module.exports = [

@@ -209,7 +209,7 @@ def corpus(sb):
                 add(variant, profile, "Glob", tool_input, tag="%s/%s/Glob/%s" % (variant, profile, json.dumps(tool_input)[:60]))
     # agents, skills, MCP
     for profile in ("orchestrator", "executor"):
-        for tool_input in [{"subagent_type": "spec-writer"}, {"subagent_type": "agent-maestro:executor-back", "model": "sonnet"}, {"subagent_type": "executor-back", "model": "opus"},
+        for tool_input in [{"subagent_type": "spec-writer"}, {"subagent_type": "rolo-loop:executor-back", "model": "sonnet"}, {"subagent_type": "executor-back", "model": "opus"},
                            {"subagent_type": "general-purpose"}, {"subagent_type": "Explore"}, {}, {"subagent_type": "verifier", "model": "claude-haiku-4-5"}]:
             for tool in ("Agent", "Task"):
                 add("plain", profile, tool, tool_input, tag="%s/%s/%s" % (profile, tool, json.dumps(tool_input)))

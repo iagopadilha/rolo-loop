@@ -24,7 +24,7 @@ pub fn is_claude_stub(exe_stem: &str) -> bool {
 
 pub fn claude_stub(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--version") {
-        println!("0.0.0 (agent-maestro demo stub)");
+        println!("0.0.0 (rolo-loop demo stub)");
         return EXIT_OK;
     }
     let mut ignored = String::new();

@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "cfg"
-description = "Configuration, environment layers and plugin/toolkit locator for agent-maestro"
+description = "Configuration, environment layers and plugin/toolkit locator for rolo-loop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -243,7 +243,7 @@ pub fn random_bytes(count: usize) -> Vec<u8> {
 }
 
 /// Extra entropy of every secret this app protects: another program running as the same user cannot unprotect them by accident.
-const SECRET_ENTROPY: &[u8] = b"agent-maestro/secrets/v1";
+const SECRET_ENTROPY: &[u8] = b"rolo-loop/secrets/v1";
 
 #[cfg(windows)]
 fn dpapi(data: &[u8], protect: bool) -> std::io::Result<Vec<u8>> {

@@ -101,7 +101,7 @@ When the user asks for changes after reviewing the decisions, the app appends a 
 A one-off doubt (small, reversible divergence) **does not stop the turn**: the orchestrator chooses the conservative path and writes a line in `.specs/project/loop/VALIDATE.md` (`- [<slug|general>] turn=<N> level=<important|critical> <doubt> | chose: <choice> | revert: <how>`). Only a blocking question (access, important business rule, discrepancy, architecture, scope, data, irreversible, PROD, spec vs rule) becomes `awaiting_user`. `VALIDATE.md` appears in the summary, in the completion notification, in the panel and in the PR. Quarantine (`blocked`) only pauses the loop when another feature depends on the blocked one (`--pause-on-blocked` always pauses; `--continue-on-blocked` never). The worktree `../<project>-worktree-loop` belongs to the engine: never create, delete or switch worktree on your own in headless (the manual worktree protocol of `dispatch.md` only applies in interactive mode).
 
 ## When testing
-`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the agent-maestro repository (engine, app and guard).
+`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the rolo-loop repository (engine, app and guard).
 
 ## Permission denied during a turn (only stops when it matters)
 
