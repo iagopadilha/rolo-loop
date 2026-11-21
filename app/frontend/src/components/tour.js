@@ -104,6 +104,9 @@ function Tour({ start }) {
 /** Opens the tour at `step` (on the projects page; from a project page it goes there first). */
 export function startTour(step = 0) {
   if (location.pathname !== '/') { location.assign('/?tour=' + step); return; }
+  try { localStorage.setItem('harness.why.seen.v1', 'true'); } catch (_) { /* the panel may show its first-visit explainer once */ }
+  const open = document.querySelector('dialog[open]');
+  if (open && open.close) open.close(); // the tour is the first-run guide: no dialog over it
   if (!root) { root = document.createElement('div'); root.id = 'tour-root'; document.body.appendChild(root); }
   render(null, root);
   render(html`<${Tour} start=${Math.max(0, Math.min(STEPS.length - 1, step))} />`, root);

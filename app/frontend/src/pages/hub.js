@@ -10,7 +10,7 @@ import { toast } from '../components/toast.js';
 import { openDialog } from '../components/dialog.js';
 import { pickFolderNativeFirst } from '../components/folder_browser.js';
 import { Conformance, conformanceDefault } from '../components/conformance.js';
-import { openWhyOnFirstVisit, openWhy, WhyButton } from '../components/why_panel.js';
+import { openWhy, WhyButton } from '../components/why_panel.js';
 import { currentRoute, onRoute, navigate } from './panel/router.js';
 import { SettingsPage } from './settings_page.js';
 import { checksOf, failText, maskIn, sendTestNotification } from './settings_system.js';
@@ -451,5 +451,5 @@ export function startHub(root) {
   });
   hubPolling.now(0);
   loadInfo();
-  openWhyOnFirstVisit();
+  // the first-run guide is the tour (maybeStartTour); "Why Rolo Loop?" stays one click away (the ? button)
 }
