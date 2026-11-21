@@ -41,7 +41,7 @@ Want to look first? `harness demo` opens the app on a fictional project. It neve
 
 ## Good to know
 
-- **Requirements:** Windows 10 or 11, `git`, and an agent CLI: the `claude` CLI or a Claude Code compatible command. The dev skills come from the companion plugin [claude-craft-kit](https://github.com/iagopadilha/claude-craft-kit).
+- **Requirements:** Windows 10 or 11, `git`, and an agent CLI: the `claude` CLI or a Claude Code compatible command. The dev skills come from the companion plugin [Craft Dev Toolkit](https://github.com/iagopadilha/craft-dev-toolkit).
 - **Safe by default:** a guard checks every tool call of every agent, the agents work in a separate git worktree, only the loop branch is ever pushed, and API keys are encrypted for your Windows user and never reach the agents.
 - **Costs:** loops use your subscription or API credit. Set a cost cap per loop; when every provider is at its limit, the loop waits for the reset.
 - **Limits:** Windows only for now. The guard reads commands, it is not a sandbox (see [the guard notes](plugin/skills/orchestrator/hooks/README.md)).

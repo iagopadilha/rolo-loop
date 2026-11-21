@@ -5,7 +5,7 @@ rolo-loop turns a goal into a roadmap, and an approved roadmap into an unattende
 ## Install
 
 1. Windows 10 or 11, `git`, and the `claude` CLI signed in.
-2. In Claude Code: `/plugin marketplace add iagopadilha/claude-craft-kit`, `/plugin install claude-craft-kit@claude-craft-kit`, then the same for `rolo-loop`.
+2. In Claude Code: `/plugin marketplace add iagopadilha/craft-dev-toolkit`, `/plugin install craft-dev-toolkit@craft-dev-toolkit`, then the same for `rolo-loop`.
 3. Put `harness.exe` on your PATH (the release archive has it in the plugin's `bin/` folder next to `guard.exe`).
 4. Run `harness install` once. It writes `~/.loop-harness/config.json` so the orchestrator skill finds the app and the skill folder.
 5. Run `harness doctor`. It lists what is missing: the skill, the guard, `claude`, the kit, the notification channels.

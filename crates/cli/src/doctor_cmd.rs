@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! `harness doctor [--json] [--project <repo>] [--data-dir D] [--toolkit-optional]`: diagnostics (the same as `GET /api/app/info`); FAILs when the
-//! claude-craft-kit toolkit is not found; with `--project`, WARNs for each Standards slot whose skill is not installed. `--access` is the access
+//! craft-dev-toolkit toolkit is not found; with `--project`, WARNs for each Standards slot whose skill is not installed. `--access` is the access
 //! report (what a `claude -p` of the app can reach).
 
 use crate::serve_cmd::apply_data_dir;
@@ -14,9 +14,9 @@ use engine_state::monitor_proc;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-const TOOLKIT_INSTALL_LINES: [&str; 2] = ["/plugin marketplace add iagopadilha/claude-craft-kit", "/plugin install claude-craft-kit@claude-craft-kit"];
+const TOOLKIT_INSTALL_LINES: [&str; 2] = ["/plugin marketplace add iagopadilha/craft-dev-toolkit", "/plugin install craft-dev-toolkit@craft-dev-toolkit"];
 /// not found / "toolkit X found, Y needed" / "toolkit <path> lacks <file>".
-const TOOLKIT_PROBLEM_PREFIXES: [&str; 2] = ["claude-craft-kit not found", "toolkit "];
+const TOOLKIT_PROBLEM_PREFIXES: [&str; 2] = ["craft-dev-toolkit not found", "toolkit "];
 
 #[derive(ClapArgs)]
 pub struct Args {
@@ -37,14 +37,14 @@ pub struct Args {
     /// with --access: do not run the run-time egress layer self test
     #[arg(long)]
     no_selftest: bool,
-    /// a missing or too old claude-craft-kit is a warning, not a problem (the installer uses it)
+    /// a missing or too old craft-dev-toolkit is a warning, not a problem (the installer uses it)
     #[arg(long)]
     toolkit_optional: bool,
 }
 
 /// `(problems, warnings)` for the toolkit skills that are missing: one line per skill, required = problem (fails the doctor), optional = warning.
 fn toolkit_skill_messages(rows: &[Value]) -> (Vec<String>, Vec<String>) {
-    let line = |kind: &str, row: &Value| format!("claude-craft-kit lacks the {kind} skill `{0}` (skills/{0}/SKILL.md not found)", row["skill"].as_str().unwrap_or(""));
+    let line = |kind: &str, row: &Value| format!("craft-dev-toolkit lacks the {kind} skill `{0}` (skills/{0}/SKILL.md not found)", row["skill"].as_str().unwrap_or(""));
     let missing = |row: &&Value| row["present"] != true;
     let problems = rows.iter().filter(|r| r["required"] == true).filter(missing).map(|r| line("required", r)).collect();
     let warnings = rows.iter().filter(|r| r["required"] != true).filter(missing).map(|r| line("optional", r)).collect();

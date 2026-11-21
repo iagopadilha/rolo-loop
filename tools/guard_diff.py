@@ -226,7 +226,7 @@ def corpus(sb):
     with open(skills, "w") as handle:
         json.dump({"executor": ["backend-dev", "github"], "orchestrator": ["orchestrator"]}, handle)
     for profile in ("executor", "orchestrator", "verifier"):
-        for tool_input in [{"skill": "backend-dev"}, {"skill": "claude-craft-kit:github"}, {"skill": "tlc-spec-driven"}, {"command": "/orchestrator"}, {}]:
+        for tool_input in [{"skill": "backend-dev"}, {"skill": "craft-dev-toolkit:github"}, {"skill": "tlc-spec-driven"}, {"command": "/orchestrator"}, {}]:
             add("plain", profile, "Skill", tool_input, env={"LOOP_SKILLS_FILE": skills}, tag="skill/%s/%s" % (profile, json.dumps(tool_input)))
             add("plain", profile, "Skill", tool_input, tag="skill-off/%s/%s" % (profile, json.dumps(tool_input)))
     # auto profile

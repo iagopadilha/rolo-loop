@@ -10,7 +10,7 @@ crates/
   cfg                   configuration sources and precedence, locating plugin, skill, guard and kit
   pycompat              Python behaviors the contracts depend on (regex, json, paths, urlsplit)
   mcp-policy            MCP allow/deny policy shared by guard and app
-  egress-policy         network list grammar and judgement (also used by claude-craft-kit)
+  egress-policy         network list grammar and judgement (also used by craft-dev-toolkit)
   guard-core            the rules of the hook: shell lexer, paths, sql, network, scope, profiles
   guard                 the hook executable
   engine-state          the loop: state machine, ROADMAP grammar, turns, gates, delivery, notify

@@ -13,7 +13,7 @@
 //! roadmapmap, subprojects, systemmap, spec, executor, verifier; `auto` = orchestrator (the inline hook `--profile auto` of the loop turns
 //! and of app jobs with no `hook_profile`; the guard resolves it to the agent's profile or, for the main session, to `orchestrator`).
 //!
-//! Skill sources, first folder with a SKILL.md wins: `<LOOP_CLAUDE_HOME>/skills/<name>`, the dev toolkit (`claude-craft-kit`), the Maestro
+//! Skill sources, first folder with a SKILL.md wins: `<LOOP_CLAUDE_HOME>/skills/<name>`, the dev toolkit (`craft-dev-toolkit`, or `claude-craft-kit` for older installs), the Rolo Loop
 //! plugin's `skills/`, then every other installed plugin cache (for the skills the projects bind to their standards slots). The skills bound
 //! in the `## Standards` section of the project's `CLAUDE.md` files join the allowlist of every profile that already has a dev skill, plus
 //! the verifier.

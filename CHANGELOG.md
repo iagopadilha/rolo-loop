@@ -5,6 +5,8 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 ## [Unreleased]
 
 ### Changed
+- The companion toolkit is now **Craft Dev Toolkit** (`iagopadilha/craft-dev-toolkit`, plugin id `craft-dev-toolkit`); an install under the old id `claude-craft-kit` is still found, and a sibling clone is looked for under both folder names.
+- Security reports go through GitHub private vulnerability reporting instead of an e-mail address.
 
 - The loop screen shows one deterministic pipeline, the same in the timeline, the list, the graph, the inspector, the feature page and Settings: **Spec → Review → Build → Verify → Quality → Commit**. The spec approval (the old separate "gate" step) closes Review; the quality-gate agent has its own Quality step instead of counting as Verify. A step with no run before a later finished step shows as skipped (an optional agent turned off), never as pending.
 - Graph view: every box names its step, with the state and the agent under it; the hub on the left is the turn ("Turn N"), not an "orchestrator" node.
