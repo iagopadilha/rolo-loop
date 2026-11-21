@@ -17,7 +17,7 @@ egress-policy = { path = "../egress-policy" }
 winproc = { path = "../winproc" }
 serde_json = { workspace = true }
 sha1 = "0.10"
-sha2 = "0.10"
+sha2 = "0.11"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset", "parsing"] }
 tempfile = { workspace = true }
 ureq = { version = "2", default-features = false, features = ["tls"] }
