@@ -238,7 +238,9 @@ pub fn carry_setup_files(repo: &str, work: &str, entry: Option<&Map<String, Valu
         }
         let join = |base: &str| path.split('/').fold(PathBuf::from(base), |acc, p| acc.join(p));
         let (source, target) = (join(repo), join(work));
-        if !source.is_file() || target.exists() {
+        // a tracked setup file is already in the fresh worktree, at its committed version: the user's uncommitted version replaces it, but
+        // never over a change made in the worktree itself
+        if !source.is_file() || (target.exists() && (same_bytes(&source, &target) || !clean_in(work, &path))) {
             continue;
         }
         let _ = std::fs::create_dir_all(target.parent().expect("has parent"));
@@ -315,6 +317,12 @@ fn same_bytes(first: &Path, second: &Path) -> bool {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
+}
+
+/// True when `path` has no change in the git tree `work` (an untracked or modified file is not clean; neither is a folder git cannot read).
+fn clean_in(work: &str, path: &str) -> bool {
+    let (code, out, _) = run_timeout_raw("git", &["-C", work, "status", "--porcelain", "--", path], None, GIT_TIMEOUT_SECONDS);
+    code == 0 && out.trim().is_empty()
 }
 
 /// `.env.test` and `NETWORK.json` of `repo`, when they exist, copied over the worktree's (also when `.specs/project` is versioned and
@@ -431,6 +439,31 @@ mod tests {
         let p = root.join(rel);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, text).unwrap();
+    }
+
+    #[test]
+    fn a_tracked_setup_file_changed_in_the_repo_replaces_the_committed_copy_of_the_worktree() {
+        let repo = repo();
+        let r = repo.path().display().to_string();
+        write(repo.path(), "CLAUDE.md", "<!-- maestro:context -->
+");
+        git(repo.path(), &["add", "-A"]);
+        git(repo.path(), &["commit", "-q", "-m", "context"]);
+        let work = tempfile::tempdir().unwrap();
+        let w = work.path().join("wt").display().to_string();
+        git(repo.path(), &["worktree", "add", "-q", &w, "-b", "loop/x"]);
+        // the setup writes the Conformance block in the user's folder and leaves it uncommitted (the release-candidate run)
+        write(repo.path(), "CLAUDE.md", "<!-- maestro:context -->
+<!-- CONFORMANCE:BEGIN -->
+Conformance: STANDARD
+<!-- CONFORMANCE:END -->
+");
+        assert_eq!(carry_setup_files(&r, &w, None, true), vec!["CLAUDE.md"]);
+        assert!(std::fs::read_to_string(Path::new(&w).join("CLAUDE.md")).unwrap().contains("CONFORMANCE"));
+        // a change made in the worktree itself is never overwritten
+        write(Path::new(&w), "CLAUDE.md", "edited in the worktree");
+        assert!(carry_setup_files(&r, &w, None, true).is_empty());
+        assert_eq!(std::fs::read_to_string(Path::new(&w).join("CLAUDE.md")).unwrap(), "edited in the worktree");
     }
 
     #[test]

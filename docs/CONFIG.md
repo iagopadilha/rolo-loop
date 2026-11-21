@@ -77,6 +77,10 @@ it), `warn` reports, `off` skips the check.
 **Amazon SES** uses its SMTP interface: host `email-smtp.<region>.amazonaws.com`, port 587, STARTTLS, SES SMTP credentials.
 **Body template placeholders** (filled JSON-escaped): `{{event}} {{project}} {{subject}} {{body}} {{url}} {{turn}} {{cost}} {{at}}`.
 
+## Keep the loop going (`loop_keep_going`)
+
+Settings > General. Off by default. On, every loop start gets `--keep-going`: work a turn leaves outside the features in progress is committed as a checkpoint on the loop branch (every turn, not only the first), and a blocked feature is set aside while the others go on. The loop still stops for a decision only you can make, the budget or cost cap, and real errors. Setup files (the Conformance block of `CLAUDE.md`, the codebase maps) are always committed as setup without stopping, with this switch on or off.
+
 ## Guided tour (`onboarding`)
 
 `{"done": false, "step": 0}`. The tour opens on the projects page until it is finished or skipped; **Settings > General > Start tour** opens it
