@@ -22,7 +22,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
@@ -58,7 +58,7 @@ jobs:
           "sha256=$hash" >> $env:GITHUB_OUTPUT
           Write-Host "$name sha256 $hash"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.zip.outputs.name }}
           path: ${{ steps.zip.outputs.name }}
