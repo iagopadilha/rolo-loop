@@ -5,6 +5,7 @@
 
 mod host;
 mod tray;
+mod updates;
 mod window;
 
 use host::Host;
@@ -49,6 +50,7 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| on_second_launch(app, args)))
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED).build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let env = cfg::Env::process();
             let stopped = app.handle().clone();
@@ -58,6 +60,7 @@ fn main() {
                     app.manage(Arc::new(host));
                     window::create(app.handle(), &first_url, &panel_url)?;
                     tray::create(app.handle())?;
+                    updates::start(app.handle());
                 }
                 Err(failure) => {
                     let handle = app.handle().clone();

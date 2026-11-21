@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! Tray icon: a click shows the window; the menu opens it or quits. Quitting while a loop or a job runs asks first (the loop's state is in
+//! Tray icon: a click shows the window; the menu opens it, checks for updates or quits. Quitting while a loop or a job runs asks first (the loop's state is in
 //! the project files, so it can be resumed from the panel later).
 
 use crate::host::Host;
@@ -12,11 +12,13 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 const OPEN_ID: &str = "open";
 const QUIT_ID: &str = "quit";
+const UPDATE_ID: &str = "update";
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, OPEN_ID, "Open Rolo Loop", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, UPDATE_ID, "Check for updates", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, QUIT_ID, "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open, &update, &quit_item])?;
     let mut builder = TrayIconBuilder::with_id("main").tooltip("Rolo Loop").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -24,6 +26,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     builder
         .on_menu_event(|app, event| match event.id.as_ref() {
             OPEN_ID => show_main(app),
+            UPDATE_ID => crate::updates::check_now(app),
             QUIT_ID => quit(app),
             _ => {}
         })

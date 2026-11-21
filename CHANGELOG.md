@@ -4,8 +4,13 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
 ### Added
 
+- **Keep the loop going** (Settings > General, `--keep-going`): unattended mode. Work a turn leaves outside the features becomes a checkpoint commit on every turn and a blocked feature is set aside while the others go on; the loop still stops for a decision only you can make, the budget or cost cap and real errors.
+- In-app updates of the desktop app from GitHub Releases (signed `latest.json`): checked 30 s after start and every 6 h, **Check for updates** in the tray; installs only after you confirm and never while a loop or a job runs.
+- A running loop shows Rolo running in the wheel as its status icon (projects list, sidebar, page states).
 - The project is now **Rolo Loop** (repository `iagopadilha/rolo-loop`, plugin id `rolo-loop`, desktop app and installers "Rolo Loop"). Its mark is Rolo, the hamster in the wheel (pixel art): app icon, favicon, sidebar, README; on the loading screen Rolo runs in the wheel. Colors unchanged. Installs under the old plugin ids (`agent-maestro`, `claude-maestro`) keep working. `tools/brand_assets.py` regenerates every brand file from the art.
 - Settings v3, minimal and grouped: General, AI providers, Agents, Quality gate, Skills and MCP, Notifications, Network, Claude account, Projects and data, System. Every value is saved at once in `config.json`; secrets are encrypted per Windows user (DPAPI, `secrets.json`) and only shown masked. See `docs/CONFIG.md`.
 - AI providers in priority order with automatic fallback: Claude subscription, `claude setup-token` token, Anthropic API key (pay per use), Anthropic-compatible gateway (LiteLLM, Bedrock/Vertex proxies, local models) and Claude Code compatible local agents with their own flags; models per role; Test button.
@@ -32,6 +37,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Panel: the navbar status of a finished loop opens the Finish dialog instead of a second summary (F3); a question opens by itself only when no other dialog is open (F4).
 
 ### Changed
+- The first-run guide is the guided tour only: the "Why Rolo Loop?" dialog no longer opens over it (it stays on the ? button).
 - The standard development command (`dotnet run`, `npm run dev`, ...) is released by default and asks nothing. Migrations still ask once; production is never released.
 
 - Readiness: a well-known root file (CLAUDE.md, README, licence, CI folders, repo settings) no longer warns as "outside any subproject" (W2); the `auto` permission mode is probed from the `claude` help and nothing is said when it works (W4); the forgotten-dependencies warning points at the one-click apply (W3).
@@ -79,6 +85,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Windows installers: NSIS `-setup.exe` (per user) and `.msi` (per machine), with `harness` on PATH, the guard and the plugin (the install folder is a local Claude Code marketplace). `harness install --desktop-exe --path add|remove`. Release workflow `release-desktop.yml`. See `docs/INSTALLER.md`.
 
 ### Fixed
+- Loop: a tracked setup file the setup changed in your folder (the Conformance block of `CLAUDE.md`) is now carried into the loop worktree. Before, the worktree kept the committed copy, so the orchestrator asked the Conformance again, the automatic answer could pick the other option, and the changed file stopped the loop as a dirty tree. A setup file left uncommitted is now committed as setup instead of stopping the loop.
 
 - No console window ever flashes: every child process starts with a hidden console (background children no longer use `DETACHED_PROCESS`, which disabled `CREATE_NO_WINDOW`).
 - The hub list answers within 1.5 s even when a project is slow to read; the checklist reuses the subproject detection (a home-folder project went from 9 s per poll to 0.09 s).

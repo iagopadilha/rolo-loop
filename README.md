@@ -25,13 +25,15 @@
 - `harness`, one Windows binary: the loop engine, the local panel server and the command line.
 - `guard`, the hook binary Claude Code runs before every tool call.
 - The panel: a small Preact app served on `127.0.0.1`, shown by the desktop app (or a browser with `harness serve --no-desktop`).
+- The Rolo Loop desktop app (Windows installer): the panel in a native window, a tray icon that keeps a running loop alive when you close the window, and in-app updates.
+- Settings: AI providers in priority order, agents and their models, the quality gate, skills and MCP tools, notifications (Windows, e-mail, webhook). Secrets are encrypted for your Windows user.
 
 ## How it works
 
 1. In Claude Code, the orchestrator skill maps your code, writes `.specs/project/ROADMAP.md` (a typed graph of features with dependencies, stages and paths) and stops.
 2. In the panel you read the graph, run the preflight and approve. Approval is a click; no agent can do it for you.
 3. The loop runs turns of `claude -p`. Each turn takes the features that are ready and runs six steps for each: spec, review, gate, execute, verify, commit. State is in files, so a stopped loop resumes.
-4. When something needs you (a choice, a blocked action), the loop stops and asks in the panel.
+4. When something needs you (a choice, a blocked action), the loop stops and asks in the panel. Turn on **Keep the loop going** (Settings > General) and it never stops for housekeeping: leftover work becomes a checkpoint commit and a blocked feature is set aside while the others go on.
 5. Deliver pushes the feature branch and opens the pull request. It is the only push there is.
 
 More in [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md); every setting in [docs/CONFIG.md](docs/CONFIG.md). The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the panel API in [docs/API.md](docs/API.md), and how the skill finds the app in [docs/SKILL_BRIDGE.md](docs/SKILL_BRIDGE.md).
@@ -52,7 +54,7 @@ Opens the panel on a fictional project with moving data. It never calls `claude`
 ## Limits, honestly
 
 - Loops spend your Claude subscription usage; long loops can reach a usage window and then wait for the reset.
-- The loop runs on the `claude` command only (one account): a usage limit waits for the reset.
+- When every AI provider in your list reaches its usage limit, the loop waits for the first reset.
 - Only the feature branch is ever pushed. Protected branches are never touched by the loop.
 - The guard is text analysis of commands, not a sandbox: a program that builds its target at run time is judged only by the run-time network layer, not by the guard. Read the residual-risk notes in `plugin/skills/orchestrator/hooks/README.md`.
 - Windows only for now.

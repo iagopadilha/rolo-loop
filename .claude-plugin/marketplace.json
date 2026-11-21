@@ -10,7 +10,7 @@
       "name": "rolo-loop",
       "source": "./plugin",
       "description": "Orchestrator skill, subagents and guard hook. Pairs with the harness executable (harness install), which runs the loop and shows it as a graph.",
-      "version": "0.3.1"
+      "version": "0.4.0"
     }
   ]
 }

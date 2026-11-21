@@ -66,3 +66,5 @@ cargo tauri signer generate -w ~/.tauri/rolo-loop.key
 ```
 
 Keep the private key and its password out of the repository (CI secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); put the public key in `plugins.updater.pubkey`. Losing the private key means existing installs can no longer update. The release workflow publishes `latest.json` next to the installers on GitHub Releases.
+
+How the app uses it: 30 seconds after it starts and then every 6 hours it reads `releases/latest/download/latest.json`; the tray menu has **Check for updates**. A newer version is installed only after you click **Install now**, and never while a loop or a job runs (the installer replaces the app's files, which would stop the loop): the next check asks again. The download is verified against the public key before it runs. The workflow creates a **draft** release: publish it on GitHub and only then does `latest` point to it.
