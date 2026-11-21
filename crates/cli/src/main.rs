@@ -18,7 +18,7 @@ mod verify_cmd;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "harness", version, about = "rolo-loop: loop engineering for Claude Code")]
+#[command(name = "harness", version, about = "rolo-loop: loop engineering for AI coding agents")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

@@ -8,7 +8,7 @@ import { navigate } from '../pages/panel/router.js';
 
 const STEPS = [
   { route: '/loop', target: null, title: 'Welcome to Rolo Loop',
-    body: 'Rolo Loop runs spec-driven build loops with Claude Code on your machine. You describe a goal, approve a plan, and a team of agents writes each feature\'s spec, builds it, verifies it and reviews it, one feature per lane, while you follow here and answer when they ask.',
+    body: 'Rolo Loop runs spec-driven build loops with AI coding agents (Claude Code or a compatible CLI) on your machine. You describe a goal, approve a plan, and a team of agents writes each feature\'s spec, builds it, verifies it and reviews it, one feature per lane, while you follow here and answer when they ask.',
     why: 'A few settings decide which AI works for you, which agents and tools it may use, and how it reaches you. This tour shows each one once, in about two minutes.' },
   { route: '/settings/agents', target: '#ag-preview', title: 'The agents of a loop',
     body: 'Every feature goes through Spec, Gate, Build, Verify, Quality and Commit. Below the preview you choose the model of each agent and turn off the optional ones (spec review, flow validation, quality gate).',

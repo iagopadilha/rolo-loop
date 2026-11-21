@@ -55,7 +55,7 @@ def main():
         ROOT / 'crates' / 'desktop' / 'icons' / 'icon.svg': svg(art, 1024),
         ROOT / 'app' / 'frontend' / 'assets' / 'rolo.svg': svg(art, 64),
         ROOT / 'docs' / 'media' / 'rolo.svg': svg(art, 160),
-        ROOT / 'docs' / 'media' / 'rolo-running.svg': svg(art, 200, running=True, title='Rolo, the hamster in the wheel'),
+        ROOT / 'docs' / 'media' / 'rolo-running.svg': svg(art, 200, running=True, title='Rolo, the mouse in the wheel'),
     }
     for path, text in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)

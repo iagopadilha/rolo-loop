@@ -26,7 +26,7 @@ The loop engine and the panel live in the `app/` folder of the plugin's reposito
 ```
 harness install
 ```
-It writes `~/.loop-harness/config.json` (`app_root_dir`, the orchestrator skill folder), which is how the skill finds the app. It runs locally with your own Claude subscription through the `claude` CLI; there is no API token to configure. `harness doctor` checks the skill, the guard, `claude` and the notification channels.
+It writes `~/.loop-harness/config.json` (`app_root_dir`, the orchestrator skill folder), which is how the skill finds the app. It runs locally with the AI providers of Settings, in priority order: your subscription through the `claude` CLI (nothing to configure), a pay-per-use API key, a gateway or a compatible CLI. `harness doctor` checks the skill, the guard, `claude` and the notification channels.
 
 ### 1. Map the repo, once
 ```

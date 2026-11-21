@@ -387,7 +387,7 @@ export function Hub() {
         <strong>App disconnected</strong>
         <span id="banner-offline-detail" />
       </div>
-      <${ShellHeader} cls="hub-header" crumbs=${[{ label: 'Projects' }]}
+      <${ShellHeader} cls="hub-header" crumbs=${currentRoute().name === 'settings' ? [{ label: 'Projects', href: '#/loop' }, { label: 'Settings' }] : [{ label: 'Projects' }]}
         end=${(compact) => compact
           ? html`<div class="header-actions" id="hub-actions"><button type="button" class="btn btn-primary" id="hub-open" onClick=${openFolder}>Open folder</button>
               ${hb.confirmShutdown ? html`<div id="hub-shutdown"><${Shutdown} /></div>` : null}</div>

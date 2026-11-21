@@ -45,7 +45,7 @@ function FlowDiagram() {
 function WhyContent() {
   const p = (text) => html`<p class="dlg-text">${text}</p>`;
   return html`
-    ${p('Rolo Loop is a local control panel for the spec-driven loop on top of Claude Code. It runs on your machine and uses your own Claude subscription through the claude CLI: no API key. The panel makes no request outside your computer.')}
+    ${p('Rolo Loop is a local control panel for the spec-driven loop on top of AI coding agents (Claude Code or a compatible CLI). It runs on your machine with the AI you choose in Settings: your subscription, a pay-per-use API key or a gateway, in priority order. The panel itself makes no request outside your computer.')}
     ${p('A loop produces dozens of files: the roadmap, the state, decisions to validate, your answers, one spec per feature, the turns and the transcript of every agent. Opening them one by one does not show the whole. The app gathers them in one place: the timeline of features and turns, the specs, the questions from the loop, what to validate, the cost and the limits.')}
     <${FlowDiagram} />
     <ul class="why-list">

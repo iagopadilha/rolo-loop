@@ -1,4 +1,4 @@
-/* The Rolo Loop mark: Rolo, the hamster in the wheel. Static everywhere the brand shows (sidebar, dialogs, favicon); `running` on the loading
+/* The Rolo Loop mark: Rolo, the mouse in the wheel. Static everywhere the brand shows (sidebar, dialogs, favicon); `running` on the loading
    screen: the spokes turn in discrete steps (pixel-art motion), Rolo bounces and the two pairs of feet alternate. Runs with SVG animation (no
    timers); with "reduce motion" on, the mark stays still. Art: rolo_art.js. */
 import { html } from '../util/preact.js';

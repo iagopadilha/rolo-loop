@@ -17,7 +17,7 @@ The specification engine is still `tlc-spec-driven` (a skill of the claude-craft
 
 ## Runtime: the Rolo Loop app (loop engine, back end and panel)
 
-This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.exe` (plugin root) and the plugin's `agents/*.md`. The **runtime** is the Rolo Loop app, in the `app/` folder of the same repository: the loop engine, a local HTTP server and a multi-project web panel. It runs on your machine with your own Claude subscription through the `claude` CLI (no API token). The old `skills/orchestrator/loop/` scripts no longer exist: do not look for them.
+This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.exe` (plugin root) and the plugin's `agents/*.md`. The **runtime** is the Rolo Loop app, in the `app/` folder of the same repository: the loop engine, a local HTTP server and a multi-project web panel. It runs on your machine with the AI providers of Settings, in priority order (subscription, pay-per-use API key, gateway or a compatible CLI). The old `skills/orchestrator/loop/` scripts no longer exist: do not look for them.
 
 **Find the `harness` executable, once per session.** Every command below starts with `harness`: run `harness --version` (one line, PowerShell or bash). It prints a version: go on. It fails (not on PATH): tell the user to put the rolo-loop `harness` executable on PATH (or give you its full path, which you then use in place of `harness`) and to run once `harness install` (it writes `~/.loop-harness/config.json` with the app folder and this skill's folder), and **stop**. Do not look for it anywhere else.
 

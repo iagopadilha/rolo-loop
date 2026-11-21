@@ -11,7 +11,9 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - **Keep the loop going** (Settings > General, `--keep-going`): unattended mode. Work a turn leaves outside the features becomes a checkpoint commit on every turn and a blocked feature is set aside while the others go on; the loop still stops for a decision only you can make, the budget or cost cap and real errors.
 - In-app updates of the desktop app from GitHub Releases (signed `latest.json`): checked 30 s after start and every 6 h, **Check for updates** in the tray; installs only after you confirm and never while a loop or a job runs.
 - A running loop shows Rolo running in the wheel as its status icon (projects list, sidebar, page states).
-- The project is now **Rolo Loop** (repository `iagopadilha/rolo-loop`, plugin id `rolo-loop`, desktop app and installers "Rolo Loop"). Its mark is Rolo, the hamster in the wheel (pixel art): app icon, favicon, sidebar, README; on the loading screen Rolo runs in the wheel. Colors unchanged. Installs under the old plugin ids (`agent-maestro`, `claude-maestro`) keep working. `tools/brand_assets.py` regenerates every brand file from the art.
+- Rolo is now a mouse (round pink ears, snout, tail) drawn in `tools/rolo_mouse_art.py`; app icon, favicon and README marks regenerated.
+- README GIFs (`tools/e2e/readme_gifs.js`, recorded from `harness demo` with the same leak check as the screenshots) and a Usage section.
+- The project is now **Rolo Loop** (repository `iagopadilha/rolo-loop`, plugin id `rolo-loop`, desktop app and installers "Rolo Loop"). Its mark is Rolo, the mouse in the wheel (pixel art): app icon, favicon, sidebar, README; on the loading screen Rolo runs in the wheel. Colors unchanged. Installs under the old plugin ids (`agent-maestro`, `claude-maestro`) keep working. `tools/brand_assets.py` regenerates every brand file from the art.
 - Settings v3, minimal and grouped: General, AI providers, Agents, Quality gate, Skills and MCP, Notifications, Network, Claude account, Projects and data, System. Every value is saved at once in `config.json`; secrets are encrypted per Windows user (DPAPI, `secrets.json`) and only shown masked. See `docs/CONFIG.md`.
 - AI providers in priority order with automatic fallback: Claude subscription, `claude setup-token` token, Anthropic API key (pay per use), Anthropic-compatible gateway (LiteLLM, Bedrock/Vertex proxies, local models) and Claude Code compatible local agents with their own flags; models per role; Test button.
 - Notifications: SMTP (with an Amazon SES preset) or HTTP e-mail API, webhooks with Slack, Teams, Discord or a custom JSON body template, method and headers; per-event choice; a test per channel.
@@ -37,6 +39,8 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 - Panel: the navbar status of a finished loop opens the Finish dialog instead of a second summary (F3); a question opens by itself only when no other dialog is open (F4).
 
 ### Changed
+- Descriptions everywhere (README, installer, plugin, app, tour) say AI coding agents (Claude Code or a compatible CLI) on a subscription or a pay-per-use API key, instead of Claude Code on a subscription only.
+- Settings shows "Projects / Settings" in the header.
 - The first-run guide is the guided tour only: the "Why Rolo Loop?" dialog no longer opens over it (it stays on the ? button).
 - The standard development command (`dotnet run`, `npm run dev`, ...) is released by default and asks nothing. Migrations still ask once; production is never released.
 

@@ -3,7 +3,7 @@
 ; Before uninstall: take that folder off the PATH. The data folder (~/.loop-harness: projects, settings) is the user's and stays.
 
 !macro NSIS_HOOK_POSTINSTALL
-  DetailPrint "Registering Rolo Loop for the harness command line and the Claude Code skill"
+  DetailPrint "Registering Rolo Loop for the harness command line and the agent skill"
   nsExec::ExecToLog '"$INSTDIR\plugin\bin\harness.exe" install --desktop-exe "$INSTDIR\${MAINBINARYNAME}.exe" --path add'
   Pop $0
 !macroend

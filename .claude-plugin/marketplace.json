@@ -4,7 +4,7 @@
     "name": "Iago Boardman Padilha"
   },
   "allowCrossMarketplaceDependenciesOn": ["claude-craft-kit"],
-  "description": "Loop engineering for Claude Code: orchestrator, spec-driven engine, subagents and guard hook, plus a local control panel (harness serve) that runs the unattended loop with a graph view, on your own Claude subscription through the claude CLI, no API token.",
+  "description": "Loop engineering for AI coding agents (Claude Code or a compatible CLI): orchestrator, spec-driven engine, subagents and guard hook, plus a local control panel and desktop app that run the unattended loop with a graph view, on your subscription or a pay-per-use API key, in the order you choose.",
   "plugins": [
     {
       "name": "rolo-loop",

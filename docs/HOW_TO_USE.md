@@ -1,6 +1,6 @@
 # How to use rolo-loop
 
-rolo-loop turns a goal into a roadmap, and an approved roadmap into an unattended loop that specs, implements and verifies each feature in an isolated git worktree. You steer from a local web panel. Everything runs on your machine, on your own Claude subscription through the `claude` CLI; no API key is used.
+rolo-loop turns a goal into a roadmap, and an approved roadmap into an unattended loop that specs, implements and verifies each feature in an isolated git worktree. You steer from a local web panel. Everything runs on your machine, with the AI providers you set in Settings > AI providers, in priority order: your subscription through the `claude` CLI, a pay-per-use API key, a gateway or a compatible CLI. When the first one reaches its usage limit, the next one takes the turn.
 
 ## Install
 

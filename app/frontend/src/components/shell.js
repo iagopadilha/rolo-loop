@@ -71,7 +71,7 @@ export function Icon({ name, size = 16 }) {
   return html`<svg class="sh-icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
 }
 
-/** The Rolo Loop mark (Rolo, the hamster in the wheel) on its dark tile. */
+/** The Rolo Loop mark (Rolo, the mouse in the wheel) on its dark tile. */
 function Logo({ size = 32, running = false }) {
   return html`<span class="sh-logo" style=${{ width: size + 'px', height: size + 'px', flexBasis: size + 'px' }}><${RoloMark} size=${size} running=${running} /></span>`;
 }
@@ -133,7 +133,7 @@ export function Sidebar({ page, project, account, activity, commands }) {
     <aside class=${'sh-side' + (state.drawer ? ' is-open' : '')} id="shell-sidebar" aria-label="Sidebar">
       ${isDesktop() ? html`<div class="sh-titlebar" data-drag><${TrafficLights} where="side" /><${SidebarToggle} where="side" /></div>` : null}
       <a class="sh-brand" href="/" title="Projects" aria-label="Rolo Loop: back to the projects">
-        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Rolo Loop</span><span class="sh-brand-sub">Spec-driven loops for Claude Code</span></span></a>
+        <${Logo} /><span class="sh-brand-text"><span class="sh-brand-name">Rolo Loop</span><span class="sh-brand-sub">Spec-driven loops for AI coding agents</span></span></a>
       <button type="button" class="sh-search" id="btn-search" onClick=${openSwitcher} aria-keyshortcuts="Control+K Meta+K" title=${'Search projects and pages (' + SHORTCUT + ')'}>
         <${Icon} name="search" size=${14} /><span class="sh-label sh-grow">Search</span><kbd class="sh-kbd sh-label">${SHORTCUT}</kbd></button>
       <nav class="sh-nav" aria-label="Workspace">
@@ -318,7 +318,7 @@ export function useSplash(ready) {
 export function Splash({ text }) {
   return html`<div class="sh-splash" id="splash" role="status" aria-live="polite">
     <${Logo} size=${120} running=${true} />
-    <div class="sh-splash-titles"><span class="sh-splash-title">Rolo Loop</span><span class="sh-splash-sub">Spec-driven loops for Claude Code</span></div>
+    <div class="sh-splash-titles"><span class="sh-splash-title">Rolo Loop</span><span class="sh-splash-sub">Spec-driven loops for AI coding agents</span></div>
     <div class="sh-splash-bar" aria-hidden="true"><div></div></div>
     <span class="sh-splash-text">${text}</span></div>`;
 }

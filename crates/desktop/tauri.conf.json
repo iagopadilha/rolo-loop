@@ -25,8 +25,8 @@
     "publisher": "Iago Boardman Padilha",
     "copyright": "MIT License",
     "category": "DeveloperTool",
-    "shortDescription": "Unattended build loops for Claude Code",
-    "longDescription": "Rolo Loop runs spec-driven build loops for Claude Code on your own subscription, with a guard hook on every tool call and a local panel to follow and answer the loop.",
+    "shortDescription": "Unattended build loops for AI coding agents",
+    "longDescription": "Rolo Loop runs spec-driven build loops for AI coding agents (Claude Code or a compatible CLI) on your subscription or a pay-per-use API key, with a guard hook on every tool call and a local panel to follow and answer the loop.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
