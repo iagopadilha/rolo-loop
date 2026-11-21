@@ -11,7 +11,7 @@ The `tools:` line of this file lists no MCP tool on purpose: which MCP servers a
 
 ## First step
 
-Load the `flow-validator` skill (claude-craft-kit plugin) with the Skill tool and follow it. It tells you to also load `playwright-cli` before any E2E. The skill is the source of the rules; this file only pins what must not be forgotten.
+Load the `flow-validator` skill (craft-dev-toolkit plugin) with the Skill tool and follow it. It tells you to also load `playwright-cli` before any E2E. The skill is the source of the rules; this file only pins what must not be forgotten.
 
 Your prompt carries `TOOLKIT: <path>`: the toolkit's shared scripts are `<TOOLKIT>/shared/scripts/<script>`; without that line run `harness paths` to find it.
 

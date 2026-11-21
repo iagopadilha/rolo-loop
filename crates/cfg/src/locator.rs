@@ -19,7 +19,9 @@ pub const PLUGIN_ROOT_VARIABLE: &str = "CLAUDE_PLUGIN_ROOT";
 pub const PLUGIN_NAME: &str = "rolo-loop";
 /// Ids the plugin had before (agent-maestro, then claude-maestro before it); an install made under one keeps working.
 pub const LEGACY_PLUGIN_NAMES: [&str; 2] = ["agent-maestro", "claude-maestro"];
-pub const TOOLKIT_PLUGIN_NAME: &str = "claude-craft-kit";
+pub const TOOLKIT_PLUGIN_NAME: &str = "craft-dev-toolkit";
+/// Older ids of the toolkit plugin: an install made under them is still found.
+pub const LEGACY_TOOLKIT_PLUGIN_NAMES: [&str; 1] = ["claude-craft-kit"];
 pub const TOOLKIT_CONFIG_KEY: &str = "dev_toolkit_dir";
 /// Minimum toolkit version (layout with `bin/`, `shared/templates`, `shared/rules`).
 pub const TOOLKIT_MIN_VERSION: &str = "0.3.0";
@@ -199,7 +201,7 @@ impl Locator {
 
     pub fn list_installed_toolkit_roots(&self) -> Vec<PathBuf> {
         let mut roots = Vec::new();
-        for path in self.installed_plugin_roots(TOOLKIT_PLUGIN_NAME) {
+        for path in std::iter::once(TOOLKIT_PLUGIN_NAME).chain(LEGACY_TOOLKIT_PLUGIN_NAMES).flat_map(|name| self.installed_plugin_roots(name)) {
             let root = Self::toolkit_plugin_folder(&path);
             if !root.as_os_str().is_empty() {
                 dedup_push(&mut roots, root);
@@ -247,8 +249,14 @@ impl Locator {
         let sibling = self.env.text(SIBLING_VARIABLE);
         let sibling = sibling.trim();
         if !sibling.eq_ignore_ascii_case("off") {
-            let path = if sibling.is_empty() { self.repo_root.join("..").join(TOOLKIT_PLUGIN_NAME).join("plugin") } else { PathBuf::from(sibling) };
-            roots.push(Self::toolkit_plugin_folder(&path));
+            if sibling.is_empty() {
+                // the clone next to this one, under the new folder name or the old one
+                for name in std::iter::once(TOOLKIT_PLUGIN_NAME).chain(LEGACY_TOOLKIT_PLUGIN_NAMES) {
+                    roots.push(Self::toolkit_plugin_folder(&self.repo_root.join("..").join(name).join("plugin")));
+                }
+            } else {
+                roots.push(Self::toolkit_plugin_folder(&PathBuf::from(sibling)));
+            }
         }
         let mut unique = Vec::new();
         for root in roots {

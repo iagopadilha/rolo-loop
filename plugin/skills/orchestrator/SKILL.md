@@ -13,7 +13,7 @@ hooks:
 
 The main chat becomes the orchestrator. It does not write specs, implement or verify: it decides, dispatches subagents, keeps state on disk and talks to the user.
 
-The specification engine is still `tlc-spec-driven` (a skill of the claude-craft-kit plugin). This skill does not replace or reinvent its format — it orchestrates its execution through subagents.
+The specification engine is still `tlc-spec-driven` (a skill of the craft-dev-toolkit plugin). This skill does not replace or reinvent its format — it orchestrates its execution through subagents.
 
 ## Runtime: the Rolo Loop app (loop engine, back end and panel)
 
@@ -27,7 +27,7 @@ This skill is the **brain**: `SKILL.md`, `references/*.md`, the hook `bin/guard.
 
 **The click is the user's.** The orchestrator never calls a trigger or approval endpoint (`/p/<id>/api/loop/*`, `/p/<id>/api/roadmap/approve`, `/p/<id>/api/action/*`, `/p/<id>/api/answer`, `/p/<id>/api/resume`, `/p/<id>/api/instruction`) and never reads the token in `~/.loop-harness/app.json` (the guard blocks both: `panel-trigger`, `secrets`). The user runs the loop: in the panel (Check / Start loop) or with `harness loop <root> ...` in their own terminal.
 
-**Requires the claude-craft-kit plugin.** The dev skills (`backend-dev`, `frontend-dev`), the spec engine (`tlc-spec-driven`), `flow-validator` and the shared scripts (`craft verify`, `craft testenv`, `craft regression_diff`, ...) live there, not in this plugin; `harness doctor` reports it missing. **Toolkit path, once per turn:** run `harness paths --json` (`maestro_plugin`, `orchestrator_skill`, `toolkit`) and put the `toolkit` value in a line `TOOLKIT: <path>` of every subagent prompt (see `references/dispatch.md`).
+**Requires the craft-dev-toolkit plugin.** The dev skills (`backend-dev`, `frontend-dev`), the spec engine (`tlc-spec-driven`), `flow-validator` and the shared scripts (`craft verify`, `craft testenv`, `craft regression_diff`, ...) live there, not in this plugin; `harness doctor` reports it missing. **Toolkit path, once per turn:** run `harness paths --json` (`maestro_plugin`, `orchestrator_skill`, `toolkit`) and put the `toolkit` value in a line `TOOLKIT: <path>` of every subagent prompt (see `references/dispatch.md`).
 
 **What stays in the plugin:** this skill, `references/`, `bin/guard.exe` and the agents. The app finds the guard through `orchestrator_skill_dir` in `config.json` (or `LOOP_SKILL_DIR`, or `$CLAUDE_PLUGIN_ROOT/skills/orchestrator`). Zero-cost suite: `cargo test --workspace` in the rolo-loop repository (engine, app and guard).
 

@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Send the report to iagopadilhadev@gmail.com with the subject `[rolo-loop] security`. Include what you found, how to reproduce it, the version (`--version` of the binary or the plugin manifest) and the impact you see. Do not include real secrets or personal data: describe them.
+Do not open a public issue. Report it privately on GitHub: the repository's **Security** tab, **Report a vulnerability** (GitHub private vulnerability reporting). Only the maintainers see the report. Include what you found, how to reproduce it, the version (`--version` of the binary or the plugin manifest) and the impact you see. Do not include real secrets or personal data: describe them.
 
 You get an answer within seven days. A confirmed problem is fixed in the latest minor version first, and the disclosure is coordinated with you: the fix and an advisory are published together, crediting you if you wish.
 

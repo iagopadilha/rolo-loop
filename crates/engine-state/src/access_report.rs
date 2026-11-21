@@ -449,7 +449,7 @@ pub fn format_report(report: &Value) -> String {
         format!("== access report: {}", text(&static_part["project"])),
         format!("isolation ........ {}", if static_part["isolation"] == true { "on" } else { "OFF (loop_isolation=false: today's argv, nothing below is enforced)" }),
         format!("plugin root ...... {}", or_none(&static_part["plugin_root"], "(not found)")),
-        format!("toolkit root ..... {}", or_none(&static_part["toolkit_root"], "(not found: /plugin install claude-craft-kit@claude-craft-kit)")),
+        format!("toolkit root ..... {}", or_none(&static_part["toolkit_root"], "(not found: /plugin install craft-dev-toolkit@craft-dev-toolkit)")),
         format!("guard ............ {}", or_none(&static_part["guard"], "(not found)")),
         String::new(),
         "-- MCP servers allowed for loops and present on this machine".into(),

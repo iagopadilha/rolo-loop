@@ -23,7 +23,7 @@ const TEST_NOTIFICATION_TIMEOUT_SECONDS: u64 = 120;
 const DEFAULT_ENABLED_CHANNELS: [&str; 3] = ["console", "toast", "file"];
 const CHANNEL_DETAIL_LIMIT: usize = 200;
 const RECENT_TURNS_FOR_USAGE: usize = 5;
-const TOOLKIT_INSTALL_LINES: [&str; 2] = ["/plugin marketplace add iagopadilha/claude-craft-kit", "/plugin install claude-craft-kit@claude-craft-kit"];
+const TOOLKIT_INSTALL_LINES: [&str; 2] = ["/plugin marketplace add iagopadilha/craft-dev-toolkit", "/plugin install craft-dev-toolkit@craft-dev-toolkit"];
 /// Skills the toolkit must carry (folder name with a SKILL.md; the content is not inspected): a missing required one fails `doctor`, an optional one
 /// warns.
 const REQUIRED_TOOLKIT_SKILLS: [&str; 6] = ["backend-dev", "frontend-dev", "tlc-spec-driven", "flow-validator", "playwright-cli", "github"];
@@ -183,18 +183,18 @@ impl AppDiagnosticsService<'_> {
         }
         let toolkit_root = self.find_toolkit();
         if toolkit_root.is_empty() {
-            problems.push(format!("claude-craft-kit not found (the dev skills and the craft binary). In Claude Code run: {}", TOOLKIT_INSTALL_LINES.join(" ; ")));
+            problems.push(format!("craft-dev-toolkit not found (the dev skills and the craft binary). In Claude Code run: {}", TOOLKIT_INSTALL_LINES.join(" ; ")));
         }
         let (toolkit_ok, toolkit_version) = Locator::toolkit_version_status(Path::new(&toolkit_root));
         if !toolkit_ok {
             problems.push(format!(
-                "toolkit {} found, {TOOLKIT_MIN_VERSION} needed: /plugin update claude-craft-kit@claude-craft-kit",
+                "toolkit {} found, {TOOLKIT_MIN_VERSION} needed: /plugin update craft-dev-toolkit@craft-dev-toolkit",
                 if toolkit_version.is_empty() { "(version unreadable, no bin/craft.exe)" } else { &toolkit_version }
             ));
         }
         let missing_files = Locator::toolkit_missing_files(Path::new(&toolkit_root));
         if !missing_files.is_empty() {
-            problems.push(format!("toolkit {toolkit_root} lacks {} (the loop calls it): /plugin update claude-craft-kit@claude-craft-kit", missing_files.join(", ")));
+            problems.push(format!("toolkit {toolkit_root} lacks {} (the loop calls it): /plugin update craft-dev-toolkit@craft-dev-toolkit", missing_files.join(", ")));
         }
         let mut warnings: Vec<String> = Vec::new();
         let standards_rows = if project_folders.is_empty() { vec![] } else { self.check_standards_bindings(project_folders, &toolkit_root) };
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(report["guard"]["found"], false);
         let problems: Vec<&str> = report["problems"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
         assert!(
-            problems.iter().any(|p| p.starts_with("the plugin's bin/guard.exe was not found")) && problems.iter().any(|p| p.starts_with("claude-craft-kit not found")),
+            problems.iter().any(|p| p.starts_with("the plugin's bin/guard.exe was not found")) && problems.iter().any(|p| p.starts_with("craft-dev-toolkit not found")),
             "{problems:?}"
         );
         assert_eq!(report["notify_channels"].as_array().unwrap().len(), 5);
