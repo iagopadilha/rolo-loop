@@ -22,10 +22,10 @@ jobs:
       HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
       HAS_AZURE_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Tauri CLI
@@ -48,7 +48,7 @@ jobs:
           $sign = 'sign code artifact-signing -ase "${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}" -asa "${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}" -ascp "${{ secrets.ARTIFACT_SIGNING_PROFILE }}" %1'
           $conf.bundle.windows | Add-Member -NotePropertyName signCommand -NotePropertyValue $sign -Force
           $conf | ConvertTo-Json -Depth 20 | Set-Content crates/desktop/tauri.conf.json -Encoding utf8
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
