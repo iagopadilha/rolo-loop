@@ -21,6 +21,8 @@ pub const ORCHESTRATOR_ROLE: &str = "orchestrator";
 const CLOSED_STATUSES: [&str; 2] = ["verified", "blocked"];
 pub const VERIFIER_ROLE: &str = "verifier";
 pub const VERIFIER_NOTE_MARK: &str = "verif";
+/// A `building` feature whose note says it is in the quality review (after verification) is with the quality-gate agent.
+pub const QUALITY_NOTE_MARK: &str = "quality";
 pub const WORKING_STATUSES: [&str; 2] = ["speccing", "building"];
 const LOOP_DONE_STATUS: &str = "done";
 const LOG_TYPES: [&str; 5] = ["sys", "tool", "ai", "user", "guard"];
@@ -86,7 +88,11 @@ fn orchestrator_decision(record: &Map<String, Value>, transcript: Option<&Value>
 
 pub fn get_inferred_role(feature: &Map<String, Value>) -> String {
     let status = feature.get("status").and_then(Value::as_str).unwrap_or("");
-    if status == "building" && text_or_empty(feature.get("note")).to_lowercase().contains(VERIFIER_NOTE_MARK) {
+    let note = text_or_empty(feature.get("note")).to_lowercase();
+    if status == "building" && note.contains(QUALITY_NOTE_MARK) {
+        return "quality-gate".into();
+    }
+    if status == "building" && note.contains(VERIFIER_NOTE_MARK) {
         return VERIFIER_ROLE.into();
     }
     match status {

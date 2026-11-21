@@ -389,7 +389,7 @@ fn path_scope_reason(paths: &str) -> String {
     format!("outside the feature's PATHS ({paths}). Need a file outside the scope? Return NEEDS_CONFIRM")
 }
 
-/// 4 steps (+1 per guard block): executors implement, a verifier checks, the orchestrator commits (approved -> verified). `blocks` = a guard block
+/// 4 steps (+1 per guard block): executors implement, a verifier checks, the quality gate reviews, the orchestrator commits (approved -> verified). `blocks` = a guard block
 /// per slug, inserted after the executor's first edit.
 fn build_execution_steps(slugs: &[&'static str], blocks: &[(&'static str, Action)]) -> Vec<Step> {
     let together = if slugs.len() > 1 { "together (disjoint paths, no dependency between them)" } else { "alone" };
@@ -408,6 +408,12 @@ fn build_execution_steps(slugs: &[&'static str], blocks: &[(&'static str, Action
         verify.push(agent_tool(slug, "Bash", json!({"command": test_command(item)}), passed));
         verify.push(agent_tool(slug, "Bash", json!({"command": lint_command(item)}), "no issues"));
         close.push(agent_return(slug, format!("VERDICT: PASS\nSUMMARY: tests, lint and typecheck green for {slug}.")));
+        close.push(status_note(slug, "building", "quality review"));
+        close.push(agent_tool(slug, "Bash", json!({"command": format!("git diff --stat -- {}", item.paths)}), "2 files changed"));
+        close.push(agent_return(
+            slug,
+            format!("VERDICT: APPROVED\nFINDINGS: none\nNOTES: {} matches its spec; no secret, no giant file, names follow the project.", item.title),
+        ));
         close.push(Action::Commit { slug });
         close.push(orchestrator_tool("Bash", json!({"command": format!("git commit -m \"feat({slug}): {}\"", item.title.to_lowercase())}), "1 file changed"));
     }

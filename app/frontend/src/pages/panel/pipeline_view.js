@@ -1,4 +1,4 @@
-/* Pipeline view of the LOOP zone: orchestrator at the left, one lane per dispatched feature grouped by WAVE, the
+/* Pipeline view of the LOOP zone: the turn at the left, one lane per dispatched feature grouped by WAVE, the
    fixed 6 steps per lane. Shows the state accumulated up to the selected turn (see pipeline_model.js).
    FIXED view (see FIXED below): the notes about pan, zoom and dragging that follow apply only when it is turned off.
    Free canvas: background drag = pan, wheel or pinch = zoom at the
@@ -10,7 +10,7 @@
 import { html, useLayoutEffect, useReducer, useRef } from '../../util/preact.js';
 import {
   pipe, loadPipeline, steps, curN, liveN, stateAt, featureStatusAt, featuresWithWaves, changedStepsAt, activeNode,
-  turnAt, emptyReason, selectNode, featureName, STEP_COLOR, FEATURE_COLOR,
+  turnAt, emptyReason, selectNode, featureName, STEP_COLOR, FEATURE_COLOR, stepName,
 } from './pipeline_model.js';
 import { openAgentDialog, openFeatureDialog } from './dialogs/index.js';
 import { taskGraphOf, waveModeLabel, splitNoteOf } from './feature_dialog_model.js';
@@ -173,7 +173,7 @@ function buildGraph(turn) {
     for (const feature of members) {
       const status = featureStatusAt(feature.id, turn), offset = offsetOf(feature.id), nodeTop = y + G.LANE_TOP;
       const stepStates = state[feature.id], laneHeight = G.LANE_H + taskBlockHeight(feature.id);
-      lanes.push({ id: feature.id, name: feature.name, stage: feature.stage, wave: feature.wave, x: G.LANE_X + offset.x, y: y + offset.y, w: laneWidth, h: laneHeight,
+      lanes.push({ id: feature.id, name: feature.name, untested: !!feature.untested && status === 'DONE', stage: feature.stage, wave: feature.wave, x: G.LANE_X + offset.x, y: y + offset.y, w: laneWidth, h: laneHeight,
         status, color: FEATURE_COLOR[status] || FEATURE_COLOR['IN PROGRESS'], quarantined: status === 'QUARANTINE', steps: [] });
       let previous = null;
       stepStates.forEach((step, index) => {
@@ -246,11 +246,11 @@ function Edges({ graph }) {
 function StepNode({ node }) {
   const cls = 'pl-node' + (node.st === PENDING_STATE ? ' pending' : '') + (node.st === 'FAIL' || node.st === 'BLOCKED' ? ' failed' : '') + (node.selected ? ' selected' : '');
   const select = () => selectNode({ f: node.feature, s: node.step });
-  return html`<div class=${cls} data-pl-drag=${node.feature} role="button" tabindex="0" title=${`${node.role} · ${node.st}`}
+  return html`<div class=${cls} data-pl-drag=${node.feature} role="button" tabindex="0" title=${`${stepName(steps()[node.step])}: ${node.role} · ${node.agent} · ${node.st.toLowerCase()}`}
     style=${{ left: node.x + 'px', top: node.y + 'px', '--pl-color': node.color }}
     onClick=${select} onDblClick=${() => openAgent(node.feature, node.step)} onKeyDown=${onActivateKey(select)}>
-    <div class="pl-node-top"><span class="pl-node-agent"><span class="pl-dot"></span><span class="pl-node-name">${node.agent}</span></span>${node.tagged ? html`<span class="pl-tag">${node.tag}</span>` : null}</div>
-    <div class="pl-node-bottom"><span class="pl-node-status">${node.st}</span>${node.turnClaude ? html`<${ClaudeBadge} source=${node.turnClaude} inherited />` : null}<span class="pl-node-attempts">${node.attempts}</span></div>
+    <div class="pl-node-top"><span class="pl-node-agent"><span class="pl-dot"></span><span class="pl-node-name">${stepName(steps()[node.step]) || node.agent}</span></span>${node.tagged ? html`<span class="pl-tag">${node.tag}</span>` : null}</div>
+    <div class="pl-node-bottom"><span class="pl-node-status">${node.st.toLowerCase()} · ${node.agent}</span>${node.turnClaude ? html`<${ClaudeBadge} source=${node.turnClaude} inherited />` : null}<span class="pl-node-attempts">${node.attempts}</span></div>
   </div>`;
 }
 
@@ -273,13 +273,13 @@ function Diagram({ graph }) {
       ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-lane' + (lane.quarantined ? ' quarantined' : '')} data-pl-drag=${lane.id}
         style=${{ left: lane.x + 'px', top: lane.y + 'px', width: lane.w + 'px', height: lane.h + 'px' }} onClick=${() => openFeatureDialog({ feature: lane.id })}>
         <div class="pl-lane-head"><span class="pl-lane-stage">${lane.stage == null ? 'STAGE ?' : 'STAGE ' + lane.stage}</span><${FeatureLabel} slug=${lane.id} className="pl-lane-id" />
-          <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span><${OpenFeatureButton} slug=${lane.id} /></div>
+          <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span>${lane.untested ? html`<span class="lt-chip is-untested" title="Verified without running tests: no test or build tool ran">not tested</span>` : null}<${OpenFeatureButton} slug=${lane.id} /></div>
         <div class="pl-lane-tasks" style=${{ top: GEOMETRY.LANE_H - 2 + 'px' }}><${TaskWaves} slug=${lane.id} className="pl-task-waves" /></div>
       </div>`)}
       <div class=${'pl-orchestrator' + (orchestratorSelected ? ' selected' : '')} data-pl-drag=${ORCHESTRATOR_KEY} role="button" tabindex="0"
         style=${{ left: orchestrator.x + 'px', top: orchestrator.y + 'px' }}
         onClick=${() => selectNode({ orch: true })} onKeyDown=${onActivateKey(() => selectNode({ orch: true }))}>
-        <div class="pl-orchestrator-name"><span class="pl-orchestrator-dot" style=${{ background: summary.color }}></span>orchestrator</div>
+        <div class="pl-orchestrator-name"><span class="pl-orchestrator-dot" style=${{ background: summary.color }}></span>${'Turn ' + (graph.turn == null ? '?' : graph.turn)}</div>
         <div class="pl-orchestrator-state">${summary.text}</div>
       </div>
       ${graph.nodes.map((node) => html`<${StepNode} key=${node.key} node=${node} />`)}
@@ -334,9 +334,9 @@ function ListMode({ graph }) {
     ${graph.folded ? html`<${FoldedNote} graph=${graph} />` : null}
     ${graph.lanes.map((lane) => html`<div key=${lane.id} class=${'pl-card' + (lane.quarantined ? ' quarantined' : '')}>
       <div class="pl-card-head" onClick=${() => openFeatureDialog({ feature: lane.id })}><span class="pl-lane-stage">W${lane.wave} · ${lane.stage == null ? 'STAGE ?' : 'STAGE ' + lane.stage}</span><${FeatureLabel} slug=${lane.id} className="pl-lane-id" />
-        <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span><${OpenFeatureButton} slug=${lane.id} /></div>
+        <span class="pl-badge" style=${{ color: lane.color, borderColor: lane.color }}>${lane.status}</span>${lane.untested ? html`<span class="lt-chip is-untested" title="Verified without running tests: no test or build tool ran">not tested</span>` : null}<${OpenFeatureButton} slug=${lane.id} /></div>
       <div class="pl-card-steps">${lane.steps.map((node) => html`<button type="button" key=${node.key} class=${'pl-step' + (node.tagged ? ' tagged' : '') + (node.selected ? ' selected' : '')}
-        style=${{ color: node.color }} title=${node.role} onClick=${() => selectNode({ f: node.feature, s: node.step })} onDblClick=${() => openAgent(node.feature, node.step)}>${node.agent} · ${node.st}${node.attempts ? ' · ' + node.attempts : ''}</button>`)}</div>
+        style=${{ color: node.color }} title=${node.role} onClick=${() => selectNode({ f: node.feature, s: node.step })} onDblClick=${() => openAgent(node.feature, node.step)}>${stepName(steps()[node.step]) || node.agent} · ${node.st}${node.attempts ? ' · ' + node.attempts : ''}</button>`)}</div>
       <${TaskWaves} slug=${lane.id} />
     </div>`)}
     <${Teaser} graph=${graph} />

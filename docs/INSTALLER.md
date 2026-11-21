@@ -57,6 +57,14 @@ Unsigned installers work, but Windows SmartScreen shows "Windows protected your 
 - **Azure Artifact Signing** (formerly Trusted Signing): monthly subscription, no hardware token; set `bundle.windows.signCommand` to the Artifact Signing CLI and keep the Azure credentials as CI secrets.
 - **OV code-signing certificate**: set `bundle.windows.certificateThumbprint`, `digestAlgorithm: "sha256"` and a `timestampUrl`. EV no longer skips SmartScreen.
 
+## Checking a download
+
+Every release carries `SHA256SUMS.txt` with the SHA-256 of each installer. Compare it with your download before running it:
+
+```
+Get-FileHash -Algorithm SHA256 ".\Rolo Loop_<version>_x64-setup.exe"
+```
+
 ## In-app updates
 
 The updater (tauri-plugin-updater) needs a signing key pair, separate from Authenticode:

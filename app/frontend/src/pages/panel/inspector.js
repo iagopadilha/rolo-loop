@@ -108,7 +108,7 @@ function StepDetails({ slug, index, turnNumber }) {
   </section>`;
 }
 
-const GLYPH = { DONE: '✓', FAIL: '!', BLOCKED: '!' };
+const GLYPH = { DONE: '✓', FAIL: '!', BLOCKED: '!', SKIPPED: '–' };
 /** The selected feature (spec L-04): name, state, turns, depends on, the steps with small check dots, the two buttons. */
 function FeatureSelected({ slug }) {
   const at = curN(), cells = stateAt(at)[slug] || null, status = loopStatusAt(slug, at), worked = workedTurns(at)[slug] || [];

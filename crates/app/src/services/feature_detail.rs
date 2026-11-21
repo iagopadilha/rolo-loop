@@ -8,7 +8,7 @@
 use super::agent_history::{ORCHESTRATOR_ROLE, VERIFIER_NOTE_MARK};
 use super::claude_accounts::{build_turn_auth, build_turn_claude};
 use super::loop_panel::compute_current_turn;
-use super::pipeline::{compute_waves, get_step_for_role, GATE_NOTE_PREFIX, STEP_COMMIT, STEP_EXEC, STEP_GATE, STEP_REVIEW, STEP_SPEC, STEP_VERIFY};
+use super::pipeline::{compute_waves, get_step_for_role, GATE_NOTE_PREFIX, STEP_COMMIT, STEP_EXEC, STEP_QUALITY, STEP_REVIEW, STEP_SPEC, STEP_VERIFY};
 use super::App;
 use crate::domain::project::ProjectContext;
 use crate::repositories::loop_read_formatting::text_or_empty;
@@ -16,11 +16,13 @@ use engine_state::{loop_state, notify_truthy};
 use serde_json::{json, Map, Value};
 
 const STEP_SPEC_NAME: &str = "spec";
-const STEP_GATE_NAME: &str = "gate";
+const STEP_REVIEW_NAME: &str = "review";
 const STEP_BUILD_NAME: &str = "build";
 const STEP_VERIFY_NAME: &str = "verify";
+const STEP_QUALITY_NAME: &str = "quality";
 const STEP_COMMIT_NAME: &str = "commit";
-const STEP_ORDER: [&str; 5] = [STEP_SPEC_NAME, STEP_GATE_NAME, STEP_BUILD_NAME, STEP_VERIFY_NAME, STEP_COMMIT_NAME];
+/// The same pipeline as the loop views (pipeline.rs STEPS).
+const STEP_ORDER: [&str; 6] = [STEP_SPEC_NAME, STEP_REVIEW_NAME, STEP_BUILD_NAME, STEP_VERIFY_NAME, STEP_QUALITY_NAME, STEP_COMMIT_NAME];
 const STEP_DONE: &str = "done";
 const STEP_RUNNING: &str = "running";
 const STEP_PENDING: &str = "pending";
@@ -38,9 +40,10 @@ const EXECUTOR_FIELDS: [&str; 13] =
 fn name_by_pipeline_step(step: usize) -> &'static str {
     match step {
         STEP_SPEC => STEP_SPEC_NAME,
-        STEP_REVIEW | STEP_GATE => STEP_GATE_NAME,
+        STEP_REVIEW => STEP_REVIEW_NAME,
         STEP_EXEC => STEP_BUILD_NAME,
         STEP_VERIFY => STEP_VERIFY_NAME,
+        STEP_QUALITY => STEP_QUALITY_NAME,
         STEP_COMMIT => STEP_COMMIT_NAME,
         _ => STEP_BUILD_NAME,
     }
@@ -49,7 +52,7 @@ fn name_by_pipeline_step(step: usize) -> &'static str {
 fn current_step_by_status(status: &str) -> Option<&'static str> {
     match status {
         "pending" | "speccing" => Some(STEP_SPEC_NAME),
-        "specced" | "approved" => Some(STEP_GATE_NAME),
+        "specced" | "approved" => Some(STEP_REVIEW_NAME),
         "building" => Some(STEP_BUILD_NAME),
         "verified" => Some(STEP_COMMIT_NAME),
         _ => None,
@@ -96,7 +99,7 @@ fn find_current_step(status: &str, note: &str, last_call_step: Option<&'static s
         return last_call_step;
     }
     if note.starts_with(GATE_NOTE_PREFIX) {
-        return Some(STEP_GATE_NAME);
+        return Some(STEP_REVIEW_NAME);
     }
     if note.to_lowercase().contains(VERIFIER_NOTE_MARK) {
         return Some(STEP_VERIFY_NAME);
@@ -261,7 +264,7 @@ mod tests {
         assert_eq!(current, Some("build"));
         assert_eq!((steps[0]["state"].clone(), steps[2]["state"].clone(), steps[3]["state"].clone()), (json!("done"), json!("running"), json!("pending")));
         assert_eq!(build_steps(&row("building", "verifying"), &[]).0, Some("verify"));
-        assert_eq!(build_steps(&row("blocked", "gate refused"), &[]).0, Some("gate"));
+        assert_eq!(build_steps(&row("blocked", "gate refused"), &[]).0, Some("review"));
         assert_eq!(build_steps(&row("blocked", ""), &[]).0, None);
         let failed = vec![json!({"role": "executor-back", "state": "done", "return_status": "FAIL"})];
         assert_eq!(build_steps(&row("building", ""), &failed).1[2]["state"], "failed");
@@ -292,6 +295,6 @@ mod tests {
             (detail["wave"].clone(), detail["deps"].clone(), detail["current_step"].clone(), detail["claude"].clone()),
             (json!(2), json!(["a"]), json!("spec"), Value::Null)
         );
-        assert_eq!(service.build_feature_detail(&context, "a").unwrap()["current_step"], "gate");
+        assert_eq!(service.build_feature_detail(&context, "a").unwrap()["current_step"], "review");
     }
 }

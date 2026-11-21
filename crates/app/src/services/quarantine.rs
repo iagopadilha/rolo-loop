@@ -14,7 +14,7 @@ use super::chat::{
 use super::loop_control::Reply;
 use super::loop_panel::QUARANTINE_OPTIONS;
 use super::loop_parsers::parse_failed_tests;
-use super::pipeline::{step_key, GATE_NOTE_PREFIX, STEP_GATE, STEP_VERIFY};
+use super::pipeline::{step_key, GATE_NOTE_PREFIX, STEP_REVIEW, STEP_VERIFY};
 use super::App;
 use crate::domain::project::ProjectContext;
 use crate::infrastructure::claude_client::{call_kind, redact_secrets, CommandOptions};
@@ -190,7 +190,7 @@ impl QuarantineService<'_> {
         let last = attempts.last();
         let step: Option<u64> = match last {
             Some(last) => last["step"].as_u64(),
-            None if fields.text("note").starts_with(GATE_NOTE_PREFIX) => Some(STEP_GATE as u64),
+            None if fields.text("note").starts_with(GATE_NOTE_PREFIX) => Some(STEP_REVIEW as u64),
             None => None,
         };
         let mut detail = json!({

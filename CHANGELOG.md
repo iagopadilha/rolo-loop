@@ -4,6 +4,18 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- The loop screen shows one deterministic pipeline, the same in the timeline, the list, the graph, the inspector, the feature page and Settings: **Spec → Review → Build → Verify → Quality → Commit**. The spec approval (the old separate "gate" step) closes Review; the quality-gate agent has its own Quality step instead of counting as Verify. A step with no run before a later finished step shows as skipped (an optional agent turned off), never as pending.
+- Graph view: every box names its step, with the state and the agent under it; the hub on the left is the turn ("Turn N"), not an "orchestrator" node.
+- Settings > Agents: agents are labeled required or "optional · on by default".
+- README rewritten short; the GitHub description and topics describe an agent-agnostic tool.
+
+### Added
+
+- "not tested": a feature verified without automatic verification (the verifier returned UNVERIFIED, e.g. no test runner on the machine) is marked in every loop view and counted in the header ("9 of 9 verified (1 not tested)").
+- Releases publish `SHA256SUMS.txt` next to the installers; Dependabot keeps the crates and the GitHub Actions current.
+
 ## [0.4.0] - 2026-11-21
 
 ### Added

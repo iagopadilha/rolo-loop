@@ -4,10 +4,9 @@
    "next" column). Dependency connectors come from the real deps, "Now" marks the shown turn and the columns after it are hatched.
    The grid scrolls horizontally INSIDE its card; at <= 480 px the same data is shown as one card per feature. */
 import { html, useLayoutEffect, useRef } from '../../util/preact.js';
-import { pipe, steps, turnsList, liveN, curN, selectTurn, stateAt, workedTurns, loopStatusAt, featuresWithWaves, featureName, selectFeature, selectedFeature, emptyReason, STEP_COLOR } from './pipeline_model.js';
+import { stepName, pipe, steps, turnsList, liveN, curN, selectTurn, stateAt, workedTurns, loopStatusAt, featuresWithWaves, featureName, selectFeature, selectedFeature, emptyReason, STEP_COLOR } from './pipeline_model.js';
 
 const ROW_H = 48;
-const STEP_LABEL = { spec: 'Spec', review: 'Review', gate: 'Gate', exec: 'Build', verify: 'Verify', commit: 'Commit' };
 const STATE_WORD = { DONE: 'verified', RUNNING: 'running', QUARANTINE: 'blocked', ATTENTION: 'needs attention', 'IN PROGRESS': 'in progress', 'NOT DISPATCHED': 'queued' };
 const BAR_KIND = { DONE: 'verified', RUNNING: 'running', QUARANTINE: 'blocked', ATTENTION: 'blocked', 'IN PROGRESS': 'open', 'NOT DISPATCHED': 'queued' };
 
@@ -15,7 +14,7 @@ const BAR_KIND = { DONE: 'verified', RUNNING: 'running', QUARANTINE: 'blocked', 
 export function stepWord(index) {
   const step = steps()[index];
   if (!step) return '';
-  return STEP_LABEL[step.key] || String(step.key || step.agent || '').replace(/^./, (c) => c.toUpperCase());
+  return stepName(step);
 }
 export const stateWord = (status) => STATE_WORD[status] || String(status || '').toLowerCase();
 /** "T2", "T2 – T5" or null when the feature never ran. */
@@ -34,9 +33,10 @@ function timelineRows(at) {
   return ordered.map(({ feature }) => {
     const status = loopStatusAt(feature.id, at), cells = state[feature.id] || null, turns = worked[feature.id] || [];
     const runningStep = cells ? cells.findIndex((cell) => cell.st === 'RUNNING') : -1;
-    const pendingStep = cells ? cells.findIndex((cell) => cell.st !== 'DONE') : -1;
+    const pendingStep = cells ? cells.findIndex((cell) => cell.st !== 'DONE' && cell.st !== 'SKIPPED') : -1;
     return { id: feature.id, name: featureName(feature.id), stage: feature.stage, deps: feature.deps.filter((dep) => !String(dep).startsWith('dir:')), status, kind: BAR_KIND[status] || 'open',
-      cells, turns, chip: runningStep >= 0 ? stepWord(runningStep) : status === 'IN PROGRESS' && pendingStep >= 0 ? stepWord(pendingStep) : status === 'DONE' ? '✓' : status === 'QUARANTINE' ? 'blocked' : status === 'ATTENTION' ? 'needs you' : '' };
+      untested: !!feature.untested,
+      cells, turns, chip: runningStep >= 0 ? stepWord(runningStep) : status === 'IN PROGRESS' && pendingStep >= 0 ? stepWord(pendingStep) : status === 'DONE' ? (feature.untested ? 'not tested' : '✓') : status === 'QUARANTINE' ? 'blocked' : status === 'ATTENTION' ? 'needs you' : '' };
   });
 }
 
@@ -70,6 +70,7 @@ function pick(slug) {
 function Legend() {
   return html`<div class="lt-legend">
     <span class="lt-key"><span class="lt-swatch is-verified"></span>verified</span>
+    <span class="lt-key"><span class="lt-chip is-untested">not tested</span>verified without running tests</span>
     <span class="lt-key"><span class="lt-swatch is-running"></span>running now</span>
     <span class="lt-key"><span class="lt-swatch is-open"></span>in progress</span>
     <span class="lt-key"><span class="lt-swatch is-queued"></span>queued</span>
@@ -80,10 +81,10 @@ function Legend() {
 function Bar({ row, selected, columns }) {
   const text = row.kind === 'queued' ? 'queued' : row.name;
   const turnText = turnRangeText(row.turns);
-  const tip = `${row.name} · ${stateWord(row.status)}${turnText ? ' · ' + turnText : ''}${row.deps.length ? ' · after ' + row.deps.map(featureName).join(', ') : ''}`;
+  const tip = `${row.name} · ${stateWord(row.status)}${row.untested ? ' · not tested: no test or build tool ran' : ''}${turnText ? ' · ' + turnText : ''}${row.deps.length ? ' · after ' + row.deps.map(featureName).join(', ') : ''}`;
   return html`<button type="button" class=${'lt-bar is-' + row.kind + (selected ? ' is-selected' : '')} style=${{ gridColumn: `${row.start} / ${row.end + 1}` }}
     aria-label=${'Inspect ' + row.name} aria-pressed=${String(selected)} title=${tip} onClick=${() => pick(row.id)}>
-    <span class="lt-bar-text">${text}</span>${row.chip ? html`<span class=${'lt-chip' + (row.kind === 'verified' ? ' is-check' : '')}>${row.chip}</span>` : null}
+    <span class="lt-bar-text">${text}</span>${row.chip ? html`<span class=${'lt-chip' + (row.kind === 'verified' ? (row.untested ? ' is-untested' : ' is-check') : '')}>${row.chip}</span>` : null}
   </button>`;
 }
 

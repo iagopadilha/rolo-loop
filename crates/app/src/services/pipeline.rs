@@ -27,21 +27,23 @@ struct Step {
     role: &'static str,
 }
 
+/// The one pipeline every feature goes through, in this order, in every view of the panel: Spec -> Review -> Build -> Verify -> Quality -> Commit.
+/// Review ends with the approval (the spec gate); Quality is the quality-gate agent after verification.
 const STEPS: [Step; 6] = [
-    Step { key: "spec", agent: "spec-writer", role: "writes the spec (PATHS + criteria)" },
-    Step { key: "review", agent: "spec-reviewer", role: "reviews the spec" },
-    Step { key: "gate", agent: "gate", role: "approves for execution" },
-    Step { key: "exec", agent: "executor", role: "implements" },
+    Step { key: "spec", agent: "spec-writer", role: "writes the spec (paths + acceptance criteria)" },
+    Step { key: "review", agent: "spec-reviewer", role: "reviews and approves the spec" },
+    Step { key: "build", agent: "executor", role: "implements the spec" },
     Step { key: "verify", agent: "verifier", role: "build · types · lint · tests" },
+    Step { key: "quality", agent: "quality-gate", role: "reviews the code: spec, security, standards" },
     Step { key: "commit", agent: "commit", role: "git checkpoint" },
 ];
 pub const STEP_SPEC: usize = 0;
 pub const STEP_REVIEW: usize = 1;
-pub const STEP_GATE: usize = 2;
-pub const STEP_EXEC: usize = 3;
-pub const STEP_VERIFY: usize = 4;
+pub const STEP_EXEC: usize = 2;
+pub const STEP_VERIFY: usize = 3;
+pub const STEP_QUALITY: usize = 4;
 pub const STEP_COMMIT: usize = 5;
-/// The `key` of a pipeline step (`spec`, `review`, `gate`, `exec`, `verify`, `commit`).
+/// The `key` of a pipeline step (`spec`, `review`, `build`, `verify`, `quality`, `commit`).
 pub fn step_key(step: usize) -> &'static str {
     STEPS[step].key
 }
@@ -51,8 +53,8 @@ pub fn step_agent(step: usize) -> &'static str {
     STEPS[step].agent
 }
 
-const STEP_LABELS: [&str; 6] = ["spec writing", "spec review", "gate", "execution", "verification", "commit"];
-const LABEL_STEP_ORDER: [usize; 4] = [STEP_SPEC, STEP_REVIEW, STEP_EXEC, STEP_VERIFY];
+const STEP_LABELS: [&str; 6] = ["spec writing", "spec review", "build", "verification", "quality review", "commit"];
+const LABEL_STEP_ORDER: [usize; 5] = [STEP_SPEC, STEP_REVIEW, STEP_EXEC, STEP_VERIFY, STEP_QUALITY];
 const LABEL_MAX_PARTS: usize = 3;
 const EVENT_DONE: &str = "DONE";
 const EVENT_RUNNING: &str = "RUNNING";
@@ -71,7 +73,8 @@ fn step_by_role(role: &str) -> Option<usize> {
     match role {
         "spec-writer" => Some(STEP_SPEC),
         "spec-reviewer" => Some(STEP_REVIEW),
-        "verifier" | "verifier-flow" | "quality-gate" => Some(STEP_VERIFY),
+        "verifier" | "verifier-flow" => Some(STEP_VERIFY),
+        "quality-gate" => Some(STEP_QUALITY),
         _ => None,
     }
 }
@@ -129,13 +132,14 @@ pub fn get_step_for_role(role: &str) -> Option<usize> {
     }
 }
 
-/// RUNNING while it runs; FAIL when it failed or returned FAIL/BLOCKED (BLOCKED for the reviewer, which blocks a spec); else DONE.
+/// RUNNING while it runs; FAIL when it failed or returned FAIL/BLOCKED (BLOCKED for the two reviewers: the spec reviewer blocks a spec, the
+/// quality gate sends the code back); else DONE.
 pub fn event_status_for_agent(agent: &Value, step: usize) -> &'static str {
     if agent["state"] == "running" {
         return EVENT_RUNNING;
     }
     let return_status = agent["return_status"].as_str().unwrap_or("");
-    if (step == STEP_REVIEW || step == STEP_GATE) && return_status == "BLOCKED" {
+    if (step == STEP_REVIEW || step == STEP_QUALITY) && return_status == "BLOCKED" {
         return EVENT_BLOCKED;
     }
     if agent["state"] == "failed" || return_status == "FAIL" || return_status == "BLOCKED" {
@@ -153,12 +157,12 @@ fn make_event(feature: &str, step: usize, status: &str, out: &str, agent_id: Opt
 /// share one.
 fn build_turn_label(events: &[Value], waves: &HashMap<String, i64>) -> String {
     let step_of = |e: &Value| e["step"].as_u64().unwrap_or(0) as usize;
-    let mut steps: BTreeSet<usize> = events.iter().filter(|e| notify_truthy(e.get("agent_id"))).map(step_of).collect(); // agent runs only: gate/commit marks are derived
+    let mut steps: BTreeSet<usize> = events.iter().filter(|e| notify_truthy(e.get("agent_id"))).map(step_of).collect(); // agent runs only: approval/commit marks are derived
     if steps.is_empty() {
         steps = events.iter().map(step_of).collect();
     }
     let mut ordered: Vec<usize> = LABEL_STEP_ORDER.iter().copied().filter(|s| steps.contains(s)).collect();
-    ordered.extend([STEP_GATE, STEP_COMMIT].into_iter().filter(|s| steps.contains(s)));
+    ordered.extend([STEP_COMMIT].into_iter().filter(|s| steps.contains(s)));
     let mut label = if ordered.is_empty() {
         "orchestration".to_string()
     } else if ordered.len() > LABEL_MAX_PARTS {
@@ -175,14 +179,14 @@ fn build_turn_label(events: &[Value], waves: &HashMap<String, i64>) -> String {
     label
 }
 
-/// The step the feature was in when it got blocked: the last agent that ran for it in the turn, else the gate when the note says so, else the one
+/// The step the feature was in when it got blocked: the last agent that ran for it in the turn, else review when the spec gate closed it, else the one
 /// the status before shows.
 fn find_step_in_progress(old_status: &str, note: &str, own_events: &[&Value]) -> usize {
     if let Some(last) = own_events.last() {
         return last["step"].as_u64().unwrap_or(0) as usize;
     }
     if note.starts_with(GATE_NOTE_PREFIX) {
-        return STEP_GATE;
+        return STEP_REVIEW;
     }
     if old_status == "building" && note.to_lowercase().contains(VERIFIER_NOTE_MARK) {
         return STEP_VERIFY;
@@ -247,7 +251,9 @@ impl PipelineService<'_> {
             .map(|row| {
                 let id = row["id"].as_str().unwrap_or("");
                 let deps: Vec<&Value> = row["deps"].as_array().into_iter().flatten().filter(|d| !d.as_str().unwrap_or("").starts_with(loop_state::DIR_PREFIX)).collect();
-                json!({"id": row["id"], "name": row["name"], "stage": row["stage"], "wave": waves.get(id).copied().unwrap_or(1), "deps": deps, "kind": row["kind"], "status": row["status"]})
+                // verified without automatic verification (the verifier returned UNVERIFIED): the same rule as the delivery summary
+                let untested = row["status"] == "verified" && text_or_empty(row.get("note")).to_lowercase().contains("unverified");
+                json!({"id": row["id"], "name": row["name"], "stage": row["stage"], "wave": waves.get(id).copied().unwrap_or(1), "deps": deps, "kind": row["kind"], "status": row["status"], "untested": untested})
             })
             .collect();
         let mut turns: Vec<Value> = numbers.iter().map(|n| self.build_turn(work_dir, *n, &waves)).collect();
@@ -324,7 +330,7 @@ impl PipelineService<'_> {
         events
     }
 
-    /// Marks only the status changes between two snapshots can show: approved (gate), verified with a commit (commit), blocked (the step that was
+    /// Marks only the status changes between two snapshots can show: approved (end of review), verified with a commit (commit), blocked (the step that was
     /// in progress). Without both snapshots there is nothing to compare.
     fn list_transition_events(&self, snapshot: Option<&Map<String, Value>>, previous: Option<&Map<String, Value>>, agent_events: &[Value]) -> Vec<Value> {
         let (Some(snapshot), Some(previous)) = (snapshot, previous) else { return vec![] };
@@ -340,8 +346,11 @@ impl PipelineService<'_> {
             let own: Vec<&Value> = agent_events.iter().filter(|e| e["feature"] == slug.as_str()).collect();
             match new_status {
                 Some("approved") => {
+                    // the approval closes Review; when the reviewer's own run already shows it done, there is nothing to add
                     let reviewer = own.iter().rev().find(|e| e["step"] == STEP_REVIEW);
-                    events.push(make_event(slug, STEP_GATE, EVENT_DONE, &text_or_empty(reviewer.and_then(|e| e.get("out"))), None, "gate"));
+                    if reviewer.is_none_or(|e| e["status"] != EVENT_DONE) {
+                        events.push(make_event(slug, STEP_REVIEW, EVENT_DONE, &text_or_empty(reviewer.and_then(|e| e.get("out"))), None, "spec-reviewer"));
+                    }
                 }
                 Some("verified") => {
                     if let Some(commit) = self.read_snapshot_commit(snapshot, slug, fields) {
@@ -411,8 +420,11 @@ mod tests {
     #[test]
     fn labels_and_roles() {
         let waves = HashMap::from([("a".to_string(), 2i64)]);
-        let events = vec![make_event("a", STEP_REVIEW, EVENT_DONE, "ok", Some("v001:x"), "spec-reviewer"), make_event("a", STEP_GATE, EVENT_DONE, "", None, "gate")];
+        let events = vec![make_event("a", STEP_REVIEW, EVENT_DONE, "ok", Some("v001:x"), "spec-reviewer"), make_event("a", STEP_COMMIT, EVENT_DONE, "", None, "commit")];
         assert_eq!(build_turn_label(&events, &waves), "spec review · wave 2");
+        assert_eq!(get_step_for_role("quality-gate"), Some(STEP_QUALITY));
+        assert_eq!(event_status_for_agent(&json!({"state": "done", "return_status": "BLOCKED"}), STEP_QUALITY), EVENT_BLOCKED);
+        assert_eq!(STEPS.iter().map(|s| s.key).collect::<Vec<_>>(), ["spec", "review", "build", "verify", "quality", "commit"]);
         assert_eq!(build_turn_label(&[], &waves), "orchestration");
         assert_eq!(
             (get_step_for_role("executor-back"), get_step_for_role("verifier-flow"), get_step_for_role("orchestrator")),
@@ -446,7 +458,7 @@ mod tests {
         let second = &body["turns"][1];
         assert_eq!(
             (second["events"][0]["status"].clone(), second["events"][0]["step"].clone(), second["events"][0]["agent"].clone()),
-            (json!("BLOCKED"), json!(STEP_GATE), json!("gate"))
+            (json!("BLOCKED"), json!(STEP_REVIEW), json!("spec-reviewer"))
         );
         assert_eq!(app.pipeline().list_feature_events(&context, "a")[0]["turn"], 2);
         assert_eq!(app.pipeline().build_pipeline(&context), body);

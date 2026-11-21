@@ -11,7 +11,7 @@ const STEPS = [
     body: 'Rolo Loop runs spec-driven build loops with AI coding agents (Claude Code or a compatible CLI) on your machine. You describe a goal, approve a plan, and a team of agents writes each feature\'s spec, builds it, verifies it and reviews it, one feature per lane, while you follow here and answer when they ask.',
     why: 'A few settings decide which AI works for you, which agents and tools it may use, and how it reaches you. This tour shows each one once, in about two minutes.' },
   { route: '/settings/agents', target: '#ag-preview', title: 'The agents of a loop',
-    body: 'Every feature goes through Spec, Gate, Build, Verify, Quality and Commit. Below the preview you choose the model of each agent and turn off the optional ones (spec review, flow validation, quality gate).',
+    body: 'Every feature goes through the same six steps: Spec, Review, Build, Verify, Quality and Commit. Below the preview you choose the model of each agent and turn off the optional ones (spec review, flow validation, quality gate).',
     why: 'Stronger models where judgment matters, faster ones where the work is routine: this is where cost and quality are balanced.' },
   { route: '/settings/mcp', target: '#st-content', title: 'Skills and MCP tools',
     body: 'Skills found on this machine (frontend-dev, backend-dev, your company\'s standards) and MCP servers (tools such as a database or a browser) that the agents of a loop may use. Nothing else is loaded.',

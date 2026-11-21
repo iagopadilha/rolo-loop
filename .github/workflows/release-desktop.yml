@@ -49,6 +49,7 @@ jobs:
           $conf.bundle.windows | Add-Member -NotePropertyName signCommand -NotePropertyValue $sign -Force
           $conf | ConvertTo-Json -Depth 20 | Set-Content crates/desktop/tauri.conf.json -Encoding utf8
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -64,3 +65,14 @@ jobs:
           releaseBody: "Windows installers: the -setup.exe (per user, no admin) or the .msi (per machine). See docs/INSTALLER.md."
           releaseDraft: true
           includeUpdaterJson: true
+      - name: SHA-256 checksums of the installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $paths = '${{ steps.tauri.outputs.artifactPaths }}' | ConvertFrom-Json
+          $installers = $paths | Where-Object { $_ -match '\.(exe|msi)$' }
+          $lines = foreach ($file in $installers) { "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower(), (Split-Path $file -Leaf) }
+          $lines | Set-Content SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+          gh release upload "v${{ steps.tauri.outputs.appVersion }}" SHA256SUMS.txt --clobber
