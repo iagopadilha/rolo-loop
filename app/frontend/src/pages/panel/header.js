@@ -158,11 +158,11 @@ export function cancelShutdown() {
   const b = $('btn-shutdown'); if (b) b.focus();
 }
 
-const CLOSED_TITLE = { notfound: 'project not found · Agent Maestro', shutdown: 'app shut down · Agent Maestro' };
+const CLOSED_TITLE = { notfound: 'project not found · Rolo Loop', shutdown: 'app shut down · Rolo Loop' };
 export function updateTitle() {
   const state = ctx.state;
-  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Agent Maestro'; return; }
-  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Agent Maestro'; return; }
+  if (ui.closed) { document.title = CLOSED_TITLE[ui.closed.kind] || 'Rolo Loop'; return; }
+  if (!state) { document.title = (ctx.offline ? 'disconnected' : 'loading') + ' · Rolo Loop'; return; }
   const label = NAVBAR_STATUS[statusKey()].label, v = loop().turn;
   document.title = `${ctx.offline ? 'disconnected · ' : ''}${label}${isNum(v) ? ' · turn ' + v : ''} · ${projectName() || 'project'}`;
 }

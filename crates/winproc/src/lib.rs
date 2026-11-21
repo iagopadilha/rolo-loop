@@ -242,6 +242,55 @@ pub fn random_bytes(count: usize) -> Vec<u8> {
     buffer
 }
 
+/// Extra entropy of every secret this app protects: another program running as the same user cannot unprotect them by accident.
+const SECRET_ENTROPY: &[u8] = b"rolo-loop/secrets/v1";
+
+#[cfg(windows)]
+fn dpapi(data: &[u8], protect: bool) -> std::io::Result<Vec<u8>> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
+    let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+    let entropy = CRYPT_INTEGER_BLOB { cbData: SECRET_ENTROPY.len() as u32, pbData: SECRET_ENTROPY.as_ptr() as *mut u8 };
+    let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    // SAFETY: both input blobs point at live buffers of the given sizes (read only); DPAPI allocates `output` with LocalAlloc, which is
+    // copied and then freed with LocalFree exactly once.
+    unsafe {
+        let ok = if protect {
+            CryptProtectData(&input, std::ptr::null(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+        } else {
+            CryptUnprotectData(&input, std::ptr::null_mut(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let bytes = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+        LocalFree(output.pbData.cast());
+        Ok(bytes)
+    }
+}
+
+/// Encrypts `data` for the current Windows user (DPAPI): only this user on this machine can read it back.
+#[cfg(windows)]
+pub fn protect_for_user(data: &[u8]) -> std::io::Result<Vec<u8>> {
+    dpapi(data, true)
+}
+
+/// Reverses [`protect_for_user`]; fails for another user, another machine or a tampered blob.
+#[cfg(windows)]
+pub fn unprotect_for_user(data: &[u8]) -> std::io::Result<Vec<u8>> {
+    dpapi(data, false)
+}
+
+#[cfg(not(windows))]
+pub fn protect_for_user(_data: &[u8]) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "secrets are protected with Windows DPAPI"))
+}
+
+#[cfg(not(windows))]
+pub fn unprotect_for_user(_data: &[u8]) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "secrets are protected with Windows DPAPI"))
+}
+
 #[cfg(not(windows))]
 pub fn random_bytes(count: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; count];
@@ -259,6 +308,144 @@ pub fn interrupted() -> bool {
 /// Clears the flag (tests).
 pub fn clear_interrupt() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// The PATH text with `dir` added at the end (`add`) or every copy of it removed; `None` when nothing changes. Entries compare without case
+/// and without a trailing backslash; empty entries are dropped only when something changes.
+pub fn path_with_entry(path: &str, dir: &str, add: bool) -> Option<String> {
+    let key = |entry: &str| entry.trim().trim_end_matches(['\\', '/']).to_lowercase();
+    let wanted = key(dir);
+    if wanted.is_empty() {
+        return None;
+    }
+    let entries: Vec<&str> = path.split(';').filter(|e| !e.trim().is_empty()).collect();
+    let present = entries.iter().any(|e| key(e) == wanted);
+    match (add, present) {
+        (true, true) | (false, false) => None,
+        (true, false) => Some(entries.iter().copied().chain(std::iter::once(dir.trim())).collect::<Vec<_>>().join(";")),
+        (false, true) => Some(entries.into_iter().filter(|e| key(e) != wanted).collect::<Vec<_>>().join(";")),
+    }
+}
+
+#[cfg(windows)]
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// The per-user PATH as stored in `HKCU\Environment`: the text (unexpanded) and whether it is `REG_EXPAND_SZ`. A missing value is
+/// `("", true)`.
+#[cfg(windows)]
+pub fn read_user_path() -> std::io::Result<(String, bool)> {
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ};
+    let (subkey, name) = (wide("Environment"), wide("Path"));
+    let mut key: HKEY = std::ptr::null_mut();
+    // SAFETY: the key handle is closed below; the buffers outlive the calls and their sizes are passed in bytes.
+    unsafe {
+        let opened = RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut key);
+        if opened != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(opened as i32));
+        }
+        let mut size: u32 = 0;
+        let mut kind: u32 = 0;
+        let probe = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut kind, std::ptr::null_mut(), &mut size);
+        if probe == ERROR_FILE_NOT_FOUND {
+            RegCloseKey(key);
+            return Ok((String::new(), true));
+        }
+        let mut buffer = vec![0u16; (size as usize).div_ceil(2) + 1];
+        let mut bytes = (buffer.len() * 2) as u32;
+        let read = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut kind, buffer.as_mut_ptr().cast(), &mut bytes);
+        RegCloseKey(key);
+        if read != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(read as i32));
+        }
+        let length = buffer.iter().take((bytes as usize) / 2).position(|c| *c == 0).unwrap_or((bytes as usize) / 2);
+        Ok((String::from_utf16_lossy(&buffer[..length]), kind == windows_sys::Win32::System::Registry::REG_EXPAND_SZ))
+    }
+}
+
+/// Writes the per-user PATH with the type it had (`expandable` = `REG_EXPAND_SZ`, else `REG_SZ`) and tells running programs (Explorer,
+/// new terminals) that the environment changed.
+#[cfg(windows)]
+pub fn write_user_path(value: &str, expandable: bool) -> std::io::Result<()> {
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_EXPAND_SZ, REG_SZ};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE};
+    let (subkey, name, data, area) = (wide("Environment"), wide("Path"), wide(value), wide("Environment"));
+    let mut key: HKEY = std::ptr::null_mut();
+    // SAFETY: the key handle is closed below; `data` is a NUL-terminated UTF-16 buffer whose byte size is passed; the broadcast only reads `area`.
+    unsafe {
+        let opened = RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_SET_VALUE, &mut key);
+        if opened != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(opened as i32));
+        }
+        let written = RegSetValueExW(key, name.as_ptr(), 0, if expandable { REG_EXPAND_SZ } else { REG_SZ }, data.as_ptr().cast(), (data.len() * 2) as u32);
+        RegCloseKey(key);
+        if written != ERROR_SUCCESS {
+            return Err(std::io::Error::from_raw_os_error(written as i32));
+        }
+        let mut result: usize = 0;
+        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, area.as_ptr() as isize, SMTO_ABORTIFHUNG, 5000, &mut result);
+    }
+    Ok(())
+}
+
+/// `CREATE_NO_WINDOW`: a console child gets no console window of its own.
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// The creation flag that keeps a console child from opening a window: [`CREATE_NO_WINDOW`] when this process has no console window
+/// (the desktop app, a detached loop, a hook run by one of them), 0 when it runs in a terminal (the child then shares that terminal, so a
+/// command-line user still sees its output).
+#[cfg(windows)]
+pub fn hidden_console_flags() -> u32 {
+    // SAFETY: no arguments; it only returns the console window handle of this process, or null.
+    let window = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
+    if window.is_null() {
+        CREATE_NO_WINDOW
+    } else {
+        0
+    }
+}
+
+#[cfg(not(windows))]
+pub fn hidden_console_flags() -> u32 {
+    0
+}
+
+/// Sets `extra_flags | `[`hidden_console_flags`] as the Windows creation flags of `command` (nothing elsewhere). Every program this
+/// workspace starts goes through here, so no terminal window ever flashes on the user's screen.
+pub fn hide_console(command: &mut std::process::Command, extra_flags: u32) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(extra_flags | hidden_console_flags());
+    }
+    #[cfg(not(windows))]
+    let _ = extra_flags;
+    command
+}
+
+/// Flags of a long-lived background child (a loop, a claude job, the panel server): `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`, always.
+/// Never `DETACHED_PROCESS`: Windows ignores `CREATE_NO_WINDOW` with it, and every console program the child starts (git, node, a shell)
+/// would then open a visible window.
+pub fn spawn_hidden_flags(command: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW | 0x0000_0200); // CREATE_NEW_PROCESS_GROUP
+    }
+    command
+}
+
+#[cfg(not(windows))]
+pub fn read_user_path() -> std::io::Result<(String, bool)> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
+}
+
+#[cfg(not(windows))]
+pub fn write_user_path(_value: &str, _expandable: bool) -> std::io::Result<()> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "the user PATH lives in the Windows registry"))
 }
 
 #[cfg(not(windows))]
@@ -321,5 +508,29 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert!(!pid_alive(root));
         let _ = child.wait();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn secrets_round_trip_for_this_user_only() {
+        let sealed = protect_for_user(b"sk-test-value").unwrap();
+        assert!(!sealed.windows(13).any(|w| w == b"sk-test-value"));
+        assert_eq!(unprotect_for_user(&sealed).unwrap(), b"sk-test-value");
+        let mut tampered = sealed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0xFF;
+        assert!(unprotect_for_user(&tampered).is_err());
+    }
+
+    #[test]
+    fn path_entries_are_added_once_and_removed_everywhere() {
+        let path = r"C:\Windows;%USERPROFILE%\bin;;C:\Tools\";
+        assert_eq!(path_with_entry(path, r"C:\Apps\Maestro\plugin\bin", true).unwrap(), r"C:\Windows;%USERPROFILE%\bin;C:\Tools\;C:\Apps\Maestro\plugin\bin");
+        assert_eq!(path_with_entry(path, r"c:\tools", true), None);
+        assert_eq!(path_with_entry(path, r"C:\Tools", false).unwrap(), r"C:\Windows;%USERPROFILE%\bin");
+        assert_eq!(path_with_entry(r"C:\A;c:\a\;C:\B", r"C:\A", false).unwrap(), r"C:\B");
+        assert_eq!(path_with_entry(path, r"C:\Nope", false), None);
+        assert_eq!(path_with_entry("", r"C:\A", true).unwrap(), r"C:\A");
+        assert_eq!(path_with_entry(path, "  ", true), None);
     }
 }

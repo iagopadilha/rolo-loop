@@ -66,6 +66,7 @@ pub mod repo_readiness;
 pub mod repo_registry;
 pub mod roadmap;
 pub mod roadmap_view;
+pub mod settings_v3;
 pub mod setup_commit;
 pub mod skills_catalog;
 pub mod spec_file;
@@ -145,6 +146,9 @@ pub struct App {
     /// Idle-shutdown monitor, set by `serve` once it exists (tests have none).
     /// Pipeline body per work dir, keyed by the files it was derived from.
     pub pipeline_cache: Mutex<std::collections::HashMap<String, (String, Value)>>,
+    /// Hub list: last progress summary per project id and when it was read; ids whose summary is being computed.
+    pub progress_summaries: Mutex<std::collections::HashMap<String, (Value, std::time::Instant)>>,
+    pub progress_refreshing: Mutex<std::collections::HashSet<String>>,
     pub duration_cache: Mutex<std::collections::HashMap<std::path::PathBuf, (f64, Option<f64>)>>,
     pub chat_send_lock: Mutex<()>,
     pub action_locks: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
@@ -215,6 +219,8 @@ impl App {
             map_active_folders: Mutex::new(BTreeSet::new()),
             monitors: Mutex::new((Vec::new(), BTreeMap::new())),
             pipeline_cache: Mutex::new(Default::default()),
+            progress_summaries: Mutex::new(Default::default()),
+            progress_refreshing: Mutex::new(Default::default()),
             duration_cache: Mutex::new(Default::default()),
             chat_send_lock: Mutex::new(()),
             action_locks: Mutex::new(Default::default()),

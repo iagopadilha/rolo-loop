@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Unsupervised /orchestrator loop: runs `claude -p` in turns until it finishes or gets stuck.
 //!
-//! Panel: by default the loop starts (or reuses) the Maestro web panel, detached and independent: it prints `[loop] monitor: <url>`, writes
+//! Panel: by default the loop starts (or reuses) the Rolo Loop web panel, detached and independent: it prints `[loop] monitor: <url>`, writes
 //! LOOP-CMD.json and the URL in meta.json, and NEVER shuts it down when it ends. `--no-monitor` or `LOOP_MONITOR=off` turns it off. The file
 //! `.specs/project/loop/internal/PAUSE` (created by the panel) makes the loop stop at awaiting_user before the next turn.
 //!
@@ -150,6 +150,9 @@ pub fn command_flags(opts: &LoopOpts) -> String {
     }
     if opts.pause_on_blocked {
         flags.push_str(" --pause-on-blocked");
+    }
+    if opts.keep_going {
+        flags.push_str(" --keep-going");
     }
     if !opts.setup.is_empty() {
         flags.push_str(&format!(" --setup \"{}\"", opts.setup));
@@ -770,7 +773,8 @@ impl Runner {
                 return self.finish(work, meta, "paused", &cost_cap_reason(cost, cap), opts);
             }
             turn += 1;
-            let leftover = LeftoverOpts { leftovers: opts.leftovers.clone(), primary_name: opts.primary_name.clone() };
+            let leftovers = if opts.leftovers.is_empty() && opts.keep_going { "commit".to_string() } else { opts.leftovers.clone() };
+            let leftover = LeftoverOpts { leftovers, primary_name: opts.primary_name.clone() };
             if let Some((dirty_name, rows)) = settle_dirty_worktrees(work, meta, turn, &leftover).into_iter().next() {
                 let where_ = if dirty_name.is_empty() { String::new() } else { format!("in repo {dirty_name} ") };
                 return self.finish(work, meta, "error", &crate::worktree_state::dirty_stop_message(&where_, turn, &rows), opts);
@@ -799,8 +803,10 @@ impl Runner {
             }
             // the user's answers to the commands the guard asked about (apply a migration, start the app on DEV): the agents read the file the flag names
             let approvals_flag = if crate::approvals::write_turn_notes(work) { " --approvals" } else { "" };
+            // the agents, models and quality checks the user set in Settings (the skill reads the file the flag names)
+            let policy_flag = if crate::loop_policy::write_turn_policy(work, &self.ctx.config) { " --policy" } else { "" };
             let prompt = format!(
-                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}{approvals_flag}",
+                "/orchestrator continue --headless --turn {turn} --wave {} --branch {branch}{}{}{approvals_flag}{policy_flag}",
                 opts.wave,
                 if opts.e2e { " --e2e" } else { "" },
                 plan_flags(work, opts.wave, &opts.primary_name)

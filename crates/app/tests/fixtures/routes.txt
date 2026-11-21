@@ -142,3 +142,15 @@ POST /api/app/settings token=1 activity=1 limit=65536
 GET /api/app/settings/mcp-servers token=0 activity=0 limit=65536
 POST /api/app/settings/mcp-servers token=1 activity=1 limit=65536
 GET /api/app/settings/skills token=0 activity=0 limit=65536
+GET /api/app/settings/providers token=0 activity=0 limit=65536
+POST /api/app/settings/providers token=1 activity=1 limit=65536
+POST /api/app/settings/providers/{provider_id}/secret token=1 activity=1 limit=65536
+POST /api/app/settings/providers/{provider_id}/test token=1 activity=1 limit=65536
+GET /api/app/settings/notifications token=0 activity=0 limit=65536
+POST /api/app/settings/notifications token=1 activity=1 limit=65536
+GET /api/app/settings/agents token=0 activity=0 limit=65536
+POST /api/app/settings/agents token=1 activity=1 limit=65536
+GET /api/app/settings/quality token=0 activity=0 limit=65536
+POST /api/app/settings/quality token=1 activity=1 limit=65536
+GET /api/app/onboarding token=0 activity=0 limit=65536
+POST /api/app/onboarding token=1 activity=1 limit=65536

@@ -244,9 +244,11 @@ mod tests {
         assert!(lanes_of_prompt("/orchestrator continue").is_empty());
     }
 
+    /// A process with no child of its own (`ping` itself, not `cmd /C ping`): a shell's child would join the job a moment later and turn the
+    /// count of a test into a race.
     fn sleeper() -> std::process::Child {
-        let mut command = std::process::Command::new("cmd");
-        command.args(["/C", "ping -n 60 127.0.0.1 > nul"]);
+        let mut command = std::process::Command::new("ping");
+        command.args(["-n", "60", "127.0.0.1"]).stdout(std::process::Stdio::null());
         crate::loop_io::hidden(&mut command).spawn().unwrap()
     }
 

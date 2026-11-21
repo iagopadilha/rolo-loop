@@ -1,6 +1,6 @@
 ---
 name: brownfield-mapper
-description: Writes ONE OR MORE tlc-spec-driven brownfield mapping documents (STACK, ARCHITECTURE, CONVENTIONS, STRUCTURE, TESTING, INTEGRATIONS or CONCERNS) into docs/codebase/ at the project root (versioned, reusable by the team), whichever the orchestrator lists in `DOCS:`. The documents are generic and stable guides, never a source of truth. The number of agents depends on repo size (`harness scale` of the Loop Harness app): small repo = 1 agent with all 7, large = 1 per document. Used by the /orchestrator skill.
+description: Writes ONE OR MORE tlc-spec-driven brownfield mapping documents (STACK, ARCHITECTURE, CONVENTIONS, STRUCTURE, TESTING, INTEGRATIONS or CONCERNS) into docs/codebase/ at the project root (versioned, reusable by the team), whichever the orchestrator lists in `DOCS:`. The documents are generic and stable guides, never a source of truth. The number of agents depends on repo size (`harness scale` of the Rolo Loop app): small repo = 1 agent with all 7, large = 1 per document. Used by the /orchestrator skill.
 tools: Read, Write, Glob, Grep, Bash
 model: sonnet
 ---

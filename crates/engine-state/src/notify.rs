@@ -168,9 +168,9 @@ fn subject_of(ctx: &Value) -> String {
         parts.push(format!("etapa {stage}"));
     }
     if parts.is_empty() || ev == "test" {
-        format!("[Agent-Maestro] {title}")
+        format!("[Rolo Loop] {title}")
     } else {
-        format!("[Agent-Maestro] {title}: {}", parts.join(" | "))
+        format!("[Rolo Loop] {title}: {}", parts.join(" | "))
     }
 }
 
@@ -756,12 +756,72 @@ fn channel_email(env: &Env, subject: &str, body: &str) -> (bool, String) {
     }
 }
 
+/// Body templates of the webhook presets (`LOOP_WEBHOOK_PRESET`); `{{name}}` placeholders are filled JSON-escaped.
+pub const WEBHOOK_PRESETS: [(&str, &str); 4] = [
+    (
+        "generic",
+        r#"{"event": "{{event}}", "project": "{{project}}", "subject": "{{subject}}", "body": "{{body}}", "url": "{{url}}", "turn": "{{turn}}", "cost": "{{cost}}", "at": "{{at}}"}"#,
+    ),
+    ("slack", r#"{"text": "*{{subject}}*\n{{body}}"}"#),
+    ("teams", r#"{"@type": "MessageCard", "@context": "https://schema.org/extensions", "summary": "{{subject}}", "title": "{{subject}}", "text": "{{body}}"}"#),
+    ("discord", r#"{"content": "**{{subject}}**\n{{body}}"}"#),
+];
+
+/// Text as it goes inside a JSON string (no surrounding quotes).
+fn json_escaped(text: &str) -> String {
+    let quoted = serde_json::to_string(text).unwrap_or_default();
+    quoted[1..quoted.len().saturating_sub(1)].to_string()
+}
+
+/// The webhook body: `LOOP_WEBHOOK_BODY` when set, else the preset's template (generic by default), with every placeholder filled.
+pub fn webhook_payload(env: &Env, subject: &str, body: &str, ctx: &Value) -> String {
+    let custom = env.text("LOOP_WEBHOOK_BODY");
+    let preset = env.text("LOOP_WEBHOOK_PRESET").trim().to_lowercase();
+    let template = if custom.trim().is_empty() { WEBHOOK_PRESETS.iter().find(|(name, _)| *name == preset).unwrap_or(&WEBHOOK_PRESETS[0]).1.to_string() } else { custom };
+    let value_text = |key: &str| match ctx.get(key) {
+        Some(Value::String(t)) => t.clone(),
+        Some(Value::Null) | None => String::new(),
+        Some(other) => other.to_string(),
+    };
+    let at = crate::loop_io::now_iso();
+    let fills = [
+        ("event", event(ctx).to_string()),
+        ("project", s(ctx, "project").to_string()),
+        ("subject", subject.to_string()),
+        ("body", body.to_string()),
+        ("url", value_text("monitor_url")),
+        ("turn", value_text("turn")),
+        ("cost", value_text("cost")),
+        ("at", at),
+    ];
+    let mut out = template;
+    for (name, value) in fills {
+        out = out.replace(&format!("{{{{{name}}}}}"), &json_escaped(&value));
+    }
+    out
+}
+
+/// Extra headers of the webhook (`LOOP_WEBHOOK_HEADERS`, a JSON object; kept in the secrets store because it usually holds a token).
+fn webhook_headers(env: &Env) -> Vec<(String, String)> {
+    serde_json::from_str::<Value>(&env.text("LOOP_WEBHOOK_HEADERS"))
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .map(|m| m.into_iter().filter_map(|(k, v)| v.as_str().map(|t| (k, t.to_string()))).collect())
+        .unwrap_or_default()
+}
+
 fn channel_webhook(env: &Env, subject: &str, body: &str, ctx: &Value) -> (bool, String) {
     let url = env.text("LOOP_WEBHOOK_URL");
-    let payload = py_json_dumps(&json!({"subject": subject, "body": body, "event": event(ctx), "project": s(ctx, "project")}), true);
+    let payload = webhook_payload(env, subject, body, ctx);
+    let method = if env.text("LOOP_WEBHOOK_METHOD").trim().eq_ignore_ascii_case("PUT") { "PUT" } else { "POST" };
+    let headers = webhook_headers(env);
     let mut last = String::new();
     for attempt in 0..3 {
-        match ureq::post(&url).timeout(Duration::from_secs(30)).set("Content-Type", "application/json").send_string(&payload) {
+        let mut request = ureq::request(method, &url).timeout(Duration::from_secs(30)).set("Content-Type", "application/json");
+        for (name, value) in &headers {
+            request = request.set(name, value);
+        }
+        match request.send_string(&payload) {
             Ok(r) => return ((200..300).contains(&r.status()), format!("HTTP {}", r.status())),
             Err(ureq::Error::Status(code, r)) => return (false, format!("HTTP {code} {}", r.into_string().unwrap_or_default().chars().take(200).collect::<String>())),
             Err(e) => {
@@ -806,6 +866,12 @@ pub fn milestones_enabled(env: &Env) -> bool {
     !matches!(env.text("LOOP_NOTIFY_MILESTONES").trim().to_lowercase().as_str(), "off" | "no" | "false" | "0")
 }
 
+/// `LOOP_NOTIFY_EVENTS` (a list of event names) turns notices on per event; empty = every event. A test notice always goes.
+pub fn event_wanted(env: &Env, name: &str) -> bool {
+    let listed: Vec<String> = env.text("LOOP_NOTIFY_EVENTS").split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
+    listed.is_empty() || name == "test" || listed.iter().any(|l| l == name)
+}
+
 /// The channels the notices can use.
 pub const CHANNELS: [&str; 5] = ["console", "toast", "file", "email", "webhook"];
 
@@ -834,6 +900,9 @@ pub fn dispatch(env: &mut Env, ctx: &Value, work: &str, only: Option<Vec<String>
         }
     });
     let mut results = Vec::new();
+    if !event_wanted(env, event(ctx)) {
+        return names.into_iter().map(|name| (name, format!("SKIPPED: the {} event is turned off (LOOP_NOTIFY_EVENTS)", event(ctx)))).collect();
+    }
     for name in names {
         let style = match name.as_str() {
             "console" | "file" | "webhook" => &full,
@@ -904,7 +973,7 @@ mod tests {
     fn test_notice_has_the_standard_shape() {
         let ctx = json!({"event": "test", "branch": "loop/example", "turn": 1, "cost": 0.0, "features": [["a", "verified"], ["b", "pending"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Agent-Maestro] Teste de notificação");
+        assert_eq!(subject, "[Rolo Loop] Teste de notificação");
         assert!(body.contains("Detalhes da sessão\n- ID do loop: example\n- Turno: 1\n- Custo atual: US$ 0.00\n- Quando: "));
         assert!(body.contains("Teste\nEste é um aviso de TESTE do loop. Nada precisa ser feito."));
         assert!(!body.contains("Status das features"));
@@ -916,7 +985,7 @@ mod tests {
             "Waiting for your validation: feature pay. Do this: send a test mail. This is a planned pause, not an error: everything else is done. [validate-stop:pay]";
         let ctx = json!({"event": "awaiting_user", "pause_kind": "validation_checkpoint", "running": ["pay"], "reason": reason, "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert!(subject.starts_with("[Agent-Maestro] Aguardando sua validação: pay"), "{subject}");
+        assert!(subject.starts_with("[Rolo Loop] Aguardando sua validação: pay"), "{subject}");
         assert!(body.contains("Pausa planejada, não é erro nem pergunta"), "{body}");
         let plain =
             json!({"event": "awaiting_user", "running": ["pay"], "reason": "which db?", "branch": "loop/x", "turn": 4, "cost": 1.0, "features": [["pay", "verified"]]});
@@ -955,7 +1024,7 @@ mod tests {
     #[test]
     fn notice_names_features_stage_and_does_not_repeat_the_title() {
         let (subject, body) = build(&env(), &named_ctx());
-        assert_eq!(subject, "[Agent-Maestro] Execução interrompida com erro: b-ui | etapa 2");
+        assert_eq!(subject, "[Rolo Loop] Execução interrompida com erro: b-ui | etapa 2");
         assert!(!body.contains("Execução interrompida"), "{body}");
         assert!(
             body.contains("- Etapa: 2")
@@ -1001,7 +1070,7 @@ mod tests {
         assert_eq!(milestones(after, after), (vec![], vec![]));
         let ctx = json!({"event": "stage_closed", "verified_now": ["a"], "stage_closed": ["1"], "features": [["a", "verified"]]});
         let (subject, body) = build(&env(), &ctx);
-        assert_eq!(subject, "[Agent-Maestro] Etapa concluída: a");
+        assert_eq!(subject, "[Rolo Loop] Etapa concluída: a");
         assert!(body.contains("a: verificada (ainda não entregue)") && body.contains("Etapa concluída: 1"));
         assert!(!milestones_enabled(&Env::from_pairs([("LOOP_NOTIFY_MILESTONES", "off")])));
     }
@@ -1033,5 +1102,28 @@ mod tests {
         assert_eq!(res[1].1, "FAILED: unknown channel");
         assert!(res[2].1.starts_with("SKIPPED: not configured (LOOP_NOTIFY_TO, LOOP_SMTP_HOST, LOOP_SMTP_FROM)"));
         assert!(loop_path(&work, "NOTICE.txt").is_file());
+    }
+
+    #[test]
+    fn webhook_presets_headers_and_event_filter() {
+        let ctx = json!({"event": "awaiting_user", "project": "shop", "turn": 4, "cost": 1.5, "monitor_url": "http://127.0.0.1:47800/p/x/"});
+        let env = Env::from_pairs([("LOOP_WEBHOOK_PRESET", "slack")]);
+        let slack: Value = serde_json::from_str(&webhook_payload(&env, "Needs you \"now\"", "line1\nline2", &ctx)).unwrap();
+        assert_eq!(slack["text"], "*Needs you \"now\"*\nline1\nline2");
+        let generic: Value = serde_json::from_str(&webhook_payload(&Env::from_pairs::<[(&str, &str); 0], &str, &str>([]), "S", "B", &ctx)).unwrap();
+        assert_eq!(
+            (generic["event"].clone(), generic["project"].clone(), generic["turn"].clone(), generic["url"].clone()),
+            (json!("awaiting_user"), json!("shop"), json!("4"), json!("http://127.0.0.1:47800/p/x/"))
+        );
+        let custom = Env::from_pairs([("LOOP_WEBHOOK_BODY", r#"{"msg": "{{project}}: {{subject}}"}"#)]);
+        assert_eq!(webhook_payload(&custom, "Done", "", &ctx), r#"{"msg": "shop: Done"}"#);
+        let teams: Value = serde_json::from_str(&webhook_payload(&Env::from_pairs([("LOOP_WEBHOOK_PRESET", "teams")]), "T", "B", &ctx)).unwrap();
+        assert_eq!(teams["@type"], "MessageCard");
+        assert_eq!(
+            webhook_headers(&Env::from_pairs([("LOOP_WEBHOOK_HEADERS", r#"{"Authorization": "Bearer x", "n": 1}"#)])),
+            vec![("Authorization".to_string(), "Bearer x".to_string())]
+        );
+        let only_errors = Env::from_pairs([("LOOP_NOTIFY_EVENTS", "error, done")]);
+        assert!(event_wanted(&only_errors, "error") && event_wanted(&only_errors, "test") && !event_wanted(&only_errors, "awaiting_user"));
     }
 }

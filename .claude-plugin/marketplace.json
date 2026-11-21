@@ -1,16 +1,16 @@
 {
-  "name": "agent-maestro",
+  "name": "rolo-loop",
   "owner": {
     "name": "Iago Boardman Padilha"
   },
   "allowCrossMarketplaceDependenciesOn": ["claude-craft-kit"],
-  "description": "Loop engineering for Claude Code: orchestrator, spec-driven engine, subagents and guard hook, plus a local control panel (harness serve) that runs the unattended loop with a graph view, on your own Claude subscription through the claude CLI, no API token.",
+  "description": "Loop engineering for AI coding agents (Claude Code or a compatible CLI): orchestrator, spec-driven engine, subagents and guard hook, plus a local control panel and desktop app that run the unattended loop with a graph view, on your subscription or a pay-per-use API key, in the order you choose.",
   "plugins": [
     {
-      "name": "agent-maestro",
+      "name": "rolo-loop",
       "source": "./plugin",
       "description": "Orchestrator skill, subagents and guard hook. Pairs with the harness executable (harness install), which runs the loop and shows it as a graph.",
-      "version": "0.3.1"
+      "version": "0.4.0"
     }
   ]
 }

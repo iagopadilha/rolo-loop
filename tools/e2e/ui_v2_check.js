@@ -3,6 +3,8 @@
 //   node ui_v2_check.js <app url> <project id> [outDir] [routes]   ->  routes = comma list of panel hash routes (features,decisions,files,errors,feature/<slug>):
 //   when given, only those panel pages are checked (the default matrix stays hub + panel loop).
 //   node ui_v2_check.js <app url> <project id> [outDir]   ->   JSON {cells: [{page, theme, viewport, findings: [...]}], summary}
+//   --desktop (anywhere): the page runs as inside the desktop app (a stub `window.__TAURI__` window API, so the traffic lights, the drag
+//   band and the sidebar toggle render) over the desktop window sizes (minimum 760x520 instead of the phone size).
 // Matrix: pages {hub, panel} x themes {light, dark} x viewports. Findings per cell:
 //   console/pageerror, http>=400, external request, page h-scroll, element overflow/clip, element past the viewport edge,
 //   sidebar/main overlap, low contrast text, home path or token in visible text, missing data-theme at first paint.
@@ -23,6 +25,13 @@ const leakIn = (text) => {
 };
 
 const VIEWPORTS = [[1440, 900], [1180, 800], [900, 700], [390, 844]];
+const DESKTOP_VIEWPORTS = [[1440, 900], [1180, 800], [1000, 700], [899, 700], [760, 520]];
+// The window API the desktop page uses (util/desktop.js), as no-op promises.
+function stubDesktopWindow() {
+  const done = () => Promise.resolve();
+  const current = { label: "main", minimize: done, toggleMaximize: done, close: done, startDragging: done, isMaximized: () => Promise.resolve(false) };
+  window.__TAURI__ = { window: { getCurrentWindow: () => current } };
+}
 const THEMES = ["light", "dark"];
 
 // Runs inside the page: returns a list of {kind, detail} findings from the DOM.
@@ -110,20 +119,24 @@ async function settle(page, name) {
   }
 }
 
-module.exports = { domChecks, VIEWPORTS, THEMES, leakIn };
+module.exports = { domChecks, VIEWPORTS, DESKTOP_VIEWPORTS, THEMES, leakIn, stubDesktopWindow };
 if (require.main === module) (async () => {
-  const [appUrl, projectId, outArg, routesArg] = process.argv.slice(2);
+  const desktop = process.argv.includes("--desktop");
+  const [appUrl, projectId, outArg, routesArg] = process.argv.slice(2).filter((a) => a !== "--desktop");
+  const viewports = desktop ? DESKTOP_VIEWPORTS : VIEWPORTS;
   const outDir = outArg || path.join(".playwright-cli", "images", "ui-v2-check");
   fs.mkdirSync(outDir, { recursive: true });
   const origin = new URL(appUrl).origin;
   const pages = routesArg
     ? routesArg.split(",").filter(Boolean).map((route) => ["panel-" + route.replace(/\//g, "_"), appUrl + "p/" + projectId + "/#/" + route])
     : [["hub", appUrl], ["panel", appUrl + "p/" + projectId + "/"]];
+  if (desktop) for (const entry of pages) entry[0] += "-desktop";
   const browser = await chromium.launch({ headless: true });
   const cells = [];
-  for (const [pname, url] of pages) for (const theme of THEMES) for (const [w, h] of VIEWPORTS) {
+  for (const [pname, url] of pages) for (const theme of THEMES) for (const [w, h] of viewports) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, colorScheme: theme });
-    await ctx.addInitScript((t) => { try { localStorage.setItem("maestro.theme", t); localStorage.setItem("harness.why.seen.v1", "true"); } catch (e) {} }, theme);
+    await ctx.addInitScript((t) => { try { localStorage.setItem("maestro.theme", t); localStorage.setItem("harness.why.seen.v1", "true"); } catch (e) {} window.__MAESTRO_NO_TOUR = true; }, theme);
+    if (desktop) await ctx.addInitScript(stubDesktopWindow);
     const page = await ctx.newPage();
     const findings = [];
     page.on("pageerror", (e) => findings.push({ kind: "pageerror", detail: e.message }));

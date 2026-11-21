@@ -7,6 +7,7 @@
 *.pfx
 *.p12
 secrets.*
+!crates/cfg/src/secrets.rs
 *.secrets.*
 **/credentials*
 .secrets/
@@ -70,3 +71,6 @@ docs/media/raw/
 
 # Release binaries (built by cargo, shipped in release assets)
 plugin/bin/
+
+# Tauri generated schemas (cargo build of crates/desktop)
+crates/desktop/gen/

@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 pub const MONITOR_FILE_NAME: &str = "MONITOR.json";
 static PROJECT_NAME_PATTERN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*\z"));
 pub const PROJECT_NAME_MAX_LENGTH: usize = 100;
-const INITIAL_COMMIT_MESSAGE: &str = "chore: initial project structure (loop-harness)";
+const INITIAL_COMMIT_MESSAGE: &str = "chore: initial project structure (rolo-loop)";
 
 fn is_windows_reserved(name: &str) -> bool {
     matches!(name, "con" | "prn" | "aux" | "nul")
@@ -207,6 +207,11 @@ impl ProjectService<'_> {
         if !Path::new(&folder).is_dir() {
             return Err(AppError::invalid_path(format!("not an existing folder: {folder}")));
         }
+        // An 8.3 short name (`C:\Users\JOHNDO~1\...`, what %TEMP% often holds) becomes the long path: the guard and git compare the long one, and
+        // a project registered by its short name had every edit refused as "outside the project". Other paths stay as given (their id too).
+        if folder.contains('~') {
+            return Ok(pycompat::nt_realpath(&folder));
+        }
         Ok(folder)
     }
 
@@ -282,5 +287,16 @@ mod tests {
         assert_eq!((written["port"].clone(), written["url"].clone()), (json!(47801), json!(format!("http://localhost:47801/p/{}/", project.id))));
         service.release_projects_on_shutdown();
         assert!(!monitor.exists());
+    }
+
+    #[test]
+    fn a_short_8_3_folder_name_is_registered_by_its_long_path() {
+        // %TEMP% is often a short 8.3 name on Windows; elsewhere this only checks that the folder is kept
+        let temp = std::env::temp_dir().display().to_string();
+        let folder = ProjectService::validate_existing_folder(&temp, Path::new("C:/home")).unwrap();
+        assert!(Path::new(&folder).is_dir());
+        if temp.contains('~') {
+            assert!(!folder.contains('~'), "{folder}");
+        }
     }
 }

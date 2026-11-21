@@ -66,7 +66,7 @@ Most guard refusals in an E2E run are about HOW a call is written, not about a m
 
 - No `SUBPROJECT:` line in the prompt = nothing in this section changes: work as before.
 - Plan and capabilities come from `.specs/project/PROJECT.md`. Stack, conformance, map location and build/run/test commands come from the already-loaded `CLAUDE.md` (its `maestro:context` block): never open another file to find them.
-- **File size:** run `harness inventory <folder> --changed <feature paths> --json` (the Loop Harness app's `harness`, read-only) and report every changed file above the threshold in `NOTES` as a WARNING. It is never a failure and never changes the verdict.
+- **File size:** run `harness inventory <folder> --changed <feature paths> --json` (the Rolo Loop app's `harness`, read-only) and report every changed file above the threshold in `NOTES` as a WARNING. It is never a failure and never changes the verdict.
 - Read the `SUBPROJECT:` lines for what to start and where. For API routes, read the CONTRACT section of `docs/codebase/SYSTEM.md` (between `<!-- CONTRACT:BEGIN -->` and `<!-- CONTRACT:END -->`).
 
 ## Reserved for the loop

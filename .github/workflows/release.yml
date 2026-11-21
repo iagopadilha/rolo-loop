@@ -1,7 +1,7 @@
 name: release
 
 # Tag vX.Y.Z -> build the Windows binaries, publish them in two places:
-#   1. a GitHub Release with agent-maestro-X.Y.Z.zip attached
+#   1. a GitHub Release with rolo-loop-X.Y.Z.zip attached
 #   2. the `dist` branch: the tagged tree plus plugin/bin, so the marketplace
 #      entry (git-subdir, ref dist) installs the plugin together with its binaries.
 # Run it by hand (workflow_dispatch) to build and inspect the zip without publishing.
@@ -51,7 +51,7 @@ jobs:
         id: zip
         shell: pwsh
         run: |
-          $name = "agent-maestro-${{ steps.version.outputs.version }}.zip"
+          $name = "rolo-loop-${{ steps.version.outputs.version }}.zip"
           Compress-Archive -Path plugin/* -DestinationPath $name
           $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
           "name=$name" >> $env:GITHUB_OUTPUT

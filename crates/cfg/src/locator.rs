@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 
 pub const SKILL_DIR_VARIABLE: &str = "LOOP_SKILL_DIR";
 pub const PLUGIN_ROOT_VARIABLE: &str = "CLAUDE_PLUGIN_ROOT";
-pub const PLUGIN_NAME: &str = "agent-maestro";
-/// Id the plugin had before the rename; an install made under it keeps working.
-pub const LEGACY_PLUGIN_NAME: &str = "claude-maestro";
+pub const PLUGIN_NAME: &str = "rolo-loop";
+/// Ids the plugin had before (agent-maestro, then claude-maestro before it); an install made under one keeps working.
+pub const LEGACY_PLUGIN_NAMES: [&str; 2] = ["agent-maestro", "claude-maestro"];
 pub const TOOLKIT_PLUGIN_NAME: &str = "claude-craft-kit";
 pub const TOOLKIT_CONFIG_KEY: &str = "dev_toolkit_dir";
 /// Minimum toolkit version (layout with `bin/`, `shared/templates`, `shared/rules`).
@@ -139,7 +139,7 @@ impl Locator {
 
     pub fn list_installed_plugin_skill_dirs(&self) -> Vec<PathBuf> {
         let mut roots = self.installed_plugin_roots(PLUGIN_NAME);
-        for legacy in self.installed_plugin_roots(LEGACY_PLUGIN_NAME) {
+        for legacy in LEGACY_PLUGIN_NAMES.iter().flat_map(|name| self.installed_plugin_roots(name)) {
             if !roots.iter().any(|p| same_text(p, &legacy)) {
                 roots.push(legacy);
             }
@@ -452,14 +452,15 @@ mod tests {
     #[test]
     fn plugin_installed_under_either_name_is_found() {
         let f = fx();
-        for (name, version) in [(PLUGIN_NAME, "0.4.0"), (LEGACY_PLUGIN_NAME, "0.3.1")] {
+        for (name, version) in [(PLUGIN_NAME, "0.5.0"), (LEGACY_PLUGIN_NAMES[0], "0.4.0"), (LEGACY_PLUGIN_NAMES[1], "0.3.1")] {
             let skill = f.claude_home.join("plugins/cache/market").join(name).join(version).join("skills").join("orchestrator");
             fs::create_dir_all(&skill).unwrap();
         }
         let dirs = f.locator().list_installed_plugin_skill_dirs();
-        assert_eq!(dirs.len(), 2);
-        assert!(dirs.iter().any(|p| p.to_string_lossy().contains(PLUGIN_NAME)));
-        assert!(dirs.iter().any(|p| p.to_string_lossy().contains(LEGACY_PLUGIN_NAME)));
+        assert_eq!(dirs.len(), 3);
+        for name in [PLUGIN_NAME, LEGACY_PLUGIN_NAMES[0], LEGACY_PLUGIN_NAMES[1]] {
+            assert!(dirs.iter().any(|p| p.to_string_lossy().contains(name)), "{name}");
+        }
     }
 
     #[test]

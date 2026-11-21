@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rolo Loop",
+  "identifier": "dev.iagopadilha.rololoop",
+  "build": {
+    "frontendDist": "fallback",
+    "beforeBuildCommand": {
+      "script": "node ../../tools/desktop/stage.mjs",
+      "cwd": "."
+    }
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "publisher": "Iago Boardman Padilha",
+    "copyright": "MIT License",
+    "category": "DeveloperTool",
+    "shortDescription": "Unattended build loops for AI coding agents",
+    "longDescription": "Rolo Loop runs spec-driven build loops for AI coding agents (Claude Code or a compatible CLI) on your subscription or a pay-per-use API key, with a guard hook on every tool call and a local panel to follow and answer the loop.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": false,
+    "resources": {
+      "../../target/desktop-stage/plugin/": "plugin/",
+      "../../target/desktop-stage/.claude-plugin/": ".claude-plugin/",
+      "../../app/frontend/": "app/frontend/",
+      "../../app/templates/": "app/templates/"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "minimumWebview2Version": "110.0.1587.40",
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "PortugueseBR"
+        ],
+        "displayLanguageSelector": true,
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "language": [
+          "en-US",
+          "pt-BR"
+        ],
+        "upgradeCode": "3BF6896A-16A2-4AE0-A62B-5B011256DCDB",
+        "fragmentPaths": [
+          "windows/path.wxs"
+        ],
+        "componentRefs": [
+          "MaestroPath"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCMDJCRkNEODI0QkY0NzEKUldSeDlFdUN6YjhDSzFTRHlCVVBYTlBjaHBKMEIraHhLMWNMeHVYZGkvdHh6a1FzUjFYcC9UaU4K",
+      "endpoints": [
+        "https://github.com/iagopadilha/rolo-loop/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

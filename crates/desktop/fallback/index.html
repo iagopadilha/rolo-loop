@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rolo Loop</title>
+<style>
+  :root { color-scheme: light dark; --bg: #FFFFFF; --fg: #1D1D1F; --fg2: #636368; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1C1C1E; --fg: #F5F5F7; --fg2: #ABABB0; } }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--fg);
+         font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+  p { color: var(--fg2); }
+  main { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  img { image-rendering: pixelated; }
+</style>
+</head>
+<body>
+  <!-- Never shown while the panel server runs: the window opens on http://127.0.0.1:<port>/ directly. -->
+  <main role="status"><img src="rolo-running.svg" width="120" height="120" alt=""><h1>Rolo Loop</h1><p>Starting the panel…</p></main>
+</body>
+</html>

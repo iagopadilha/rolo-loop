@@ -1,6 +1,6 @@
 # Roadmap
 
-<!-- Loop Harness template. The orchestrator writes this file (`/orchestrator roadmap`, or the app's
+<!-- Rolo Loop template. The orchestrator writes this file (`/orchestrator roadmap`, or the app's
      "Generate roadmap" button). Only the user's click on "Approve roadmap" approves it: the loop does not run without that.
 
 Grammar of each feature line (checked by engine/loop_state.py). One line per feature, under the

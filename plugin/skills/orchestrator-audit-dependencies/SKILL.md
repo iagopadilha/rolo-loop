@@ -5,7 +5,7 @@ description: Audits whether any ROADMAP feature depends on another without decla
 
 # Audit dependencies between features
 
-Depends on the `orchestrator` skill and on the Loop Harness app (engine command `harness audit`; ROADMAP in `.specs/project/`).
+Depends on the `orchestrator` skill and on the Rolo Loop app (engine command `harness audit`; ROADMAP in `.specs/project/`).
 
 ## Why it exists
 

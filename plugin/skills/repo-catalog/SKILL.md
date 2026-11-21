@@ -8,7 +8,7 @@ description: Maps which repository does what, so "which repo already does X?" ha
 One short sheet per repository: what it is for and the capabilities it offers, each one proved by a file that exists.
 
 ## When to use
-- Building a sheet for a repo (the Loop Harness app runs this as a job; a user can also ask for it in chat).
+- Building a sheet for a repo (the Rolo Loop app runs this as a job; a user can also ask for it in chat).
 - Answering "which repo already does X": read the index first (name, purpose, capability ids), open a sheet only for the best match.
 
 ## Sheet format

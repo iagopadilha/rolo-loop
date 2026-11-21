@@ -48,7 +48,7 @@ Always prefer the script declared in the project over the raw command. In a mono
 
 - No `SUBPROJECT:` line in the prompt = nothing in this section changes: work as before.
 - Plan and capabilities come from `.specs/project/PROJECT.md`. Stack, conformance, map location and build/run/test commands come from the already-loaded `CLAUDE.md` (its `maestro:context` block): never open another file to find them.
-- **File size:** run `harness inventory <folder> --changed <feature paths> --json` (the Loop Harness app's `harness`, read-only) and report every changed file above the threshold in `NOTES` as a WARNING. It is never a failure and never changes the verdict.
+- **File size:** run `harness inventory <folder> --changed <feature paths> --json` (the Rolo Loop app's `harness`, read-only) and report every changed file above the threshold in `NOTES` as a WARNING. It is never a failure and never changes the verdict.
 - Read the `SUBPROJECT:` lines: run the checks of the subproject that the feature changed, with the commands from its `CLAUDE:` file. When verifying front-end use of the API, read the CONTRACT section of `docs/codebase/SYSTEM.md`. For a back-end feature of a monorepo (a `SUBPROJECT:` line present), also check that `.specs/features/<slug>/contract.md` exists and report `NOTES: contract.md missing` as a WARNING when it does not (the orchestrator sends the executor back for it).
 
 ## Reserved for the loop

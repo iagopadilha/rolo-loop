@@ -71,7 +71,9 @@ pub fn isolation_environment(ctx: &AppCtx, cwd: &str) -> Vec<(String, String)> {
 
 /// The full argv of one turn.
 pub fn claude_command(ctx: &AppCtx, opts: &LoopOpts, prompt: &str) -> Vec<String> {
-    let mut argv = claude_binaries::base_argv(&current_claude(opts));
+    let provider = current_claude(opts);
+    crate::providers::set_active(&provider); // the turn's environment adds this provider's sign-in (push_lock_env)
+    let mut argv = claude_binaries::base_argv(&provider);
     // each non-primary worktree is granted as `--add-dir=<path>` (the `=` form: the flag is variadic and would swallow what follows); each
     // `reference` repo (read only, no worktree) is granted the same way, as its own folder
     let extra_dirs: Vec<String> = opts.extra_worktrees.iter().chain(opts.reference_dirs.iter()).map(|p| format!("--add-dir={p}")).collect();
@@ -91,7 +93,10 @@ pub fn claude_command(ctx: &AppCtx, opts: &LoopOpts, prompt: &str) -> Vec<String
     ] {
         argv.push(item.to_string());
     }
-    argv.extend(model_arguments(opts));
+    match crate::providers::orchestrator_model_of(&provider) {
+        Some(model) => argv.extend(["--model".to_string(), model]),
+        None => argv.extend(model_arguments(opts)),
+    }
     argv.extend(extra_dirs);
     argv.extend(isolation_arguments(ctx, opts));
     argv.extend(["--strict-mcp-config".to_string(), "--mcp-config".to_string(), mcp_config]);
@@ -125,7 +130,7 @@ pub fn loop_json_correction_prompt(turn: i64, branch: &str) -> String {
 /// The process environment minus the secret-looking variables that came from the app `.env` (see `turn_environment`). The first turn of a
 /// run prints their NAMES (never a value).
 pub fn turn_environment_for(ctx: &AppCtx, reported: &mut bool) -> Vec<(String, String)> {
-    let built = turn_environment::build(&ctx.env.vars(), &ctx.env.env_file_candidates());
+    let built = turn_environment::build_for(&ctx.env);
     if !*reported {
         *reported = true;
         if !built.removed.is_empty() {
@@ -159,6 +164,10 @@ pub fn push_lock_env(ctx: &AppCtx, cwd: &str, reported: &mut bool) -> Vec<(Strin
     // wait for the background subagents (the verifier) instead of killing them 10 min after the last turn; the turn timeout still bounds it
     set_default(&mut env, "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", "0");
     set_default(&mut env, "LOOP_APP_HOME", &ctx.repo_root.display().to_string());
+    // the provider of this turn signs in (key, token, gateway) or blanks a key the subscription must not see
+    for (key, value) in crate::providers::active_environment(&ctx.env.user_data_dir()) {
+        set_env(&mut env, &key, &value);
+    }
     let specs_dir = Path::new(&pycompat::nt_abspath(cwd)).join(".specs"); // cwd = the PRIMARY worktree (run_turn is called with `work`)
     if specs_dir.is_dir() {
         set_env(&mut env, "LOOP_SPECS_DIR", &specs_dir.display().to_string()); // the guard finds SCOPE.json even when its cwd is a second worktree

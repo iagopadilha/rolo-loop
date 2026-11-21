@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "egress-policy"
-description = "Network list grammar and judgement shared by the agent-maestro guard, engine and the claude-craft-kit testenv"
+description = "Network list grammar and judgement shared by the rolo-loop guard, engine and the claude-craft-kit testenv"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

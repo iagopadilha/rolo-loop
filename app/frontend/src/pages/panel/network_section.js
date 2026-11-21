@@ -13,7 +13,7 @@ const EXAMPLES = 'api.example.com/v1 GET,POST cred  ·  *.example.com  ·  db.ex
 const ORIGIN_TEXT = { local: 'always allowed', builtin: 'built-in read', global: 'global (Settings)', project: 'this project' };
 const ORIGIN_TITLE = {
   local: 'This machine: any port, any method, credentials allowed.',
-  builtin: 'Maestro built-in read list: GET and HEAD only, never credentials. Turn it off in Settings.',
+  builtin: 'Rolo Loop built-in read list: GET and HEAD only, never credentials. Turn it off in Settings.',
   global: 'Allowed for every project in Settings (egress_hosts).',
   project: 'Saved in .specs/project/NETWORK.json.',
 };

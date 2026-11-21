@@ -1,4 +1,4 @@
-"""Python half of the loop's run-time egress layer (RUN-02). Standard library only, no Maestro imports: it runs inside ANY Python process an agent
+"""Python half of the loop's run-time egress layer (RUN-02). Standard library only, no Rolo Loop imports: it runs inside ANY Python process an agent
 command starts (the guard puts this folder first on PYTHONPATH, so `site` imports this file as `sitecustomize` at interpreter start-up).
 
 It does nothing unless LOOP_NETWORK_ALLOW_FILE names the project's `network-allow.json` (written by the engine at every turn start). With it,

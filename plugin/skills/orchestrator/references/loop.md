@@ -1,6 +1,6 @@
 # Headless mode: the orchestrator inside the unsupervised loop
 
-Caller: the Loop Harness engine (`harness loop <repo>`, a command of the `harness` executable, outside Claude; see `SKILL.md`, section Runtime). Each turn is a new conversation:
+Caller: the Rolo Loop engine (`harness loop <repo>`, a command of the `harness` executable, outside Claude; see `SKILL.md`, section Runtime). Each turn is a new conversation:
 
 ```
 claude -p "/orchestrator continue --headless --turn N --wave W --branch B [--e2e]" --output-format stream-json --verbose \
@@ -101,7 +101,7 @@ When the user asks for changes after reviewing the decisions, the app appends a 
 A one-off doubt (small, reversible divergence) **does not stop the turn**: the orchestrator chooses the conservative path and writes a line in `.specs/project/loop/VALIDATE.md` (`- [<slug|general>] turn=<N> level=<important|critical> <doubt> | chose: <choice> | revert: <how>`). Only a blocking question (access, important business rule, discrepancy, architecture, scope, data, irreversible, PROD, spec vs rule) becomes `awaiting_user`. `VALIDATE.md` appears in the summary, in the completion notification, in the panel and in the PR. Quarantine (`blocked`) only pauses the loop when another feature depends on the blocked one (`--pause-on-blocked` always pauses; `--continue-on-blocked` never). The worktree `../<project>-worktree-loop` belongs to the engine: never create, delete or switch worktree on your own in headless (the manual worktree protocol of `dispatch.md` only applies in interactive mode).
 
 ## When testing
-`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the agent-maestro repository (engine, app and guard).
+`harness loop <repo> --dry-run` shows what it would do without executing anything. `harness summary <folder>` generates the summary at any time, without Claude. Zero-cost suite: `cargo test --workspace` in the rolo-loop repository (engine, app and guard).
 
 ## Permission denied during a turn (only stops when it matters)
 
@@ -136,7 +136,7 @@ The `spec-reviewer` may reject the same spec turn after turn on a wording point 
 
 ## Panel
 
-A local web page that shows the loop's progress and lets the user answer, resume, pause and add notes without typing a command. It is the **Loop Harness panel** (multi-project, a single process; the project's panel at `/p/<id>/`, routes at `/p/<id>/api/...`); contract in `docs/API.md`; `harness serve --project` starts or reuses the app. The routes below (`/api/...`) take the `/p/<id>` prefix.
+A local web page that shows the loop's progress and lets the user answer, resume, pause and add notes without typing a command. It is the **Rolo Loop panel** (multi-project, a single process; the project's panel at `/p/<id>/`, routes at `/p/<id>/api/...`); contract in `docs/API.md`; `harness serve --project` starts or reuses the app. The routes below (`/api/...`) take the `/p/<id>` prefix.
 
 - **Lifecycle.** After creating/reusing the worktree and before the lock and the turns, `harness loop` writes `LOOP-CMD.json`, starts or reuses the panel, prints `[loop] monitor: <url>` and keeps `monitor_url` in `meta.json`. It does not start it in `--check`, `--dry-run` or `--rewind`. `--no-monitor` or `LOOP_MONITOR=off` (in the app's `.env`) turns it off. A failure to start it (app missing, no valid `MONITOR.json` in time, any exception) only prints a warning: the loop continues without the panel.
 - **The project's control panel.** The panel is independent of the loop: it starts detached (stdin closed, output in `.specs/project/loop/internal/monitor.log`), **stays up without a loop** and **does not die when `harness loop` ends**; the engine never shuts it down. From the front end the user checks (`/api/loop/check`), starts a new loop (`/api/loop/start`), answers, resumes, pauses and shuts down. It only shuts down on `POST /api/shutdown`, on idleness (**loop NOT running, in any state**: `done`, `error`, `stopped`, `awaiting_user` or `no_loop`, and 2 h without use; never while `running`) or if killed from outside. With no live app (including after the automatic shutdown) `harness serve --project <repo>` is enough. A second loop on the same work folder reuses the live panel (live pid and `GET /api/health` with the same `work`).

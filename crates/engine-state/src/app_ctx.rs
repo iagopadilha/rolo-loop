@@ -21,7 +21,7 @@ pub struct AppCtx {
     pub guard: PathBuf,
     /// Plugin root of the dev toolkit, empty when it is not installed.
     pub toolkit_root: PathBuf,
-    /// This executable.
+    /// The `harness` executable the engine children run (`<app_exe> loop ...`): see [`app_exe`].
     pub app_exe: PathBuf,
 }
 
@@ -32,11 +32,32 @@ pub fn repo_root(env: &Env) -> PathBuf {
     }
     let exe = std::env::current_exe().unwrap_or_default();
     for ancestor in exe.ancestors().skip(1) {
-        if ancestor.join("plugin").is_dir() {
+        // a cargo profile folder (`target/debug`, `target/release`) can hold a stale copy of `plugin/` and `app/` (the desktop crate's
+        // build copies its bundle resources there): the repository above it is the real root
+        let in_cargo_target = ancestor.parent().and_then(|p| p.file_name()).is_some_and(|n| n.eq_ignore_ascii_case("target"));
+        if ancestor.join("plugin").is_dir() && !in_cargo_target {
             return ancestor.to_path_buf();
         }
     }
     exe.parent().map(PathBuf::from).unwrap_or_default()
+}
+
+/// Variable that names the `harness` executable explicitly (set by a host such as the desktop app).
+pub const APP_EXE_VARIABLE: &str = "LOOP_APP_EXE";
+const HARNESS_STEM: &str = "harness";
+
+/// The `harness` executable: `LOOP_APP_EXE` when it names a file; else, when this process is another program (the desktop app hosting
+/// the panel), `<repo root>/plugin/bin/harness.exe` if it exists; else this executable.
+pub fn app_exe(env: &Env, repo_root: &std::path::Path, current: &std::path::Path) -> PathBuf {
+    if let Some(named) = env.get(APP_EXE_VARIABLE).filter(|v| !v.is_empty()).map(PathBuf::from).filter(|p| p.is_file()) {
+        return named;
+    }
+    let is_harness = current.file_stem().is_some_and(|stem| stem.to_string_lossy().eq_ignore_ascii_case(HARNESS_STEM));
+    let bundled = repo_root.join("plugin").join("bin").join(format!("{HARNESS_STEM}{}", std::env::consts::EXE_SUFFIX));
+    if !is_harness && bundled.is_file() {
+        return bundled;
+    }
+    current.to_path_buf()
 }
 
 impl AppCtx {
@@ -46,13 +67,15 @@ impl AppCtx {
 
     pub fn discover_in(env: &Env, repo_root: PathBuf) -> Self {
         let config = read_user_config(&env.user_data_dir());
+        crate::providers::install(&config);
         let locator = Locator::new(env.clone(), repo_root.clone());
         let configured = config.get("orchestrator_skill_dir").and_then(Value::as_str).unwrap_or("");
         let skill_dir = locator.locate_orchestrator_skill_dir(configured);
         let (plugin_root, guard) =
             if skill_dir.as_os_str().is_empty() { (PathBuf::new(), PathBuf::new()) } else { (plugin_root_of(&skill_dir), locator.locate_guard(&skill_dir)) };
         let toolkit_root = locator.find_toolkit_root(&config);
-        AppCtx { env: env.clone(), repo_root, config, skill_dir, plugin_root, guard, toolkit_root, app_exe: std::env::current_exe().unwrap_or_default() }
+        let app_exe = app_exe(env, &repo_root, &std::env::current_exe().unwrap_or_default());
+        AppCtx { env: env.clone(), repo_root, config, skill_dir, plugin_root, guard, toolkit_root, app_exe }
     }
 
     pub fn data_dir(&self) -> PathBuf {
@@ -81,5 +104,32 @@ impl AppCtx {
             .map(|f| f.join("..").join("..").join("bin").join("guard.exe").display().to_string())
             .collect::<Vec<_>>()
             .join(", ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_exe_is_harness_for_a_gui_host() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("plugin").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let harness = bin.join(format!("harness{}", std::env::consts::EXE_SUFFIX));
+        let gui = dir.path().join("Rolo Loop.exe");
+        let none = Env::from_pairs::<[(&str, &str); 0], &str, &str>([]);
+        // no bundled harness yet: the current executable
+        assert_eq!(app_exe(&none, dir.path(), &gui), gui);
+        std::fs::write(&harness, b"").unwrap();
+        assert_eq!(app_exe(&none, dir.path(), &gui), harness);
+        // harness itself stays itself
+        let own = dir.path().join("elsewhere").join("harness.exe");
+        assert_eq!(app_exe(&none, dir.path(), &own), own);
+        // an explicit file wins; a missing one is ignored
+        let named = dir.path().join("named.exe");
+        std::fs::write(&named, b"").unwrap();
+        assert_eq!(app_exe(&Env::from_pairs([(APP_EXE_VARIABLE, named.to_str().unwrap())]), dir.path(), &gui), named);
+        assert_eq!(app_exe(&Env::from_pairs([(APP_EXE_VARIABLE, "C:/missing/x.exe")]), dir.path(), &gui), harness);
     }
 }

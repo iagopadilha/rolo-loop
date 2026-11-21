@@ -359,24 +359,22 @@ pub fn alert(g: &G, specs_dir: Option<&str>, profile: &str, message: &str) {
         "The orchestrator guard failed internally and LET THE ACTION THROUGH (fail-open, so the loop is not stalled).\nProfile: {profile}\nReason: {}\n\nSee .specs/project/loop/internal/guard.log and run the guard test suite.",
         message.chars().take(300).collect::<String>()
     );
-    let _ = std::process::Command::new(&notify[0])
+    let mut command = std::process::Command::new(&notify[0]);
+    command
         .args(&notify[1..])
         .args(["--subject", "[guard] internal failure: the gatekeeper let it through", "--body", &body])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+        .stderr(std::process::Stdio::null());
+    let _ = winproc::hide_console(&mut command, 0).spawn();
 }
 
 /// `git -C <cwd> branch --show-current` (5 s limit); empty on any failure.
 pub fn current_branch(cwd: Option<&str>) -> String {
     let dir = cwd.filter(|c| !c.is_empty()).unwrap_or(".");
-    let child = std::process::Command::new("git")
-        .args(["-C", dir, "branch", "--show-current"])
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .spawn();
+    let mut command = std::process::Command::new("git");
+    command.args(["-C", dir, "branch", "--show-current"]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).stdout(std::process::Stdio::piped());
+    let child = winproc::hide_console(&mut command, 0).spawn();
     let Ok(mut child) = child else {
         return String::new();
     };

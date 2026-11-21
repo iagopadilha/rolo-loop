@@ -260,11 +260,19 @@ impl ClaudeClient {
     /// Always returns an object (never fails): `ok`, `reply`, `cost_usd`, `session_id`, `error`, `raw`, `binary`, `account`.
     pub fn run_prompt(&self, argv: &[String], folder: &str, stdin_text: &str, timeout_seconds: u64, extra_env: &[(String, String)]) -> Value {
         let extra_env = self.isolation_variables(folder, extra_env);
-        let names = claude_binaries::ordered(&self.claude_binary, &self.fallback_binaries);
+        // the providers of Settings, read now (their order and secrets may have changed since the app started)
+        let data_dir = self.env.user_data_dir();
+        let fresh = cfg::locator::read_user_config(&data_dir);
+        engine_state::providers::install(&fresh);
+        let (primary, fallbacks) = engine_state::providers::chain(&fresh).unwrap_or_else(|| (self.claude_binary.clone(), self.fallback_binaries.clone()));
+        let names = claude_binaries::ordered(&primary, &fallbacks);
         let mut result = Value::Object(Map::new());
         for (position, name) in names.iter().enumerate() {
-            let attempt = if position == 0 { argv.to_vec() } else { claude_binaries::swap_binary(argv, &names[0], name) };
-            let (mut outcome, switch_cause) = self.run_once(&attempt, folder, stdin_text, timeout_seconds, &extra_env);
+            let current = self.binary_name().to_string(); // the command `argv` was built with
+            let attempt = if *name == current { argv.to_vec() } else { claude_binaries::swap_binary(argv, &current, name) };
+            let mut attempt_env = extra_env.clone();
+            attempt_env.extend(engine_state::providers::environment_of(name, &data_dir));
+            let (mut outcome, switch_cause) = self.run_once(&attempt, folder, stdin_text, timeout_seconds, &attempt_env);
             outcome["binary"] = json!(name);
             let account = outcome.as_object_mut().and_then(|o| o.remove("stderr_account")).unwrap_or(json!(""));
             outcome["account"] = account;

@@ -96,10 +96,26 @@ pub struct Built {
 }
 
 pub fn build(environ: &[(String, String)], env_paths: &[PathBuf]) -> Built {
-    let from_files = values_from_env_files(env_paths);
+    build_from(environ, &values_from_env_files(env_paths), &[])
+}
+
+/// The turn environment of an engine whose `Env` also carries the Settings values and the secrets store (`cfg::env::load_all`): those
+/// count as app values like the `.env` ones, and EVERY name of the secrets store is left out whatever it is called.
+pub fn build_for(env: &cfg::Env) -> Built {
+    let mut app_values = values_from_env_files(&env.env_file_candidates());
+    app_values.extend(cfg::env::settings_values(env));
+    build_from(&env.vars(), &app_values, &cfg::secrets::names(&env.user_data_dir()))
+}
+
+/// [`build`] over explicit app values (`(name, value)` the app set) and names that are secrets by definition.
+pub fn build_from(environ: &[(String, String)], app_values: &[(String, String)], secret_names: &[String]) -> Built {
     let mut removed: Vec<String> = environ
         .iter()
-        .filter(|(name, value)| from_files.iter().any(|(n, v)| n == name && v == value) && looks_secret(name) && !KEPT_PREFIXES.iter().any(|p| name.starts_with(p)))
+        .filter(|(name, value)| {
+            app_values.iter().any(|(n, v)| n == name && v == value)
+                && (looks_secret(name) || secret_names.contains(name))
+                && !KEPT_PREFIXES.iter().any(|p| name.starts_with(p))
+        })
         .map(|(n, _)| n.clone())
         .collect();
     removed.sort();
@@ -112,6 +128,19 @@ pub fn build(environ: &[(String, String)], env_paths: &[PathBuf]) -> Built {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_secrets_never_reach_the_turn() {
+        let environ: Vec<(String, String)> = [("MY_STORED_THING", "s1"), ("LOOP_SMTP_HOST", "smtp.x"), ("LOOP_SMTP_PASSWORD", "pw"), ("REAL_TOKEN", "mine")]
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+        let app: Vec<(String, String)> =
+            [("MY_STORED_THING", "s1"), ("LOOP_SMTP_HOST", "smtp.x"), ("LOOP_SMTP_PASSWORD", "pw")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        let built = build_from(&environ, &app, &["MY_STORED_THING".to_string()]);
+        assert_eq!(built.removed, vec!["LOOP_SMTP_PASSWORD", "MY_STORED_THING"]);
+        assert!(built.env.iter().any(|(k, _)| k == "LOOP_SMTP_HOST") && built.env.iter().any(|(k, _)| k == "REAL_TOKEN"));
+    }
 
     #[test]
     fn leaves_out_only_app_env_secrets() {

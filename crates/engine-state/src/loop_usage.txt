@@ -11,7 +11,7 @@ usage: run_loop.py [-h] [--wave WAVE] [--e2e] [--push] [--no-push]
                    [--yes] [--leftovers {commit,discard}]
                    [--summary-dir SUMMARY_DIR] [--json] [--check] [--planning]
                    [--dry-run] [--ensure-worktrees] [--repos REPOS]
-                   [--continue-on-blocked] [--pause-on-blocked]
+                   [--continue-on-blocked] [--pause-on-blocked] [--keep-going]
                    [--allow-silent] [--no-auto-answer] [--no-monitor]
                    [--gate-tiebreaks GATE_TIEBREAKS]
                    [--max-auto-answers MAX_AUTO_ANSWERS]
@@ -103,6 +103,9 @@ options:
                         is now the default; kept for compatibility; formerly:
                         only pauses when another feature depends on the
                         blocked one)
+  --keep-going          unattended: work a turn leaves outside the features is
+                        committed as a checkpoint on every turn (not only the
+                        first) and a quarantined feature never pauses the loop
   --allow-silent        testing only: waives the mandatory notice channels
                         (LOOP_NOTIFY_REQUIRED)
   --no-auto-answer      turns the automatic answer off: every orchestrator

@@ -50,6 +50,8 @@ pub struct LoopOpts {
     pub repos: String,
     pub continue_on_blocked: bool,
     pub pause_on_blocked: bool,
+    /// unattended: work left outside the features is committed as a checkpoint on every turn and a quarantined feature never pauses the loop
+    pub keep_going: bool,
     pub allow_silent: bool,
     pub auto_answer: bool,
     pub no_monitor: bool,
@@ -116,6 +118,7 @@ impl LoopOpts {
             repos: String::new(),
             continue_on_blocked: false,
             pause_on_blocked: false,
+            keep_going: false,
             allow_silent: false,
             auto_answer: true,
             no_monitor: false,
@@ -161,7 +164,7 @@ enum Kind {
     Append,
 }
 
-const FLAGS: [(&str, Kind); 40] = [
+const FLAGS: [(&str, Kind); 41] = [
     ("--help", Kind::Switch),
     ("--wave", Kind::Int),
     ("--e2e", Kind::Switch),
@@ -196,6 +199,7 @@ const FLAGS: [(&str, Kind); 40] = [
     ("--repos", Kind::Text),
     ("--continue-on-blocked", Kind::Switch),
     ("--pause-on-blocked", Kind::Switch),
+    ("--keep-going", Kind::Switch),
     ("--allow-silent", Kind::Switch),
     ("--no-auto-answer", Kind::Switch),
     ("--no-monitor", Kind::Switch),
@@ -306,6 +310,10 @@ pub fn parse(args: &[String]) -> Parsed {
                 "--ensure-worktrees" => o.ensure_worktrees = true,
                 "--continue-on-blocked" => o.continue_on_blocked = true,
                 "--pause-on-blocked" => o.pause_on_blocked = true,
+                "--keep-going" => {
+                    o.keep_going = true;
+                    o.continue_on_blocked = true;
+                }
                 "--allow-silent" => o.allow_silent = true,
                 "--no-auto-answer" => o.auto_answer = false,
                 "--no-monitor" => o.no_monitor = true,

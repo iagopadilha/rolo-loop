@@ -10,11 +10,12 @@ import { toast } from '../components/toast.js';
 import { openDialog } from '../components/dialog.js';
 import { pickFolderNativeFirst } from '../components/folder_browser.js';
 import { Conformance, conformanceDefault } from '../components/conformance.js';
-import { openWhyOnFirstVisit, openWhy, WhyButton } from '../components/why_panel.js';
+import { openWhy, WhyButton } from '../components/why_panel.js';
 import { currentRoute, onRoute, navigate } from './panel/router.js';
 import { SettingsPage } from './settings_page.js';
 import { checksOf, failText, maskIn, sendTestNotification } from './settings_system.js';
-import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects } from '../components/shell.js';
+import { maybeStartTour } from '../components/tour.js';
+import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects, StatusDot } from '../components/shell.js';
 
 /** Status words of a project that has no loop (progress_summary.mode) and of a loop (progress_summary.loop_status). */
 const MODE_LABEL = {
@@ -42,11 +43,17 @@ const focusId = (id) => { const el = document.getElementById(id); if (el) el.foc
 const closeMenus = () => { for (const menu of document.querySelectorAll('details.hub-menu[open]')) menu.open = false; };
 
 // ---------- projects ----------
+// A project whose progress the server is still reading (a huge folder) comes as progress_pending: ask again shortly, once.
+const PENDING_RETRY_MS = 2000;
+let pendingRetry = null;
 async function loadProjects() {
   const r = await appApi.get('projects', 10000);
   hb.projects = list(r && r.projects); hb.error = null;
   setShellProjects(hb.projects);
   draw();
+  if (!pendingRetry && hb.projects.some((p) => p.progress_pending)) {
+    pendingRetry = setTimeout(() => { pendingRetry = null; loadProjects().catch(() => {}); }, PENDING_RETRY_MS);
+  }
 }
 
 /** What the Status cell says: { label, kind, title }. A running loop adds its turn (from GET overview). */
@@ -55,6 +62,7 @@ function statusOf(p) {
   const turn = lp && lp.turn != null ? ` · T${lp.turn}` : '';
   const feats = lp ? list(lp.feature).join(', ') : '';
   if (p.folder_exists === false) return { label: 'Folder missing', kind: 'bad', title: 'The project folder is not on disk any more.' };
+  if (p.progress_pending && !lp) return { label: 'Reading…', kind: 'idle', title: 'The app is still reading this project folder.' };
   const loopStatus = lp && lp.question ? 'awaiting_user' : (lp && lp.status) || ps.loop_status;
   if (LOOP_LABEL[loopStatus]) return { label: LOOP_LABEL[loopStatus] + (loopStatus === 'running' || loopStatus === 'awaiting_user' ? turn : ''), kind: dotKind(loopStatus), title: feats };
   return { label: MODE_LABEL[ps.mode] || 'No loop', kind: dotKind(ps.mode === 'done' ? 'done' : ''), title: '' };
@@ -107,7 +115,7 @@ function ProjectRow({ p }) {
         <span class="hub-path mono" title=${repo}>${repo || DASH}</span>
       </span>
       <span role="cell" class="hub-cell hub-cell-status" title=${[st.title, ps.next_action ? 'Next: ' + (NEXT_ACTION[ps.next_action] || ps.next_action) : ''].filter(Boolean).join(' · ') || null}>
-        <span class=${'sh-dot is-' + st.kind} aria-hidden="true"></span><span class="hub-status-text">${st.label}</span></span>
+        <${StatusDot} kind=${st.kind} /><span class="hub-status-text">${st.label}</span></span>
       <span role="cell" class="hub-cell hub-cell-ver">${total > 0
         ? html`<span class="hub-bar" role="img" aria-label=${`${verified} of ${total} features verified`}><span style=${{ width: pct + '%' }}></span></span><span class="mono hub-num">${verified}/${total}</span>`
         : html`<span class="dim" title="no features yet">${DASH}</span>`}</span>
@@ -353,7 +361,7 @@ async function shutDown() {
     await appApi.post('shutdown', {}, 15000);
     if (hubPolling) hubPolling.stop();
     hb.closed = true; draw();
-    document.title = 'app shut down · Agent Maestro';
+    document.title = 'app shut down · Rolo Loop';
   } catch (e) { toast('Could not shut down: ' + e.message, 'err'); hb.confirmShutdown = false; hb.shuttingDown = false; draw(); focusId('shut-open'); }
 }
 
@@ -379,14 +387,14 @@ export function Hub() {
         <strong>App disconnected</strong>
         <span id="banner-offline-detail" />
       </div>
-      <${ShellHeader} cls="hub-header" crumbs=${[{ label: 'Projects' }]}
+      <${ShellHeader} cls="hub-header" crumbs=${currentRoute().name === 'settings' ? [{ label: 'Projects', href: '#/loop' }, { label: 'Settings' }] : [{ label: 'Projects' }]}
         end=${(compact) => compact
           ? html`<div class="header-actions" id="hub-actions"><button type="button" class="btn btn-primary" id="hub-open" onClick=${openFolder}>Open folder</button>
               ${hb.confirmShutdown ? html`<div id="hub-shutdown"><${Shutdown} /></div>` : null}</div>
             <${OverflowMenu}>
               <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
               ${hb.confirmShutdown ? null : html`<div id="hub-shutdown"><${Shutdown} /></div>`}
-              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Agents Maestro?</button>
+              <button type="button" class="btn btn-ghost" id="btn-help" onClick=${openWhy}>Why Rolo Loop?</button>
             <//>`
           : html`<div class="header-actions" id="hub-actions">
             <button type="button" class="btn" id="hub-create" onClick=${createDialog}>New project</button>
@@ -398,7 +406,7 @@ export function Hub() {
         <div class="hub-inner">
           <section class="hub-start" aria-labelledby="hub-title">
             <h1 id="hub-title" class="hub-h1">Projects</h1>
-            <p class="hub-lead">Open a folder (new, existing, or a loop stopped midway). Maestro runs the spec-driven loop of the <span class="mono">/orchestrator</span> skill and keeps every step in files you can read.</p>
+            <p class="hub-lead">Open a folder (new, existing, or a loop stopped midway). Rolo Loop runs the spec-driven loop of the <span class="mono">/orchestrator</span> skill and keeps every step in files you can read.</p>
             <div id="hub-opening" class="hub-opening" hidden=${!hb.opening}><${Opening} v=${hb.opening} /></div>
           </section>
           <${ProjectTable} />
@@ -421,7 +429,8 @@ export function startHub(root) {
   hubRoot = root;
   root.replaceChildren();
   onRoute(() => draw());
-  document.title = 'projects · Agent Maestro';
+  document.title = 'projects · Rolo Loop';
+  maybeStartTour(); // first run: the guided tour (it waits for the splash)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.sh-sw') || document.querySelector('dialog[open]')) return; // the switcher and the dialogs own Esc
@@ -442,5 +451,5 @@ export function startHub(root) {
   });
   hubPolling.now(0);
   loadInfo();
-  openWhyOnFirstVisit();
+  // the first-run guide is the tour (maybeStartTour); "Why Rolo Loop?" stays one click away (the ? button)
 }

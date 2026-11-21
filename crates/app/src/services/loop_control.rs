@@ -290,12 +290,8 @@ impl LoopControlService<'_> {
             self.app.log.info("loop_command_options_dropped", &[("project", json!(context.project.id)), ("options", json!(names))]);
         }
         let mut argv: Vec<String> = command["argv"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
-        if !self.app.config.claude_binary.is_empty() {
-            argv.extend(["--claude".to_string(), self.app.config.claude_binary.clone()]);
-        }
-        for fallback in &self.app.config.claude_fallback_binaries {
-            argv.extend(["--claude-fallback".to_string(), fallback.clone()]);
-        }
+        argv.extend(self.app.claude_chain_flags());
+        argv.extend(self.app.loop_behavior_flags());
         command["argv"] = json!(argv);
         Ok(command)
     }
@@ -375,14 +371,10 @@ impl LoopControlService<'_> {
         let push = push_choice.unwrap_or_else(|| settings.get("push_pr") == Some(&Value::Bool(true)));
         let base_branch = read_roadmap_base_branch(&self.read_roadmap_text(context));
         let mut flags = convert_settings_to_loop_flags(&settings, dispatch["wave"].as_i64().unwrap_or(1), push, None, &base_branch);
-        if !self.app.config.claude_binary.is_empty() {
-            // AUD-36: the engine runs the same `claude` the app runs (a demo/test fake), not always the one on PATH
-            flags.extend(["--claude".to_string(), self.app.config.claude_binary.clone()]);
-        }
-        for fallback in &self.app.config.claude_fallback_binaries {
-            // e.g. `cc`: another account when this one hits its limit
-            flags.extend(["--claude-fallback".to_string(), fallback.clone()]);
-        }
+        // AUD-36: the engine runs the same `claude` the app runs (a demo/test fake), not always the one on PATH; with providers configured
+        // in Settings, their order (read now, so a change applies to the next start without restarting the app)
+        flags.extend(self.app.claude_chain_flags());
+        flags.extend(self.app.loop_behavior_flags());
         Ok((flags, dispatch))
     }
 

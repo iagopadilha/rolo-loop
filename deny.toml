@@ -19,6 +19,7 @@ allow = [
     "CC0-1.0",
     "0BSD",
     "CDLA-Permissive-2.0",
+    "MPL-2.0", # file-level copyleft (cssparser, selectors via the Tauri webview stack): used unmodified, compatible with MIT
 ]
 
 [bans]

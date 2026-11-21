@@ -119,6 +119,9 @@ pub fn resolve(name: &str) -> String {
     if name.is_empty() {
         return String::new();
     }
+    if let Some(provider) = crate::providers::by_ref(name) {
+        return resolve(&provider.command_or_default());
+    }
     if Path::new(name).is_file() {
         return name.to_string();
     }
@@ -168,6 +171,11 @@ pub fn executable(name: &str) -> String {
 
 /// Start of the argv: a `.py` (the tests' fake claude) runs with `python`.
 pub fn base_argv(name: &str) -> Vec<String> {
+    if let Some(provider) = crate::providers::by_ref(name) {
+        let mut argv = base_argv(&provider.command_or_default());
+        argv.extend(provider.args);
+        return argv;
+    }
     let binary = executable(name);
     if binary.ends_with(".py") {
         vec!["python".into(), binary]
@@ -285,6 +293,16 @@ fn s(v: Option<&Value>) -> String {
 /// `{"method", "email", "org", "plan", "account", "logged_in", "error"}` of `<name> auth status` (no secret in it); `{}` for a test `.py`
 /// fake. Never fails: a missing command or an unreadable answer comes back as `error`.
 pub fn auth_status(name: &str) -> Value {
+    if let Some(provider) = crate::providers::by_ref(name) {
+        // a key or a token signs in by itself: nothing to ask the CLI (and `auth status` would describe the user's login instead)
+        match provider.kind.as_str() {
+            "anthropic-api-key" | "anthropic-gateway" => {
+                return json!({"method": "API key", "email": "", "org": "", "plan": provider.name, "account": "", "logged_in": true, "error": ""})
+            }
+            "claude-oauth-token" => return json!({"method": "token", "email": "", "org": "", "plan": "", "account": "", "logged_in": true, "error": ""}),
+            _ => {}
+        }
+    }
     let argv = base_argv(name);
     if argv[0] == "python" {
         return json!({});

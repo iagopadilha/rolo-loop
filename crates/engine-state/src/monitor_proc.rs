@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! Ensures the web panel (the Maestro app) for the loop and writes the command to relaunch the loop.
+//! Ensures the web panel (the Rolo Loop app) for the loop and writes the command to relaunch the loop.
 //!
 //! The panel is the multi-project app (`harness serve`): one single process for every project, INDEPENDENT of the loop (it starts
 //! detached, does not read stdin and does not die when the loop ends). Order of [`ensure_monitor`]:
@@ -179,11 +179,9 @@ pub fn launch_app(repo: &str, work: &str, program: &Path, open_browser: bool) ->
         command.arg("--no-browser"); // the app opens the browser once, only when it starts
     }
     command.stdin(std::process::Stdio::null()).stdout(log.try_clone()?).stderr(log).current_dir(program.parent().unwrap_or(Path::new(".")));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
-    }
+    // A hidden console of its own (not DETACHED_PROCESS: Windows ignores CREATE_NO_WINDOW with it, and every console program the child
+    // starts would then open a window), in its own process group (the parent's Ctrl+C never reaches it).
+    winproc::spawn_hidden_flags(&mut command);
     let child = command.spawn()?;
     Ok((i64::from(child.id()), offset))
 }
