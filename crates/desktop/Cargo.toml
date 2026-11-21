@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "desktop"
 description = "Rolo Loop desktop app: a Tauri window over the panel server it runs in-process"
 version.workspace = true

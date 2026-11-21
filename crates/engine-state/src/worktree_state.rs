@@ -630,22 +630,38 @@ mod tests {
             assert_eq!(git(&work, &args).0, 0);
         }
         std::fs::create_dir_all(dir.path().join(".specs/project")).unwrap();
-        std::fs::write(dir.path().join(".gitignore"), ".specs/
-").unwrap();
-        std::fs::write(dir.path().join("CLAUDE.md"), "# app
-").unwrap();
-        std::fs::write(dir.path().join(".specs/project/ROADMAP.md"), "## Stage 1
+        std::fs::write(
+            dir.path().join(".gitignore"),
+            ".specs/
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("CLAUDE.md"),
+            "# app
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join(".specs/project/ROADMAP.md"),
+            "## Stage 1
 - [a] status=pending paths=src
-").unwrap();
+",
+        )
+        .unwrap();
         git(&work, &["add", "-A"]);
         assert_eq!(git(&work, &["commit", "-q", "-m", "init"]).0, 0);
         // the Conformance block the setup writes, uncommitted (the release-candidate run stopped here before turn 2)
-        std::fs::write(dir.path().join("CLAUDE.md"), "# app
+        std::fs::write(
+            dir.path().join("CLAUDE.md"),
+            "# app
 
 <!-- CONFORMANCE:BEGIN -->
 Conformance: STANDARD
 <!-- CONFORMANCE:END -->
-").unwrap();
+",
+        )
+        .unwrap();
         let mut meta = json!({"verified_settled": []});
         let still = settle_dirty_worktrees(&work, &mut meta, 2, &LeftoverOpts::default());
         assert!(still.is_empty(), "{still:?}");

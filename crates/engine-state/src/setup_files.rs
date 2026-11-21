@@ -445,19 +445,27 @@ mod tests {
     fn a_tracked_setup_file_changed_in_the_repo_replaces_the_committed_copy_of_the_worktree() {
         let repo = repo();
         let r = repo.path().display().to_string();
-        write(repo.path(), "CLAUDE.md", "<!-- maestro:context -->
-");
+        write(
+            repo.path(),
+            "CLAUDE.md",
+            "<!-- maestro:context -->
+",
+        );
         git(repo.path(), &["add", "-A"]);
         git(repo.path(), &["commit", "-q", "-m", "context"]);
         let work = tempfile::tempdir().unwrap();
         let w = work.path().join("wt").display().to_string();
         git(repo.path(), &["worktree", "add", "-q", &w, "-b", "loop/x"]);
         // the setup writes the Conformance block in the user's folder and leaves it uncommitted (the release-candidate run)
-        write(repo.path(), "CLAUDE.md", "<!-- maestro:context -->
+        write(
+            repo.path(),
+            "CLAUDE.md",
+            "<!-- maestro:context -->
 <!-- CONFORMANCE:BEGIN -->
 Conformance: STANDARD
 <!-- CONFORMANCE:END -->
-");
+",
+        );
         assert_eq!(carry_setup_files(&r, &w, None, true), vec!["CLAUDE.md"]);
         assert!(std::fs::read_to_string(Path::new(&w).join("CLAUDE.md")).unwrap().contains("CONFORMANCE"));
         // a change made in the worktree itself is never overwritten

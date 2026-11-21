@@ -53,7 +53,9 @@ enum Spec {
 
 fn allowed(name: &str) -> Option<Spec> {
     Some(match name {
-        "--e2e" | "--push" | "--no-push" | "--continue-on-blocked" | "--pause-on-blocked" | "--keep-going" | "--allow-silent" | "--no-auto-answer" | "--no-monitor" => Spec::Switch,
+        "--e2e" | "--push" | "--no-push" | "--continue-on-blocked" | "--pause-on-blocked" | "--keep-going" | "--allow-silent" | "--no-auto-answer" | "--no-monitor" => {
+            Spec::Switch
+        }
         "--wave" => Spec::Whole(1, MAX_WAVE),
         "--timeout" => Spec::Whole(1, MAX_WHOLE_NUMBER),
         "--max-stall" | "--limit-wait" | "--limit-retries" | "--gate-tiebreaks" | "--max-auto-answers" | "--auto-answers-per-feature" => Spec::Whole(0, MAX_WHOLE_NUMBER),
