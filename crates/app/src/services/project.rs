@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 pub const MONITOR_FILE_NAME: &str = "MONITOR.json";
 static PROJECT_NAME_PATTERN: LazyLock<Re> = LazyLock::new(|| Re::new(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*\z"));
 pub const PROJECT_NAME_MAX_LENGTH: usize = 100;
-const INITIAL_COMMIT_MESSAGE: &str = "chore: initial project structure (loop-harness)";
+const INITIAL_COMMIT_MESSAGE: &str = "chore: initial project structure (rolo-loop)";
 
 fn is_windows_reserved(name: &str) -> bool {
     matches!(name, "con" | "prn" | "aux" | "nul")

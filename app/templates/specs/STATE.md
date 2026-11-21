@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** {today}
-**Current Work:** none (project created by Loop Harness)
+**Current Work:** none (project created by Rolo Loop)
 
 <!-- Only the "now" (up to ~300 words): checkpoint mode, current stage, features in flight, quarantine, open
      questions. The history of a closed stage goes to phases/stage-NN.md. The orchestrator writes this file. -->
@@ -24,7 +24,7 @@ Mapped in `docs/codebase/` (see its `README.md` for the mapped commit). Read onl
 
 ## Recent Decisions
 
-- {today}: project opened/created in Loop Harness.
+- {today}: project opened/created in Rolo Loop.
 
 ## Todos
 

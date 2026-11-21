@@ -1,6 +1,6 @@
 # Flows
 
-<!-- Loop Harness template. One "## [slug] Title" section per ROADMAP feature: the user-visible (or API) flow that
+<!-- Rolo Loop template. One "## [slug] Title" section per ROADMAP feature: the user-visible (or API) flow that
      proves the feature works. Numbered steps ("1." or "1)"); the "Expected:" steps are what the verifier-flow checks.
      A feature has a flow when its section exists with at least 2 steps; "Approve roadmap" requires one for EVERY
      feature. `/orchestrator plan` (the planning chat) and `/orchestrator roadmap` write this file.

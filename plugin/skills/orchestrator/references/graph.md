@@ -1,6 +1,6 @@
 # The orchestrator as a multi-agent graph (Graph Engineering applied)
 
-This file maps what the orchestrator and the loop already are, in graph terms, and says where each guarantee is **enforced** (by code or hook) and where it is only **prompt**. Code is the authority: `harness state` and `harness loop` (the Loop Harness engine, part of the `harness` executable) and `bin/guard.exe` (this skill).
+This file maps what the orchestrator and the loop already are, in graph terms, and says where each guarantee is **enforced** (by code or hook) and where it is only **prompt**. Code is the authority: `harness state` and `harness loop` (the Rolo Loop engine, part of the `harness` executable) and `bin/guard.exe` (this skill).
 
 ## Map
 

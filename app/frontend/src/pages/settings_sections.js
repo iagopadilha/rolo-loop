@@ -108,10 +108,17 @@ function KeyGroup({ data, onSaved, keys, title, desc, id, after }) {
 }
 
 
+const LOOP_KEYS = ['loop_keep_going'];
 const CLAUDE_KEYS = ['orchestrator_model', 'claude_binary', 'claude_fallback_binaries', 'loop_isolation', 'loop_caveman'];
 const NETWORK_KEYS = ['egress_hosts', 'egress_never', 'egress_builtin_read', 'env_sources'];
 /** Keys no section above names go to Projects and data, so a setting added later is never lost. */
-const otherKeys = (data) => data.settings.map((s) => s.key).filter((k) => !CLAUDE_KEYS.includes(k) && !NETWORK_KEYS.includes(k));
+const otherKeys = (data) => data.settings.map((s) => s.key).filter((k) => !CLAUDE_KEYS.includes(k) && !NETWORK_KEYS.includes(k) && !LOOP_KEYS.includes(k));
+
+/** How the loop runs: unattended or stopping to ask. */
+export function LoopRunGroup() {
+  return html`<${SettingsData}>${(data, onSaved) => html`<${KeyGroup} data=${data} onSaved=${onSaved} keys=${LOOP_KEYS} title="How the loop runs" id="st-loop-run"
+    desc="Loops run for hours. Turn this on so the loop does not stop for housekeeping; the next start of a loop uses it." />`}<//>`;
+}
 
 export function ClaudeSection() {
   const totals = ctx.state && ctx.state.meta ? ctx.state.meta.claude_totals : null;

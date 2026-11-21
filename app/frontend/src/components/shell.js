@@ -86,7 +86,10 @@ export function dotKind(value) {
   if (state === 'error' || state === 'failed' || state === 'fail' || state === 'blocked') return 'bad';
   return 'idle';
 }
-export const StatusDot = ({ kind }) => html`<span class=${'sh-dot is-' + (kind || 'idle')} aria-hidden="true"></span>`;
+/** A running loop shows Rolo running in the wheel instead of a dot; every other state is the dot. */
+export const StatusDot = ({ kind }) => (kind === 'live'
+  ? html`<span class="sh-dot-rolo" aria-hidden="true"><${RoloMark} size=${18} running=${true} tile=${false} /></span>`
+  : html`<span class=${'sh-dot is-' + (kind || 'idle')} aria-hidden="true"></span>`);
 
 // ---------- sidebar ----------
 const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');

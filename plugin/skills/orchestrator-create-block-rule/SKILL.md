@@ -5,7 +5,7 @@ description: Turns a user prohibition ("never edit folder X", "never create trac
 
 # Create a project block rule (with a test)
 
-Depends on the `orchestrator` skill (its `bin/guard.exe`) and on the Loop Harness app (engine command `harness rules`). Without `.specs/` in the project there is nowhere to write: warn and stop.
+Depends on the `orchestrator` skill (its `bin/guard.exe`) and on the Rolo Loop app (engine command `harness rules`). Without `.specs/` in the project there is nowhere to write: warn and stop.
 
 ## When
 

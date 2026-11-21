@@ -45,6 +45,8 @@ a.sh-item:hover,.sh-brand:hover{text-decoration:none;}
 .sh-dot.is-ok{background:var(--ok);border-color:var(--ok);}
 .sh-dot.is-bad{background:var(--danger);border-color:var(--danger);}
 .sh-item .sh-dot,.sh-group .sh-dot{width:6px;height:6px;}
+.sh-dot-rolo{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;margin:-6px -3px;}
+.sh-dot-rolo .rolo{display:block;}
 .sh-account{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:none;border:0;min-width:0;}
 .sh-avatar{flex:none;width:28px;height:28px;border-radius:50%;background:var(--fill2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
 .sh-account.is-action{width:100%;box-sizing:border-box;font:inherit;color:inherit;text-align:left;cursor:pointer;}

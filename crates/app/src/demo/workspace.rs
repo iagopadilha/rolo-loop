@@ -11,13 +11,13 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const TEMP_PREFIX: &str = "loop-harness-demo-";
+const TEMP_PREFIX: &str = "rolo-loop-demo-";
 const DEMO_FOLDER_NAME: &str = "demo";
 const TRANSCRIPTS_FOLDER_NAME: &str = "claude-projects";
 const APP_DATA_FOLDER_NAME: &str = "app-data";
 const REPLACE_ATTEMPTS: u32 = 20;
 const REPLACE_RETRY_MILLISECONDS: u64 = 50;
-const DEMO_AUTHOR_NAME: &str = "Loop Harness demo";
+const DEMO_AUTHOR_NAME: &str = "Rolo Loop demo";
 const DEMO_AUTHOR_EMAIL: &str = "demo@example.invalid";
 
 #[derive(Clone, Debug)]

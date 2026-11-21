@@ -84,6 +84,14 @@ impl App {
         flags
     }
 
+    /// Loop flags of the app-level loop behavior: `--keep-going` when the user turned on "Keep the loop going".
+    pub fn loop_behavior_flags(&self) -> Vec<String> {
+        match self.settings.read_all_or_empty().get("loop_keep_going").and_then(Value::as_bool) {
+            Some(true) => vec!["--keep-going".to_string()],
+            _ => vec![],
+        }
+    }
+
     pub fn settings_v3(&self) -> SettingsV3<'_> {
         SettingsV3 { app: self }
     }

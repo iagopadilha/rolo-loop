@@ -291,6 +291,7 @@ impl LoopControlService<'_> {
         }
         let mut argv: Vec<String> = command["argv"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
         argv.extend(self.app.claude_chain_flags());
+        argv.extend(self.app.loop_behavior_flags());
         command["argv"] = json!(argv);
         Ok(command)
     }
@@ -373,6 +374,7 @@ impl LoopControlService<'_> {
         // AUD-36: the engine runs the same `claude` the app runs (a demo/test fake), not always the one on PATH; with providers configured
         // in Settings, their order (read now, so a change applies to the next start without restarting the app)
         flags.extend(self.app.claude_chain_flags());
+        flags.extend(self.app.loop_behavior_flags());
         Ok((flags, dispatch))
     }
 

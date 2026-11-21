@@ -15,7 +15,7 @@ import { currentRoute, onRoute, navigate } from './panel/router.js';
 import { SettingsPage } from './settings_page.js';
 import { checksOf, failText, maskIn, sendTestNotification } from './settings_system.js';
 import { maybeStartTour } from '../components/tour.js';
-import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects } from '../components/shell.js';
+import { Sidebar, ShellHeader, OverflowMenu, Splash, useSplash, Icon, dotKind, setShellProjects, StatusDot } from '../components/shell.js';
 
 /** Status words of a project that has no loop (progress_summary.mode) and of a loop (progress_summary.loop_status). */
 const MODE_LABEL = {
@@ -115,7 +115,7 @@ function ProjectRow({ p }) {
         <span class="hub-path mono" title=${repo}>${repo || DASH}</span>
       </span>
       <span role="cell" class="hub-cell hub-cell-status" title=${[st.title, ps.next_action ? 'Next: ' + (NEXT_ACTION[ps.next_action] || ps.next_action) : ''].filter(Boolean).join(' · ') || null}>
-        <span class=${'sh-dot is-' + st.kind} aria-hidden="true"></span><span class="hub-status-text">${st.label}</span></span>
+        <${StatusDot} kind=${st.kind} /><span class="hub-status-text">${st.label}</span></span>
       <span role="cell" class="hub-cell hub-cell-ver">${total > 0
         ? html`<span class="hub-bar" role="img" aria-label=${`${verified} of ${total} features verified`}><span style=${{ width: pct + '%' }}></span></span><span class="mono hub-num">${verified}/${total}</span>`
         : html`<span class="dim" title="no features yet">${DASH}</span>`}</span>

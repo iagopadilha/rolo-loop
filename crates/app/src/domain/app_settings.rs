@@ -70,6 +70,7 @@ pub fn setting_catalog() -> Vec<SettingDefinition> {
             d.choices = vec![("opus", "Opus (latest)"), ("sonnet", "Sonnet (latest)"), ("haiku", "Haiku (latest)"), ("", "Account default (no flag)")];
             d
         },
+        def("loop_keep_going", "Keep the loop going", "Unattended mode: the loop does not stop for housekeeping. Files a turn leaves outside the features are committed as a checkpoint on the loop branch, and a blocked feature is set aside while the others go on. It still stops for a decision only you can make, a budget or cost cap, and real errors. Setup files (CLAUDE.md, codebase maps) are always committed without stopping.", BOOL, json!(false)),
         restart(def("claude_binary", "Claude command", "The command that starts Claude Code. Empty uses claude from your PATH. Change it to run a wrapper (for example cc) signed in with another account.", TEXT, json!(""))),
         restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped. A loop that is already running reads the list again before each turn.", LIST, json!([]))),
         min(restart(def("max_parallel_maps", "Parallel subproject maps", "How many subproject map jobs of a monorepo run at the same time; the rest wait in a queue. Lower it if your machine or account limit struggles.", INT, json!(6))), 1.0),
@@ -297,7 +298,7 @@ mod tests {
 
     #[test]
     fn values_are_judged_by_type() {
-        assert_eq!(setting_catalog().len(), 16);
+        assert_eq!(setting_catalog().len(), 17);
         assert_eq!(validate_setting_value(&def_of("loop_isolation"), &json!(false)).unwrap(), json!(false));
         assert_eq!(validate_setting_value(&def_of("loop_isolation"), &json!("yes")).unwrap_err().message, "loop_isolation must be true or false");
         assert_eq!(validate_setting_value(&def_of("max_parallel_maps"), &json!(6.5)).unwrap_err().message, "max_parallel_maps must be a whole number");

@@ -17,8 +17,8 @@ const WORKTREE_REMOVE_TIMEOUT_SECONDS: u64 = 300;
 pub const INTEGRATION_BRANCH_VARIABLE: &str = "LOOP_INTEGRATION_BRANCH";
 pub const DEFAULT_INTEGRATION_BRANCH: &str = "developer";
 pub const OTHER_COMPARISON_BASES: [&str; 2] = ["main", "master"];
-pub const DEFAULT_GIT_USER_NAME: &str = "loop-harness";
-pub const DEFAULT_GIT_USER_EMAIL: &str = "loop-harness@localhost";
+pub const DEFAULT_GIT_USER_NAME: &str = "rolo-loop";
+pub const DEFAULT_GIT_USER_EMAIL: &str = "rolo-loop@localhost";
 pub const NO_REPLY_EMAIL_DOMAIN: &str = "users.noreply.github.com";
 const LEFTOVER_FOLDER_RETRIES: u32 = 5;
 const LEFTOVER_FOLDER_RETRY_SECONDS: f64 = 0.4;
@@ -342,7 +342,7 @@ impl GitClient {
 
     /// `git init` + `git add -A` + initial commit (`--allow-empty`: an empty folder also gets a commit). Returns `(ok, error)`. Commit identity:
     /// `user` (when given) becomes user.name only for this commit (email = the configured one or `<user>@users.noreply.github.com`); without
-    /// `user` and without a configured identity, it uses `loop-harness`. Nothing is written to the git config. A folder that already is a repo:
+    /// `user` and without a configured identity, it uses `rolo-loop`. Nothing is written to the git config. A folder that already is a repo:
     /// no re-init, just `(true, '')` without a commit.
     pub fn init_repo_with_initial_commit(&self, folder: &str, message: &str, user: &str) -> (bool, String) {
         if folder.is_empty() || !Path::new(folder).is_dir() {

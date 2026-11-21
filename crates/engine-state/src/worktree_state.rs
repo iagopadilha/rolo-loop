@@ -369,6 +369,15 @@ pub fn settle_dirty_worktrees(work: &str, meta: &mut Value, turn: i64, opts: &Le
                 println!("[loop] checkpoint failed: {problem}");
             }
         }
+        // setup files (the Conformance block of CLAUDE.md, the codebase maps) are the app's own context, not a feature's work: commit them as
+        // setup and carry on instead of stopping the loop for them
+        if !outside.is_empty() {
+            let setup: Vec<String> = crate::setup_files::list_setup_files(&path, None).iter().filter_map(|i| i["path"].as_str().map(String::from)).collect();
+            let setup_rows: Vec<String> = outside.iter().filter(|r| setup.contains(&r.path)).map(|r| r.path.clone()).collect();
+            if !setup_rows.is_empty() && crate::worktrees::commit_carried_setup(&path, &setup_rows, if name.is_empty() { "loop" } else { &name }) {
+                outside.retain(|r| !setup_rows.contains(&r.path));
+            }
+        }
         if !outside.is_empty() {
             still_dirty.push((name, outside));
         }
@@ -611,6 +620,37 @@ mod tests {
         assert!(checkpoint_credit(&json!({}), before, after, 0, "").is_empty());
         let errors = loop_state::validate(before, after, None, 0, false, None, "");
         assert!(errors.iter().any(|e| e.contains("became verified but there were 0 new commit(s)")));
+    }
+
+    #[test]
+    fn a_dirty_setup_file_is_committed_as_setup_and_does_not_stop_the_loop() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().display().to_string();
+        for args in [vec!["init", "-q"], vec!["config", "user.email", "t@example.invalid"], vec!["config", "user.name", "t"], vec!["config", "commit.gpgsign", "false"]] {
+            assert_eq!(git(&work, &args).0, 0);
+        }
+        std::fs::create_dir_all(dir.path().join(".specs/project")).unwrap();
+        std::fs::write(dir.path().join(".gitignore"), ".specs/
+").unwrap();
+        std::fs::write(dir.path().join("CLAUDE.md"), "# app
+").unwrap();
+        std::fs::write(dir.path().join(".specs/project/ROADMAP.md"), "## Stage 1
+- [a] status=pending paths=src
+").unwrap();
+        git(&work, &["add", "-A"]);
+        assert_eq!(git(&work, &["commit", "-q", "-m", "init"]).0, 0);
+        // the Conformance block the setup writes, uncommitted (the release-candidate run stopped here before turn 2)
+        std::fs::write(dir.path().join("CLAUDE.md"), "# app
+
+<!-- CONFORMANCE:BEGIN -->
+Conformance: STANDARD
+<!-- CONFORMANCE:END -->
+").unwrap();
+        let mut meta = json!({"verified_settled": []});
+        let still = settle_dirty_worktrees(&work, &mut meta, 2, &LeftoverOpts::default());
+        assert!(still.is_empty(), "{still:?}");
+        assert!(git(&work, &["status", "--porcelain", "--", "CLAUDE.md"]).1.trim().is_empty());
+        assert!(git(&work, &["log", "-1", "--format=%s"]).1.contains("setup"));
     }
 
     #[test]

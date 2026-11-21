@@ -151,6 +151,9 @@ pub fn command_flags(opts: &LoopOpts) -> String {
     if opts.pause_on_blocked {
         flags.push_str(" --pause-on-blocked");
     }
+    if opts.keep_going {
+        flags.push_str(" --keep-going");
+    }
     if !opts.setup.is_empty() {
         flags.push_str(&format!(" --setup \"{}\"", opts.setup));
     }
@@ -770,7 +773,8 @@ impl Runner {
                 return self.finish(work, meta, "paused", &cost_cap_reason(cost, cap), opts);
             }
             turn += 1;
-            let leftover = LeftoverOpts { leftovers: opts.leftovers.clone(), primary_name: opts.primary_name.clone() };
+            let leftovers = if opts.leftovers.is_empty() && opts.keep_going { "commit".to_string() } else { opts.leftovers.clone() };
+            let leftover = LeftoverOpts { leftovers, primary_name: opts.primary_name.clone() };
             if let Some((dirty_name, rows)) = settle_dirty_worktrees(work, meta, turn, &leftover).into_iter().next() {
                 let where_ = if dirty_name.is_empty() { String::new() } else { format!("in repo {dirty_name} ") };
                 return self.finish(work, meta, "error", &crate::worktree_state::dirty_stop_message(&where_, turn, &rows), opts);

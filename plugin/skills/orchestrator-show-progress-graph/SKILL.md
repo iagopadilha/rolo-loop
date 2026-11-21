@@ -5,7 +5,7 @@ description: Shows the orchestrator roadmap progress as a drawing (features per 
 
 # Show the progress graph
 
-Depends on the `orchestrator` skill and on the Loop Harness app (engine command `harness graph`; reads `.specs/project/ROADMAP.md`). It only reads and draws: it changes nothing except `GRAPH.md`.
+Depends on the `orchestrator` skill and on the Rolo Loop app (engine command `harness graph`; reads `.specs/project/ROADMAP.md`). It only reads and draws: it changes nothing except `GRAPH.md`.
 
 ## Usage
 
@@ -50,4 +50,4 @@ Legend: [x] done  [>] in progress  [.] to do  [!] blocked  (<- waits for)
 
 ## Web panel
 
-The same drawing (dependencies, what is done, in progress and stuck) appears live in the Loop Harness panel (`harness serve --project <root>`; the URL also comes in the loop's notification). This skill remains the way to produce the text for chat, e-mail and the PR.
+The same drawing (dependencies, what is done, in progress and stuck) appears live in the Rolo Loop panel (`harness serve --project <root>`; the URL also comes in the loop's notification). This skill remains the way to produce the text for chat, e-mail and the PR.

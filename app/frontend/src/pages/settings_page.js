@@ -5,7 +5,7 @@ import { html } from '../util/preact.js';
 import { Page } from '../components/page.js';
 import { SkillsToolsSection } from '../components/skills_tools_section.js';
 import { currentRoute, navigate } from './panel/router.js';
-import { AppearanceSection, ClaudeSection, NetworkSettings, ProjectsSection } from './settings_sections.js';
+import { AppearanceSection, ClaudeSection, NetworkSettings, ProjectsSection, LoopRunGroup } from './settings_sections.js';
 import { SystemSection } from './settings_system.js';
 import { ProvidersSection } from './settings_providers.js';
 import { AgentsSection, QualitySection } from './settings_agents.js';
@@ -16,6 +16,7 @@ import { SettingsGroup, SettingsRow } from '../components/settings_ui.js';
 /** General: the look of the app and the guided tour. */
 function GeneralSection() {
   return html`<${AppearanceSection} />
+    <${LoopRunGroup} />
     <${SettingsGroup} id="st-tour" title="Guided tour" desc="A step-by-step walk through the screens: what each setting is for and how to start your first loop.">
       <${SettingsRow} label="Start the tour again" desc="It opens on the projects screen and moves through Settings with you.">
         <button type="button" class="btn btn-sm" id="st-tour-restart" onClick=${() => startTour(0)}>Start tour</button><//>
@@ -23,7 +24,7 @@ function GeneralSection() {
 }
 
 const SECTIONS = [
-  { id: 'general', label: 'General', sub: 'Theme and the guided tour.', view: GeneralSection },
+  { id: 'general', label: 'General', sub: 'Theme, how the loop runs and the guided tour.', view: GeneralSection },
   { id: 'providers', label: 'AI providers', sub: 'Which AI runs the loop, in what order, with which models.', view: ProvidersSection },
   { id: 'agents', label: 'Agents', sub: 'The agents of the pipeline, their models and what a loop runs.', view: AgentsSection },
   { id: 'quality', label: 'Quality gate', sub: 'What the last review of every feature checks.', view: QualitySection },

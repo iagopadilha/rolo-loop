@@ -53,7 +53,7 @@ enum Spec {
 
 fn allowed(name: &str) -> Option<Spec> {
     Some(match name {
-        "--e2e" | "--push" | "--no-push" | "--continue-on-blocked" | "--pause-on-blocked" | "--allow-silent" | "--no-auto-answer" | "--no-monitor" => Spec::Switch,
+        "--e2e" | "--push" | "--no-push" | "--continue-on-blocked" | "--pause-on-blocked" | "--keep-going" | "--allow-silent" | "--no-auto-answer" | "--no-monitor" => Spec::Switch,
         "--wave" => Spec::Whole(1, MAX_WAVE),
         "--timeout" => Spec::Whole(1, MAX_WHOLE_NUMBER),
         "--max-stall" | "--limit-wait" | "--limit-retries" | "--gate-tiebreaks" | "--max-auto-answers" | "--auto-answers-per-feature" => Spec::Whole(0, MAX_WHOLE_NUMBER),
@@ -67,12 +67,13 @@ fn allowed(name: &str) -> Option<Spec> {
 }
 
 /// Every flag that [`allowed`] accepts, for the test that keeps it in step with the parser.
-pub const ALLOWED_FLAGS: [&str; 23] = [
+pub const ALLOWED_FLAGS: [&str; 24] = [
     "--e2e",
     "--push",
     "--no-push",
     "--continue-on-blocked",
     "--pause-on-blocked",
+    "--keep-going",
     "--allow-silent",
     "--no-auto-answer",
     "--no-monitor",
