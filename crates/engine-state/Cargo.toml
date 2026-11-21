@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 winproc = { path = "../winproc" }
 egress-policy = { path = "../egress-policy" }
 mcp-policy = { path = "../mcp-policy" }
-sha1 = "0.10"
+sha1 = "0.11"
 sha2 = "0.10"
 ureq = { version = "2", default-features = false, features = ["tls"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls", "hostname"] }
