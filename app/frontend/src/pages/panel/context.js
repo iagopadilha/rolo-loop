@@ -3,13 +3,6 @@
 import { isNum, list } from '../../util/format.js';
 
 // ---------- visual constants (not data) ----------
-const PAL = {
-  pending: ['var(--fg2)', 'var(--fill)'], speccing: ['var(--info)', 'var(--blue-bg)'], specced: ['var(--accent)', 'var(--violet-bg)'],
-  approved: ['var(--cyan)', 'var(--blue-bg)'], building: ['var(--warn)', 'var(--amber-bg)'], verified: ['var(--ok)', 'var(--green-bg)'],
-  blocked: ['var(--danger)', 'var(--red-bg)'], running: ['var(--warn)', 'var(--amber-bg)'], done: ['var(--ok)', 'var(--green-bg)'],
-  idle: ['var(--fg2)', 'var(--fill)'], failed: ['var(--danger)', 'var(--red-bg)'], queued: ['var(--info)', 'var(--blue-bg)'],
-};
-export const pal = (s) => PAL[s] || PAL.idle;
 export const ROLE_DESC = {
   orchestrator: 'roadmap · dispatch · commit · checkpoint',
   'spec-writer': 'writes the spec of one feature', 'spec-reviewer': 'spec gate · read-only',

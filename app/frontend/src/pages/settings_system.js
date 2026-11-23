@@ -1,5 +1,5 @@
-/* Diagnostics of the app (GET /api/app/info): the checks list shared by the hub system strip and Settings -> System, the Notifications
-   section (channels + test) and the Claude commands/usage. One source: checksOf(). Every path shown goes through maskIn. */
+/* Diagnostics of the app (GET /api/app/info): the checks list shared by the hub system strip and Settings -> System, and the
+   Claude commands/usage. One source: checksOf(). Every path shown goes through maskIn. */
 import { html, useState, useEffect } from '../util/preact.js';
 import { list, txt, DASH } from '../util/format.js';
 import { appApi } from '../api/api_client.js';
@@ -95,26 +95,6 @@ export function SystemSection() {
     ${rest.length ? html`<${SettingsGroup} title="More details" id="st-more">
       ${rest.map(([k, v]) => html`<${SettingsRow} key=${k} label=${k}>${typeof v === 'boolean' ? html`<${StateMark} ok=${v} />` : html`<span class="st-value mono" title=${maskIn(txt(v))}>${maskIn(txt(v))}</span>`}<//>`)}
     <//>` : null}`;
-}
-
-/** Settings -> Notifications: the channels (read only, from GET info) and the test notification. */
-export function NotificationsSection() {
-  const { info, error } = useAppInfo();
-  const [busy, setBusy] = useState(false);
-  const channels = info ? list(info.notify_channels) : [];
-  const send = async () => { setBusy(true); try { await sendTestNotification(); } finally { setBusy(false); } };
-  return html`<${SettingsGroup} title="Channels" desc="Where the app tells you a loop needs you. Channels are turned on in config.json." id="st-channels">
-      ${!info ? html`<${SettingsBlock}><${Unavailable} error=${error} /><//>`
-        : channels.length ? channels.map((c) => {
-          const name = typeof c === 'string' ? c : c.name;
-          const on = typeof c === 'string' ? true : c.enabled !== false;
-          const note = [c.required ? 'required' : '', on && c.configured === false ? 'not configured' : ''].filter(Boolean).join(' · ');
-          return html`<${SettingsRow} key=${name} label=${name} desc=${note || null}><span class=${'st-state is-' + (on ? 'ok' : 'na')}>${on ? 'On' : 'Off'}</span><//>`;
-        }) : html`<${SettingsBlock}><span class="st-empty">No notification channel is configured.</span><//>`}
-    <//>
-    <${SettingsGroup} title="Test" id="st-test">
-      <${SettingsRow} label="Send a test notification" desc="Sends one message through every enabled channel."><button type="button" class="btn btn-sm" id="st-test-notify" disabled=${busy} onClick=${send}>${busy ? 'Sending…' : 'Send test'}</button><//>
-    <//>`;
 }
 
 /** Claude commands and their 5-hour / weekly usage (GET info). */

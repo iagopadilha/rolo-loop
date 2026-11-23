@@ -5,7 +5,6 @@ const HOUR_S = 60 * 60;
 export const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 export const num = (v, d = 2) => (isNum(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(d)) : DASH);
 export const cost = (v) => (isNum(v) ? '$' + v.toFixed(2) : DASH);
-export const tok = (v) => (isNum(v) ? (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v)) : DASH);
 export function dur(s) {
   if (!isNum(s)) return DASH;
   s = Math.floor(s);
