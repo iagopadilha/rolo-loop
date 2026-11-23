@@ -199,7 +199,7 @@ These fields are added to the state payload (feature `live-status-and-notices`).
 |---|---|---|
 | `processes` | `[{id, kind, turn, pid, started_at, label, feature, step, lanes: [{feature, step}], claude, claude_account}]` | What the engine started and is running now (`kind` is `claude_turn`, or `left_over` for a program a turn started and left running; each row also has `name` (program file name) and `cwd`). Empty when the loop is not alive. `label` is a one-line title such as `Loop turn 7 · feature a, b · step execute`. |
 | `now` | `{running, turn, label, started_at, pid, claude, claude_account, lanes: [{feature, name, step, stage, stage_title}]}` | The "running now" strip built from `processes` and the roadmap view. `{running: false, lanes: []}` when idle. |
-| `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `picker_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
+| `meta.claude_events` | `[{kind, turn, at, from: {command, account}, to: {command, account}, to_main, reason, unusable}]` | Each switch of the Claude account, newest 30. `kind` is `usage_limit_switch`, `back_to_main` or `account_unusable` (an unusable account has no reset time). The account of each turn is in the turn rows (`claude`, `claude_account`). |
 
 The state payload also carries the permissions journal (feature `e2e-dev-baseline`), read-only:
 
@@ -277,8 +277,7 @@ Additive, read-only. One object that joins what the validation produced; every l
 ### Claude accounts: backups listed, account changes notified, wrapper table as information (A2, A3, A5)
 
 - `GET /api/app/settings`: the item `claude_fallback_binaries` also carries `accounts`: `[{command, role, found, method, email, org, plan}]`, the main command first and then the backups in the order they are tried, from the cached `auth status` (the poll never waits for it). `found` is false for a command that is not on the machine; the account fields are empty when it is not signed in. Never a token.
-- Every change of the account that runs the loop (usage-limit switch, back to the main command, the `cc` picker moving to another account, an unusable account) is sent to every notice channel, the same ones as a stop. The notice names the account, the plan, why it changed and the reset time.
-- `GET errors`: stderr of a turn that ended well, when it is the account wrapper's status table (it names the account it opened), is listed as an `info` item with id `turn-<n>-account` and the title `Turn <n>: account used: <name>, <p>% of the 5-hour window`; it never counts as a problem. Stderr with a failure word keeps its own classification.
+- Every change of the account that runs the loop (usage-limit switch, back to the main command, an unusable account) is sent to every notice channel, the same ones as a stop. The notice names the account, the plan, why it changed and the reset time.
 
 ### Installs and registries (I6, I7)
 

@@ -5,6 +5,7 @@ All notable changes are listed here, newest first. The format follows Keep a Cha
 ## [Unreleased]
 
 ### Changed
+- Support for the `cc` account-wrapper command was removed: no default, no account-picker parsing and no per-account usage key; the generic fallback commands (`--claude-fallback`, `claude_fallback_binaries`) stay.
 - The companion toolkit is now **Craft Dev Toolkit** (`iagopadilha/craft-dev-toolkit`, plugin id `craft-dev-toolkit`); an install under the old id `claude-craft-kit` is still found, and a sibling clone is looked for under both folder names.
 - Security reports go through GitHub private vulnerability reporting instead of an e-mail address.
 

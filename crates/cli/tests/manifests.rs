@@ -32,7 +32,7 @@ fn the_marketplace_points_at_the_plugin_folder_by_name() {
 fn the_kit_dependency_is_declared_and_allowed_across_marketplaces() {
     let plugin = json("plugin/.claude-plugin/plugin.json");
     assert_eq!(plugin["dependencies"][0]["name"], "craft-dev-toolkit");
-    assert_eq!(plugin["dependencies"][0]["version"], ">=0.3.0 <0.4.0");
+    assert_eq!(plugin["dependencies"][0]["version"], ">=0.4.0 <0.5.0");
     assert_eq!(json(".claude-plugin/marketplace.json")["allowCrossMarketplaceDependenciesOn"][0], "craft-dev-toolkit");
 }
 

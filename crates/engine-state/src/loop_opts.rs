@@ -78,7 +78,6 @@ pub struct LoopOpts {
     pub limit_reset_phrases: Vec<(PrimitiveDateTime, String)>,
     pub limit_phrases: Vec<(String, String)>,
     pub main_reset: Option<PrimitiveDateTime>,
-    pub picker_tried: Vec<String>,
     pub last_claude_used: Option<(String, String)>,
     pub weekly_alerts: Vec<(String, Value)>,
 }
@@ -141,7 +140,6 @@ impl LoopOpts {
             limit_reset_phrases: vec![],
             limit_phrases: vec![],
             main_reset: None,
-            picker_tried: vec![],
             last_claude_used: None,
             weekly_alerts: vec![],
         }
@@ -424,8 +422,8 @@ mod tests {
             "5",
             "--no-push",
             "--claude-fallback",
-            "cc",
-            "--claude-fallback=cc2",
+            "claude-backup",
+            "--claude-fallback=claude-backup2",
             "--max-cost",
             "0",
             "--rewind",
@@ -436,7 +434,7 @@ mod tests {
         ]);
         assert_eq!(
             (o.wave, o.push_flag, o.claude_fallback.clone(), o.max_cost, o.rewind, o.auto_answer, o.leftovers.as_str()),
-            (5, Some(false), vec!["cc".to_string(), "cc2".to_string()], 0.0, Some(-1), false, "commit")
+            (5, Some(false), vec!["claude-backup".to_string(), "claude-backup2".to_string()], 0.0, Some(-1), false, "commit")
         );
         let o = opts(&["--max-sta", "3", "C:\\repo", "--e2e"]);
         assert_eq!((o.max_stall, o.e2e, o.repo.as_str()), (3, true, "C:\\repo"));

@@ -1,8 +1,8 @@
 /* Which command and sign-in a turn (and every agent inside it) ran with, in plain words. Shared by the account chip, the turn strip, the
    turn header, the pipeline diagram, the feature dialog and the agent dialog.
-   Short form (badge): "claude · login", "cc · token", "API key" (warning colour: it is billed per token). Long form (tooltip and chip):
+   Short form (badge): "claude · login", "claude-backup · token", "API key" (warning colour: it is billed per token). Long form (tooltip and chip):
    "subscription · browser login", "subscription · sign-in token", "API key · billed per token".
-   Data: the fields `claude`, `auth_method` ("login" | "token" | "api_key" | ""), `auth_email`, `auth_plan`, `cc_account` that the back end
+   Data: the fields `claude`, `auth_method` ("login" | "token" | "api_key" | ""), `auth_email`, `auth_plan` that the back end
    puts on every turn and, inherited from its turn, on every agent. Turns logged before those fields still carry `claude_account`, read here. */
 import { html, useState } from '../../util/preact.js';
 import { money } from '../../util/format.js';
@@ -13,7 +13,7 @@ const METHOD_SHORT = { login: 'login', token: 'token', api_key: 'API key' };
 const LABEL_WORDS = { login: 'login', token: 'token', 'API key': 'api_key', api_key: 'api_key' };
 const DEFAULT_MAX_PARALLEL = 3;
 
-/** "claude", "cc": the command of a turn without its folder and extension ('' when it was not recorded). */
+/** "claude", "claude-backup": the command of a turn without its folder and extension ('' when it was not recorded). */
 function commandOf(source) {
   const path = String((source && (source.claude || source.command)) || '');
   return path.split(/[\\/]/).pop().replace(/\.(cmd|bat|exe|py)$/i, '');
@@ -70,7 +70,7 @@ export function ClaudeUsageWindows() {
   if (!rows.length) return null;
   return html`<div class="z-totals" aria-label="Usage windows per command and account">
     <div class="z-figure-k">5-HOUR AND WEEKLY USAGE</div>
-    ${rows.map((row) => html`<div key=${row.key} class="z-totals-row"><span>${row.cc_account ? `${row.command} · ${row.cc_account}` : row.command}</span>
+    ${rows.map((row) => html`<div key=${row.key} class="z-totals-row"><span>${row.command}</span>
       <span class="mono">${row.windows.length ? row.windows.map((window, index) => html`${index ? ' · ' : ''}<span class=${window.exhausted ? 'is-exhausted' : ''}>${windowText(window)}</span>`) : 'usage unknown'}${ageText(row.age_seconds) ? ' · ' + ageText(row.age_seconds) : ''}</span></div>`)}
   </div>`;
 }
@@ -81,7 +81,7 @@ function describeClaude(source, { inherited = false } = {}) {
   if (!command && !method) return null;
   const data = source || {};
   const short = method === 'api_key' ? METHOD_SHORT.api_key : [command, METHOD_SHORT[method]].filter(Boolean).join(' · ');
-  const who = data.auth_email || (data.cc_account ? 'cc account ' + data.cc_account : '');
+  const who = data.auth_email || '';
   const lines = [`command: ${command || 'not recorded'}`, `sign-in: ${METHOD_WORDS[method] || 'unknown'}`];
   if (who) lines.push('account: ' + who);
   if (data.auth_plan) lines.push('plan: ' + data.auth_plan);

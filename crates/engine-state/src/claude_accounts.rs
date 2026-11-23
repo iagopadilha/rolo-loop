@@ -18,7 +18,6 @@ pub const LOCAL_NOTICE_CHANNELS: [&str; 3] = ["console", "toast", "file"];
 const UNUSABLE_REASON_LIMIT: usize = 300;
 
 static ACCOUNT_EXTRA: LazyLock<Re> = LazyLock::new(|| Re::new(r"\s*\(([^)]*)\)\s*\z"));
-static CC_ACCOUNT_IN_LABEL: LazyLock<Re> = LazyLock::new(|| Re::new(r"cc account +(\S+)"));
 
 /// Commands of the turns, in fallback order: `--claude` (default `claude`), then each `--claude-fallback`.
 pub fn claude_names(opts: &LoopOpts) -> Vec<String> {
@@ -68,8 +67,7 @@ pub fn switch_claude(opts: &mut LoopOpts) -> bool {
 }
 
 /// Remembers that the command's account cannot be used in this run and returns the record kept in meta.json
-/// (`{command, account, reason, turn}`; the reason is redacted and short). The `cc` account picker cannot yet leave one account out, so an
-/// unusable `cc` account makes the whole `cc` command unusable for the run.
+/// (`{command, account, reason, turn}`; the reason is redacted and short).
 pub fn mark_account_unusable(opts: &mut LoopOpts, name: &str, account: &str, reason: &str, turn: i64) -> Value {
     let record = json!({"command": name, "account": account, "reason": cli_output::redact_text(reason, Some(UNUSABLE_REASON_LIMIT)), "turn": turn});
     opts.unusable_commands.push(record.clone());
@@ -94,13 +92,13 @@ pub fn unusable_stop_message(opts: &LoopOpts) -> String {
     )
 }
 
-/// Account text of a turn: the `cc` picker names it on stderr; otherwise `<name> auth status`, asked once per command.
-pub fn claude_account(opts: &mut LoopOpts, name: &str, stderr: &str) -> String {
+/// Account text of a turn: `<name> auth status`, asked once per command.
+pub fn claude_account(opts: &mut LoopOpts, name: &str) -> String {
     if !opts.claude_auth.iter().any(|(n, _)| n == name) {
         opts.claude_auth.push((name.to_string(), claude_binaries::auth_status(name)));
     }
     let auth = &opts.claude_auth.iter().find(|(n, _)| n == name).expect("cached").1;
-    claude_binaries::account_label(auth, &claude_binaries::account_from_stderr(stderr))
+    claude_binaries::account_label(auth)
 }
 
 /// The configured notice channels that stay on this machine (console, toast, file), in the configured order.
@@ -120,7 +118,7 @@ pub fn sign_in_words(method: &str) -> Option<&'static str> {
     }
 }
 
-/// `C:/bin/claude.exe` -> `claude`, `cc.cmd` -> `cc`.
+/// `C:/bin/claude.exe` -> `claude`, `backup.cmd` -> `backup`.
 pub fn command_base_name(name: &str) -> String {
     let last = pycompat::last_segment(name);
     match last.rfind('.') {
@@ -130,7 +128,7 @@ pub fn command_base_name(name: &str) -> String {
 }
 
 /// `(method, who, organization and plan)` of a [`claude_binaries::account_label`] text such as `login, dev@example.com (Acme, team)` or
-/// `token, cc account claude2`; missing parts come back empty.
+/// `token`; missing parts come back empty.
 pub fn split_account_label(account: &str) -> (String, String, String) {
     let mut text = account.trim().to_string();
     let mut extra = String::new();
@@ -157,17 +155,15 @@ fn auth_method_code(label: &str) -> &'static str {
     }
 }
 
-/// Structured sign-in of a turn, taken from its account label (never a secret): `{"auth_method", "auth_email", "auth_plan", "cc_account"}`.
+/// Structured sign-in of a turn, taken from its account label (never a secret): `{"auth_method", "auth_email", "auth_plan"}`.
 pub fn claude_auth_fields(account: &str) -> Map<String, Value> {
     let (method, who, extra) = split_account_label(account);
     let mut parts: Vec<String> = extra.split(',').map(|p| p.trim().to_string()).collect();
     parts.extend([String::new(), String::new()]);
-    let cc = CC_ACCOUNT_IN_LABEL.search(&who).and_then(|m| m.group(1).map(String::from)).unwrap_or_default();
     let mut fields = Map::new();
     fields.insert("auth_method".into(), json!(auth_method_code(&method)));
     fields.insert("auth_email".into(), json!(if who.contains('@') { who.clone() } else { String::new() }));
     fields.insert("auth_plan".into(), json!(parts[1]));
-    fields.insert("cc_account".into(), json!(cc));
     fields
 }
 
@@ -184,8 +180,8 @@ pub fn describe_claude_used(name: &str, account: &str, is_main: bool) -> String 
 
 /// Subject that says, in words, which account the loop is on now and how it signs in. `unusable` ("main account unusable") goes in front
 /// when the change came from an account that cannot be used.
-pub fn claude_change_subject(name: &str, account: &str, is_main: bool, same_command: bool, unusable: &str) -> String {
-    let subject = claude_change_subject_core(name, account, is_main, same_command);
+pub fn claude_change_subject(name: &str, account: &str, is_main: bool, unusable: &str) -> String {
+    let subject = claude_change_subject_core(name, account, is_main);
     if unusable.is_empty() {
         subject
     } else {
@@ -194,11 +190,9 @@ pub fn claude_change_subject(name: &str, account: &str, is_main: bool, same_comm
 }
 
 /// The kind of an account change, as the panel and the notice name it.
-pub fn change_kind(unusable: bool, same_command: bool, is_main: bool) -> &'static str {
+pub fn change_kind(unusable: bool, is_main: bool) -> &'static str {
     if unusable {
         "account_unusable"
-    } else if same_command {
-        "picker_switch"
     } else if is_main {
         "back_to_main"
     } else {
@@ -207,13 +201,10 @@ pub fn change_kind(unusable: bool, same_command: bool, is_main: bool) -> &'stati
 }
 
 /// The part of the subject that names the account the loop is on now.
-pub fn claude_change_subject_core(name: &str, account: &str, is_main: bool, same_command: bool) -> String {
+pub fn claude_change_subject_core(name: &str, account: &str, is_main: bool) -> String {
     let (method, who, _) = split_account_label(account);
     let who = if who.is_empty() { format!("`{}`", command_base_name(name)) } else { who };
     let how = sign_in_words(&method).map(|w| format!(" ({w})")).unwrap_or_default();
-    if same_command {
-        return format!("{} switched to {who}{how}", command_base_name(name));
-    }
     format!("{}: {who}{how}", if is_main { "back on the main account" } else { "now on the backup account" })
 }
 
@@ -225,7 +216,6 @@ pub fn return_to_main_command(opts: &mut LoopOpts) -> bool {
     if opts.claude_index > 0 && local_now() >= moment && !unusable_names(opts).contains(&names[0]) {
         opts.claude_index = 0;
         opts.main_reset = None;
-        opts.picker_tried.clear();
         println!("[loop] the main command `{}` should be free again (reset {}): back on it", names[0], day_month_clock(moment));
         return true;
     }
@@ -257,14 +247,9 @@ pub fn limit_suffix(phrase: &str) -> String {
     }
 }
 
-/// Key of a command in meta.json `claude_usage`: its base name, plus `:<account>` when the `cc` picker named one (`cc:claudep`).
-pub fn usage_key(name: &str, cc_account: &str) -> String {
-    let base = command_base_name(name);
-    if cc_account.is_empty() {
-        base
-    } else {
-        format!("{base}:{cc_account}")
-    }
+/// Key of a command in meta.json `claude_usage`: its base name.
+pub fn usage_key(name: &str) -> String {
+    command_base_name(name)
 }
 
 /// Keeps the last usage windows read from a command's output in meta.json: `{"<key>": {"windows", "status", "read_at"}}`. A turn whose
@@ -319,40 +304,32 @@ mod tests {
 
     #[test]
     fn every_account_change_has_a_kind_for_the_panel_and_the_notice() {
-        assert_eq!(change_kind(true, false, false), "account_unusable");
-        assert_eq!(change_kind(true, true, true), "account_unusable");
-        assert_eq!(change_kind(false, true, false), "picker_switch");
-        assert_eq!(change_kind(false, false, true), "back_to_main");
-        assert_eq!(change_kind(false, false, false), "usage_limit_switch");
+        assert_eq!(change_kind(true, false), "account_unusable");
+        assert_eq!(change_kind(true, true), "account_unusable");
+        assert_eq!(change_kind(false, true), "back_to_main");
+        assert_eq!(change_kind(false, false), "usage_limit_switch");
     }
 
     #[test]
     fn labels_split_and_describe() {
         assert_eq!(split_account_label("login, dev@example.com (Acme, team)"), ("login".to_string(), "dev@example.com".to_string(), "Acme, team".to_string()));
-        assert_eq!(split_account_label("token, cc account claude2"), ("token".to_string(), "cc account claude2".to_string(), String::new()));
+        assert_eq!(split_account_label("token"), ("token".to_string(), String::new(), String::new()));
         assert_eq!(split_account_label("weird text"), (String::new(), "weird text".to_string(), String::new()));
         let fields = claude_auth_fields("login, dev@example.com (Acme, team)");
-        assert_eq!(
-            (fields["auth_method"].as_str(), fields["auth_email"].as_str(), fields["auth_plan"].as_str(), fields["cc_account"].as_str()),
-            (Some("login"), Some("dev@example.com"), Some("team"), Some(""))
-        );
-        assert_eq!(claude_auth_fields("token, cc account claude2")["cc_account"], "claude2");
+        assert_eq!((fields["auth_method"].as_str(), fields["auth_email"].as_str(), fields["auth_plan"].as_str()), (Some("login"), Some("dev@example.com"), Some("team")));
         assert_eq!(
             describe_claude_used("C:/bin/claude.exe", "login, dev@example.com (Acme, team)", true),
             "the main command `claude` (dev@example.com, subscription, browser login; Acme, team)"
         );
-        assert_eq!(describe_claude_used("cc.cmd", "", false), "the backup command `cc` (account unknown)");
+        assert_eq!(describe_claude_used("backup.cmd", "", false), "the backup command `backup` (account unknown)");
+        assert_eq!(claude_change_subject("backup", "token", false, ""), "now on the backup account: `backup` (subscription, sign-in token)");
+        assert_eq!(claude_change_subject("claude", "login, a@x.com", true, ""), "back on the main account: a@x.com (subscription, browser login)");
         assert_eq!(
-            claude_change_subject("cc", "token, cc account claude2", false, false, ""),
-            "now on the backup account: cc account claude2 (subscription, sign-in token)"
-        );
-        assert_eq!(claude_change_subject("claude", "login, a@x.com", true, false, ""), "back on the main account: a@x.com (subscription, browser login)");
-        assert_eq!(
-            claude_change_subject("cc", "token, cc account claude3", false, true, "main account unusable"),
-            "main account unusable, cc switched to cc account claude3 (subscription, sign-in token)"
+            claude_change_subject("backup", "token", false, "main account unusable"),
+            "main account unusable, now on the backup account: `backup` (subscription, sign-in token)"
         );
         assert_eq!(command_base_name("C:/bin/claude.exe"), "claude");
-        assert_eq!(usage_key("cc.cmd", "claudep"), "cc:claudep");
+        assert_eq!(usage_key("backup.cmd"), "backup");
     }
 
     #[test]
@@ -360,11 +337,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().display().to_string())]);
         let mut opts = LoopOpts::new("x");
-        opts.claude_fallback = vec!["cc".into()];
+        opts.claude_fallback = vec!["claude-backup".into()];
         assert!(!refresh_fallbacks(&mut opts, &env), "no key in the file: the command line list stays");
-        std::fs::write(dir.path().join("config.json"), r#"{"claude_fallback_binaries": ["cc2", "cc3"]}"#).unwrap();
+        std::fs::write(dir.path().join("config.json"), r#"{"claude_fallback_binaries": ["claude-backup2", "claude-backup3"]}"#).unwrap();
         assert!(refresh_fallbacks(&mut opts, &env));
-        assert_eq!(opts.claude_fallback, vec!["cc2", "cc3"]);
+        assert_eq!(opts.claude_fallback, vec!["claude-backup2", "claude-backup3"]);
         assert!(!refresh_fallbacks(&mut opts, &env));
         std::fs::write(dir.path().join("config.json"), r#"{"claude_fallback_binaries": []}"#).unwrap();
         assert!(refresh_fallbacks(&mut opts, &env) && opts.claude_fallback.is_empty() && opts.claude_index == 0);
@@ -394,10 +371,10 @@ mod tests {
         assert_eq!(meta["claude_usage"]["claude"]["status"], "allowed");
         let mut opts = LoopOpts::new("x");
         opts.claude = "claude".into();
-        record_usage(&mut meta, "cc:one", &json!({"seven_day": {"pct": 33.0, "reset_at": null}}), "");
+        record_usage(&mut meta, "backup:one", &json!({"seven_day": {"pct": 33.0, "reset_at": null}}), "");
         let lines = other_usage_lines(&opts, &meta, "claude");
         assert_eq!(lines.len(), 1);
-        assert!(lines[0].starts_with("- `cc:one`: weekly 33%, read at "));
+        assert!(lines[0].starts_with("- `backup:one`: weekly 33%, read at "));
         let mut moment_opts = LoopOpts::new("x");
         let now = local_now();
         remember_reset(&mut moment_opts, Some(now), "5-hour window, back at 17:05");

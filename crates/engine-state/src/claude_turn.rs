@@ -197,7 +197,7 @@ pub fn run_turn_notifying(
     reported: &mut bool,
     on_start: &mut dyn FnMut(i64),
 ) -> (i32, String, String, bool) {
-    // a .cmd wrapper (`cc`) would cut the prompt at a line break
+    // a .cmd wrapper would cut the prompt at a line break
     let (command, stdin_text) = claude_binaries::prompt_through_stdin(command, "");
     let env = push_lock_env(ctx, cwd, reported);
     let timeout = (timeout_min.max(0) as u64) * 60;

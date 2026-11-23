@@ -34,7 +34,7 @@ What else each installer does:
 2. In Claude Code, add the plugin from the install folder:
    ```
    /plugin marketplace add "%LOCALAPPDATA%\Rolo Loop"
-   /plugin install claude-maestro@claude-maestro
+   /plugin install rolo-loop@rolo-loop
    ```
 3. `harness doctor` in a new terminal.
 
