@@ -85,6 +85,8 @@ The plugin needs the dev toolkit; install both (from GitHub, or from local clone
 /plugin install rolo-loop@rolo-loop
 ```
 
+If the plugin comes from a clone, run `powershell -File tools/install-local.ps1` once (and after each plugin update): the repository does not track `plugin/bin/`, and without `guard.exe` the guard hook fails on every tool call. The installer already ships these binaries.
+
 Check with `harness doctor` in a new terminal.
 
 ## Licence

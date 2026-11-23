@@ -38,6 +38,14 @@ What else each installer does:
    ```
 3. `harness doctor` in a new terminal.
 
+If the plugin comes from a clone or from source instead of the installer folder, `plugin/bin/` is empty (the repository does not track it) and the guard hook (`bin/guard.exe`) fails on every tool call with "exit 127". Build and copy the binaries once, and again after each plugin update (a new cache folder starts without them):
+
+```
+powershell -File tools/install-local.ps1
+```
+
+The same applies to the toolkit's `bin/craft.exe` (`tools/install-local.ps1` in `craft-dev-toolkit`). `harness doctor` reports a missing one.
+
 When the orchestrator skill runs `harness serve --project <repo>`, the project opens in the desktop app (it is started if it is not running). `--no-desktop` (or `LOOP_NO_DESKTOP=1`) keeps the old headless server in the browser.
 
 ## Building the installers
