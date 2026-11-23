@@ -24,7 +24,7 @@
 //! Stops (all notify through the LOOP_NOTIFY_CHANNELS channels: console, toast, file, email, webhook):
 //!   done | awaiting_user | error (LOOP.json) | turn timeout | exit!=0 | risky permission denial or one without progress | dirty tree outside
 //!   .specs/ | LOOP.json missing/stale | identical state in 2 turns | `--max-stall` turns WITHOUT PROGRESS (default 10; the counter resets on
-//!   every status advance in the ROADMAP) | account usage limit (first the next `--claude-fallback` command, e.g. `cc` signed in with another
+//!   every status advance in the ROADMAP) | account usage limit (first the next `--claude-fallback` command, e.g. `claude-backup` signed in with another
 //!   account; when every one is limited, waits until the first known reset (else `--limit-wait` min), up to `--limit-retries` times, and
 //!   starts again from `--claude`; while on a fallback, it goes back to `--claude` by itself once that command's remembered reset moment has
 //!   passed) | unusable account (logged out, revoked token, organization without access: the turn is run again on the next command with a
@@ -429,8 +429,8 @@ impl Runner {
         true
     }
 
-    /// Notice (every configured channel) when a turn ran on another command or account than the previous turn: `claude` -> `cc`, back to
-    /// `claude`, or the `cc` picker on another account. The first turn of the first run only records it.
+    /// Notice (every configured channel) when a turn ran on another command or account than the previous turn: `claude` -> a backup command, back to
+    /// `claude`. The first turn of the first run only records it.
     fn notify_claude_change(&self, opts: &mut LoopOpts, turn: i64, name: &str, account: &str) -> Option<Value> {
         let used = (name.to_string(), account.to_string());
         let previous = opts.last_claude_used.replace(used.clone());
@@ -442,8 +442,7 @@ impl Runner {
         let before = describe_claude_used(&previous.0, &previous.1, command_base_name(&previous.0) == main_name);
         let now = describe_claude_used(name, account, is_main);
         println!("[loop] turn {turn} ran on {now}; before it was {before}");
-        let same_command = previous.0 == name && unusable.is_none();
-        // A2: every account change goes to the same channels as a stop (message, e-mail, webhook), the picker's change of account included: the
+        // A2: every account change goes to the same channels as a stop (message, e-mail, webhook): the
         // user is not at the panel when the account that runs the loop changes, and the notice names the account, the plan, why and the reset time.
         let only: Option<Vec<String>> = None;
         let mut unusable_subject = String::new();
@@ -453,12 +452,6 @@ impl Runner {
             unusable_subject = format!("{} account unusable", if command_base_name(u["command"].as_str().unwrap_or("")) == main_name { "main" } else { "backup" });
             let why = u["reason"].as_str().filter(|r| !r.is_empty()).unwrap_or("no reason in the output");
             reason = format!("The previous account is unusable ({why}); this is not a usage limit, so there is no reset time and it does not come back by itself. The loop moved to the backup command. Waiting does not fix a login: sign in again (`claude` then /login, or `claude setup-token`) or ask the admin to enable access.");
-        } else if same_command {
-            reason = format!(
-                "The `{}` account picker moved to another account because the previous one hit its usage limit{}.",
-                command_base_name(name),
-                limit_suffix(&phrase_of(&command_base_name(&previous.0)))
-            );
         } else if is_main {
             reason = format!("The usage limit of the main account{} should have reset, so the loop went back to it.", limit_suffix(&phrase_of(&main_name)));
         } else {
@@ -467,14 +460,14 @@ impl Runner {
                 limit_suffix(&phrase_of(&command_base_name(&previous.0)))
             );
         }
-        let kind = change_kind(unusable.is_some(), same_command, is_main);
+        let kind = change_kind(unusable.is_some(), is_main);
         let event = json!({
             "kind": kind, "turn": turn, "at": now_iso(), "to_main": is_main,
             "from": {"command": command_base_name(&previous.0), "account": previous.1}, "to": {"command": command_base_name(name), "account": account},
             "reason": reason, "unusable": unusable.as_ref().map(|u| u["reason"].clone()).unwrap_or(Value::Null),
         });
         self.notify_wait(
-            &claude_change_subject(name, account, is_main, same_command, &unusable_subject),
+            &claude_change_subject(name, account, is_main, &unusable_subject),
             &format!("Turn {turn} now runs on {now}.\nBefore it the loop ran on {before}.\n{reason} The loop goes on by itself."),
             only,
         );
@@ -872,7 +865,6 @@ impl Runner {
             } else {
                 format!("{}\n{err}", cli_output::strip_rate_limit_events(&out))
             };
-            let picked_account = claude_binaries::account_from_stderr(&err);
             let blocking = usage_windows::blocking_window(&rate_limit, None);
             if !err.is_empty() {
                 log.insert("stderr".into(), json!(tail(&err, 2000)));
@@ -882,7 +874,7 @@ impl Runner {
             log.insert("turn".into(), json!(turn));
             log.insert("claude".into(), json!(claude_name));
             log.insert("caveman".into(), json!(is_caveman_on(&self.ctx)));
-            let account = claude_account(opts, &claude_name, &err);
+            let account = claude_account(opts, &claude_name);
             log.insert("claude_account".into(), json!(account));
             let auth_fields = claude_auth_fields(&account);
             for (k, v) in &auth_fields {
@@ -893,7 +885,7 @@ impl Runner {
             for (k, v) in &auth_fields {
                 set(meta, k, v.clone());
             }
-            record_usage(meta, &usage_key(&claude_name, &picked_account), &windows, &limit_status);
+            record_usage(meta, &usage_key(&claude_name), &windows, &limit_status);
             let _ = save_json(&logs.join(format!("{turn:03}.json")), &Value::Object(log));
             cost += f64_of(data.get("total_cost_usd"));
             set(meta, "turns", json!(turn));
@@ -919,7 +911,7 @@ impl Runner {
             let account_limited = failed && (claude_binaries::is_usage_limit(&scan_text) || limited_by_status);
             let mut limit_phrase = String::new();
             if account_limited {
-                // the blocking window first, `[cc] reinicia:` / `limit reached|epoch` otherwise
+                // the blocking window first, `limit reached|epoch` otherwise
                 let reset = usage_windows::reset_moment(blocking.as_ref()).or_else(|| claude_binaries::reset_time(&scan_text));
                 limit_phrase = usage_windows::phrase(blocking.as_ref());
                 let key = command_base_name(&claude_name);
@@ -930,22 +922,8 @@ impl Runner {
                     // the main command: when to try it again while a fallback keeps the turns
                     opts.main_reset = Some(main_reset_moment(opts, reset));
                 }
-                if picked_account.is_empty() && self.alert_main_weekly_limit(opts, meta, turn, &claude_name, blocking.as_ref()) {
+                if self.alert_main_weekly_limit(opts, meta, turn, &claude_name, blocking.as_ref()) {
                     let _ = save_meta(&meta_path(work), meta);
-                }
-                if !picked_account.is_empty() && !opts.picker_tried.contains(&picked_account) {
-                    // the `cc` picker ran on an account that ran out during the turn: run it again, it picks the next free one ("cc" + Enter)
-                    opts.picker_tried.push(picked_account.clone());
-                    if opts.last_claude_used.is_none() {
-                        opts.last_claude_used = Some((claude_name.clone(), account.clone()));
-                        // notify the change
-                    }
-                    println!(
-                        "[loop] usage limit on `{claude_name}` account {picked_account}{}; turn {turn} again, the picker chooses another account",
-                        limit_suffix(&limit_phrase)
-                    );
-                    turn -= 1;
-                    continue;
                 }
             }
             if account_limited && switch_claude(opts) {
@@ -1028,14 +1006,12 @@ impl Runner {
                     return self.finish(work, meta, "awaiting_user", &paused, opts);
                 }
                 opts.claude_index = first_usable_index(opts); // after the wait, the main command again (the first one whose account works)
-                opts.picker_tried.clear();
                 opts.limit_resets.clear();
                 opts.main_reset = None;
                 turn -= 1;
                 continue;
             }
             limit_hits = 0;
-            opts.picker_tried.clear();
             opts.limit_resets.clear();
             if unreadable && code == 0 {
                 let detail = if truthy(data.get("detail")) { text(data.get("detail")) } else { "unrecognized".into() };

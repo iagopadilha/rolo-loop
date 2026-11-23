@@ -70,7 +70,7 @@ pub struct AppConfig {
     pub templates_dir: PathBuf,
     pub claude_transcripts_dir: String,
     pub output_dir: String,
-    /// Empty = `claude` from PATH; a name such as `cc` (wrapper of another account) works; tests inject a fake `.py`.
+    /// Empty = `claude` from PATH; a name such as `claude-backup` (wrapper of another account) works; tests inject a fake `.py`.
     pub claude_binary: String,
     /// Tried in order when the running command hits the account usage limit.
     pub claude_fallback_binaries: Vec<String>,
@@ -213,10 +213,11 @@ mod tests {
     #[test]
     fn config_reads_the_data_dir_and_honours_overrides() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.json"), r#"{"claude_binary": "cc", "idle_hours": "0", "max_parallel_maps": 2, "output_dir": "D:\\out"}"#).unwrap();
+        std::fs::write(dir.path().join("config.json"), r#"{"claude_binary": "claude-backup", "idle_hours": "0", "max_parallel_maps": 2, "output_dir": "D:\\out"}"#)
+            .unwrap();
         let env = Env::from_pairs([("LOOP_DATA_DIR", dir.path().to_str().unwrap()), ("LOOP_CLAUDE_HOME", dir.path().to_str().unwrap())]);
         let config = load_app_config(&env, &Overrides::default());
-        assert_eq!((config.claude_binary.as_str(), config.idle_hours, config.max_parallel_maps, config.output_dir.as_str()), ("cc", 0.0, 2, "D:\\out"));
+        assert_eq!((config.claude_binary.as_str(), config.idle_hours, config.max_parallel_maps, config.output_dir.as_str()), ("claude-backup", 0.0, 2, "D:\\out"));
         assert!(config.projects_registry_path().ends_with("projects.json") && config.frontend_dir.ends_with("frontend"));
         let over = load_app_config(&env, &Overrides { claude_binary: "fake.py".into(), fixed_port: 47801, ..Default::default() });
         assert_eq!((over.claude_binary.as_str(), over.fixed_port), ("fake.py", 47801));

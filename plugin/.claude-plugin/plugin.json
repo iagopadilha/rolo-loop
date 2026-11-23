@@ -5,7 +5,7 @@
     {
       "name": "craft-dev-toolkit",
       "marketplace": "craft-dev-toolkit",
-      "version": ">=0.3.0 <0.4.0"
+      "version": ">=0.4.0 <0.5.0"
     }
   ],
   "description": "Turns an AI coding agent chat (Claude Code or a compatible CLI) into an orchestrator for loop engineering: roadmap, spec, review gate, implement, verify, quality gate, run by subagents with on-disk state and a PreToolUse guard hook. The unattended loop runs in the Rolo Loop app (desktop or harness serve) from the same repository: graph view of the roadmap, approve, answer, instruct, deliver, on your subscription or a pay-per-use API key, in the order you choose.",

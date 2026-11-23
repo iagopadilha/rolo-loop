@@ -263,8 +263,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().display().to_string();
         let saved = json!({"argv": ["harness", "loop", repo, "--wave", "2", "--answer", "old", "--claude", "evil.exe"], "cwd": null});
-        let args = resume_args(&saved, &repo, &[repo.clone()], "harness.exe", " go on ", "claude", &["cc".to_string()]).unwrap();
-        assert_eq!(args, vec![repo.as_str(), "--wave", "2", "--instruction", "go on", "--claude", "claude", "--claude-fallback", "cc"]);
+        let args = resume_args(&saved, &repo, &[repo.clone()], "harness.exe", " go on ", "claude", &["claude-backup".to_string()]).unwrap();
+        assert_eq!(args, vec![repo.as_str(), "--wave", "2", "--instruction", "go on", "--claude", "claude", "--claude-fallback", "claude-backup"]);
         assert!(matches!(parse(&args), Parsed::Run(_)), "the loop parser accepts what resume builds");
         let bare = resume_args(&saved, &repo, &[], "harness.exe", "", "", &[]).unwrap();
         assert_eq!(bare, vec![repo.as_str(), "--wave", "2"], "the old answer and the saved claude never come back");

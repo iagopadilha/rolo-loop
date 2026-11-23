@@ -257,7 +257,7 @@ impl ClaudeClient {
     /// Runs the argv (no shell, environment without secrets, stdin = `stdin_text`) and parses the stream-json output (its last `result` event).
     /// When the command hits an account usage limit, or its account cannot be used, the same argv runs again with each fallback binary in turn.
     ///
-    /// Always returns an object (never fails): `ok`, `reply`, `cost_usd`, `session_id`, `error`, `raw`, `binary`, `account`.
+    /// Always returns an object (never fails): `ok`, `reply`, `cost_usd`, `session_id`, `error`, `raw`, `binary`.
     pub fn run_prompt(&self, argv: &[String], folder: &str, stdin_text: &str, timeout_seconds: u64, extra_env: &[(String, String)]) -> Value {
         let extra_env = self.isolation_variables(folder, extra_env);
         // the providers of Settings, read now (their order and secrets may have changed since the app started)
@@ -274,8 +274,6 @@ impl ClaudeClient {
             attempt_env.extend(engine_state::providers::environment_of(name, &data_dir));
             let (mut outcome, switch_cause) = self.run_once(&attempt, folder, stdin_text, timeout_seconds, &attempt_env);
             outcome["binary"] = json!(name);
-            let account = outcome.as_object_mut().and_then(|o| o.remove("stderr_account")).unwrap_or(json!(""));
-            outcome["account"] = account;
             result = outcome;
             if switch_cause.is_empty() || position == names.len() - 1 {
                 break;
@@ -318,7 +316,7 @@ impl ClaudeClient {
         let raw = Self::parse_json_output(&output);
         let raw_map = raw.as_object().cloned().unwrap_or_default();
         let text = |key: &str| raw_map.get(key).and_then(Value::as_str).unwrap_or("").to_string();
-        let mut result = json!({"ok": false, "reply": "", "cost_usd": Self::extract_cost(&raw), "session_id": text("session_id"), "error": "", "raw": raw, "stderr_account": claude_binaries::account_from_stderr(&error)});
+        let mut result = json!({"ok": false, "reply": "", "cost_usd": Self::extract_cost(&raw), "session_id": text("session_id"), "error": "", "raw": raw});
         if code == TIMEOUT_CODE {
             result["error"] = json!(TIMEOUT_MESSAGE);
             return (result, "");

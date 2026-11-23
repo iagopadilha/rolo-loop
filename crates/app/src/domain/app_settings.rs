@@ -71,7 +71,7 @@ pub fn setting_catalog() -> Vec<SettingDefinition> {
             d
         },
         def("loop_keep_going", "Keep the loop going", "Unattended mode: the loop does not stop for housekeeping. Files a turn leaves outside the features are committed as a checkpoint on the loop branch, and a blocked feature is set aside while the others go on. It still stops for a decision only you can make, a budget or cost cap, and real errors. Setup files (CLAUDE.md, codebase maps) are always committed without stopping.", BOOL, json!(false)),
-        restart(def("claude_binary", "Claude command", "The command that starts Claude Code. Empty uses claude from your PATH. Change it to run a wrapper (for example cc) signed in with another account.", TEXT, json!(""))),
+        restart(def("claude_binary", "Claude command", "The command that starts Claude Code. Empty uses claude from your PATH. Change it to run a wrapper (for example claude-backup) signed in with another account.", TEXT, json!(""))),
         restart(def("claude_fallback_binaries", "Fallback commands", "Commands tried in order, one per line, when the running one hits the account usage limit. A command missing on this machine is skipped. A loop that is already running reads the list again before each turn.", LIST, json!([]))),
         min(restart(def("max_parallel_maps", "Parallel subproject maps", "How many subproject map jobs of a monorepo run at the same time; the rest wait in a queue. Lower it if your machine or account limit struggles.", INT, json!(6))), 1.0),
         min(restart(def("idle_hours", "Idle shutdown (hours)", "The app shuts itself down after this many hours without activity or a running loop. 0 means it never shuts down.", NUMBER, json!(2))), 0.0),
@@ -310,7 +310,7 @@ mod tests {
             validate_setting_value(&def_of("orchestrator_model"), &json!("gpt")).unwrap_err().message,
             "orchestrator_model must be one of: 'opus', 'sonnet', 'haiku', ''"
         );
-        assert_eq!(validate_setting_value(&def_of("claude_binary"), &json!("  cc ")).unwrap(), json!("cc"));
+        assert_eq!(validate_setting_value(&def_of("claude_binary"), &json!("  claude-backup ")).unwrap(), json!("claude-backup"));
         assert_eq!(validate_setting_value(&def_of("output_dir"), &json!(" ")).unwrap_err().message, "output_dir cannot be empty: use Reset to default instead");
         assert_eq!(validate_setting_value(&def_of("claude_binary"), &json!("a\nb")).unwrap_err().message, "claude_binary must be one line of at most 500 characters");
         assert_eq!(find_definition(&json!("nope")).unwrap_err().message, "unknown setting: nope");
@@ -350,11 +350,12 @@ mod tests {
     #[test]
     fn stored_values_fall_back_to_the_default() {
         let stored: Map<String, Value> =
-            serde_json::from_value(json!({"loop_isolation": "x", "max_parallel_maps": 0, "loop_extra_skills": [" a ", 3, ""], "claude_binary": "cc"})).unwrap();
+            serde_json::from_value(json!({"loop_isolation": "x", "max_parallel_maps": 0, "loop_extra_skills": [" a ", 3, ""], "claude_binary": "claude-backup"}))
+                .unwrap();
         assert_eq!(read_stored_or_default(&def_of("loop_isolation"), &stored), json!(true));
         assert_eq!(read_stored_or_default(&def_of("max_parallel_maps"), &stored), json!(6));
         assert_eq!(read_stored_or_default(&def_of("loop_extra_skills"), &stored), json!(["a"]));
-        assert_eq!(read_stored_or_default(&def_of("claude_binary"), &stored), json!("cc"));
+        assert_eq!(read_stored_or_default(&def_of("claude_binary"), &stored), json!("claude-backup"));
         let env = Env::from_pairs([("USERPROFILE", "C:\\Users\\Me")]);
         assert_eq!(get_default_value(&def_of("output_dir"), &env), json!("C:\\Users\\Me\\Downloads"));
         let (servers, extra) = validate_mcp_settings(&json!({"db": {"allow": true}}), &json!(["mcp__db__query"])).unwrap();

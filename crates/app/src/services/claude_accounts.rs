@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-//! Which Claude account the loop is using, for the panel: command, auth method, e-mail, organization, plan, `cc` account name.
+//! Which Claude account the loop is using, for the panel: command, auth method, e-mail, organization, plan.
 //!
-//! `claude <command> auth status` takes seconds (the `cc` picker asks every account for its usage), so the rows are cached and the panel poll
+//! `claude <command> auth status` can take seconds, so the rows are cached and the panel poll
 //! never waits for them: a stale cache is refreshed by one background thread while the poll gets the last rows (or none yet). The diagnostics
 //! screen (`GET /api/app/info`) may wait, since the user asked for that screen.
 
@@ -15,7 +15,6 @@ use std::sync::{Arc, LazyLock, Mutex};
 pub const CACHE_TTL_SECONDS: f64 = 300.0;
 pub const DEFAULT_COMMAND: &str = claude_binaries::DEFAULT_BINARY_NAME;
 static COMMAND_EXTENSION: LazyLock<Re> = LazyLock::new(|| Re::ci(r"\.(cmd|bat|exe|py)\z"));
-static CC_ACCOUNT_LABEL: LazyLock<Re> = LazyLock::new(|| Re::new(r"cc account +(\S+)"));
 static EMAIL: LazyLock<Re> = LazyLock::new(|| Re::new(r"\S+@\S+"));
 static ORG_PLAN: LazyLock<Re> = LazyLock::new(|| Re::new(r"\(([^)]*)\)\s*\z"));
 const KNOWN_METHODS: [&str; 3] = ["login", "token", "API key"];
@@ -38,18 +37,18 @@ fn text_of(value: Option<&Value>) -> String {
     }
 }
 
-/// `claude`, `cc`: a command path/name without its folder and extension ('' when empty).
+/// `claude`, `claude-backup`: a command path/name without its folder and extension ('' when empty).
 pub fn command_name(path_or_name: &str) -> String {
     let base = path_or_name.replace('\\', "/");
     let base = base.rsplit('/').next().unwrap_or("");
     COMMAND_EXTENSION.replace_lit(base, "")
 }
 
-/// Fields of a label written by the loop ("login dev@example.com (Acme, team)", "token, cc account claude2") ->
-/// `{"method", "email", "org", "plan", "cc_account"}`; unknown parts are ''.
+/// Fields of a label written by the loop ("login dev@example.com (Acme, team)", "token") ->
+/// `{"method", "email", "org", "plan"}`; unknown parts are ''.
 pub fn parse_account_label(label: &str) -> Map<String, Value> {
     let mut text = label.trim().to_string();
-    let mut fields: Map<String, Value> = ["method", "email", "org", "plan", "cc_account"].iter().map(|k| (k.to_string(), json!(""))).collect();
+    let mut fields: Map<String, Value> = ["method", "email", "org", "plan"].iter().map(|k| (k.to_string(), json!(""))).collect();
     if text.is_empty() {
         return fields;
     }
@@ -68,9 +67,6 @@ pub fn parse_account_label(label: &str) -> Map<String, Value> {
     }
     if let Some(email) = EMAIL.search(&text) {
         fields.insert("email".into(), json!(email.text().trim_matches(',')));
-    }
-    if let Some(account) = CC_ACCOUNT_LABEL.search(&text) {
-        fields.insert("cc_account".into(), json!(&account[1]));
     }
     fields
 }
@@ -92,15 +88,15 @@ fn field_str(record: &Value, key: &str) -> String {
     text_of(record.get(key))
 }
 
-/// Structured sign-in of one turn record (or the meta): `{"auth_method", "auth_email", "auth_plan", "cc_account"}`, never a secret. The loop
+/// Structured sign-in of one turn record (or the meta): `{"auth_method", "auth_email", "auth_plan"}`, never a secret. The loop
 /// writes these fields next to `claude_account`; a turn written before that is read from the `claude_account` label.
 pub fn build_turn_auth(record: &Value) -> Value {
-    if record.get("auth_method").is_some() || record.get("cc_account").is_some() {
-        return json!({"auth_method": method_code(&field_str(record, "auth_method")), "auth_email": field_str(record, "auth_email"), "auth_plan": field_str(record, "auth_plan"), "cc_account": field_str(record, "cc_account")});
+    if record.get("auth_method").is_some() {
+        return json!({"auth_method": method_code(&field_str(record, "auth_method")), "auth_email": field_str(record, "auth_email"), "auth_plan": field_str(record, "auth_plan")});
     }
     let parsed = parse_account_label(&field_str(record, "claude_account"));
     let get = |k: &str| parsed.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-    json!({"auth_method": method_code(&get("method")), "auth_email": get("email"), "auth_plan": get("plan"), "cc_account": get("cc_account")})
+    json!({"auth_method": method_code(&get("method")), "auth_email": get("email"), "auth_plan": get("plan")})
 }
 
 /// The command, sign-in and usage fields a turn row carries. The usage fields are empty for a turn written before the loop read them.
@@ -172,14 +168,6 @@ pub fn parse_read_at(text: &str) -> Option<f64> {
         return Some(epoch as f64 + moment.seconds.fract());
     }
     Some(moment.seconds)
-}
-
-/// "cc:claudep" -> ("cc", "claudep"); "claude" -> ("claude", "").
-pub fn split_usage_key(key: &str) -> (String, String) {
-    match key.split_once(':') {
-        Some((command, account)) => (command.to_string(), account.to_string()),
-        None => (key.to_string(), String::new()),
-    }
 }
 
 pub use pycompat::format_g;
@@ -258,9 +246,7 @@ pub fn build_usage_totals(turn_rows: &[Value], call_rows: &[Value]) -> Value {
 /// The newest turn/call row of `key` that has usage windows, as `{windows, status, read_at}`; `None` if none.
 fn newest_usage_entry(rows: &[Value], key: &str) -> Option<Value> {
     for row in rows.iter().rev() {
-        let (command, account) = (command_name(&field_str(row, "claude")), field_str(row, "cc_account"));
-        let row_key = if account.is_empty() { command } else { format!("{command}:{account}") };
-        if row_key == key && clean_windows(row.get("usage_windows")).as_object().is_some_and(|m| !m.is_empty()) {
+        if command_name(&field_str(row, "claude")) == key && clean_windows(row.get("usage_windows")).as_object().is_some_and(|m| !m.is_empty()) {
             let read_at = if engine_state::notify_truthy(row.get("at")) { row.get("at").cloned() } else { row.get("read_at").cloned() }.unwrap_or(json!(""));
             return Some(json!({"windows": row["usage_windows"], "status": row.get("limit_status").cloned().unwrap_or(Value::Null), "read_at": read_at}));
         }
@@ -269,7 +255,7 @@ fn newest_usage_entry(rows: &[Value], key: &str) -> Option<Value> {
 }
 
 /// The usage of every command/account, from what the loop already wrote (never queries anything, never waits):
-/// `[{key, command, cc_account, windows, status, read_at, age_seconds}]`. Source order per key: `meta.claude_usage`, else the newest turn, else the
+/// `[{key, command, windows, status, read_at, age_seconds}]`. Source order per key: `meta.claude_usage`, else the newest turn, else the
 /// newest panel call (newest first). A configured command never seen gets empty windows ("usage unknown"). Configured commands come first.
 pub fn build_usage_view(meta: &Value, configured_rows: &[Value], turn_rows: &[Value], call_rows: &[Value], now: f64) -> Vec<Value> {
     let stored: Map<String, Value> = meta.get("claude_usage").and_then(Value::as_object).cloned().unwrap_or_default();
@@ -285,15 +271,12 @@ pub fn build_usage_view(meta: &Value, configured_rows: &[Value], turn_rows: &[Va
     keys.extend(stored_keys);
     for rows in [turn_rows, call_rows] {
         for row in rows.iter().rev() {
-            let (command, account) = (command_name(&field_str(row, "claude")), field_str(row, "cc_account"));
-            let key = if account.is_empty() { command } else { format!("{command}:{account}") };
+            let key = command_name(&field_str(row, "claude"));
             if !key.is_empty() && !keys.contains(&key) && clean_windows(row.get("usage_windows")).as_object().is_some_and(|m| !m.is_empty()) {
                 keys.push(key);
             }
         }
     }
-    let all = keys.clone();
-    keys.retain(|key| stored.contains_key(key) || !all.iter().any(|other| other.starts_with(&format!("{key}:")))); // `cc` is shown per picked account
     let reversed_calls: Vec<Value> = call_rows.iter().rev().cloned().collect();
     let mut view = Vec::new();
     for key in keys {
@@ -302,10 +285,9 @@ pub fn build_usage_view(meta: &Value, configured_rows: &[Value], turn_rows: &[Va
             entry = newest_usage_entry(turn_rows, &key).or_else(|| newest_usage_entry(&reversed_calls, &key)).or(Some(json!({})));
         }
         let entry = entry.unwrap_or_else(|| json!({}));
-        let (command, account) = split_usage_key(&key);
         let read_epoch = parse_read_at(&text_of(entry.get("read_at")));
         view.push(json!({
-            "key": key, "command": command, "cc_account": account, "windows": build_window_rows(entry.get("windows")),
+            "key": key, "command": key, "windows": build_window_rows(entry.get("windows")),
             "status": text_of(entry.get("status")), "read_at": text_of(entry.get("read_at")),
             "age_seconds": read_epoch.map(|r| ((now - r) as i64).max(0)),
         }));
@@ -427,7 +409,7 @@ impl ClaudeAccountService {
         build_usage_view(meta, &self.get_rows(wait), turn_rows, call_rows, now_epoch())
     }
 
-    /// `{command, role, method, email, org, plan, cc_account, switches, label}` of the account in use. The per-turn label in meta (what the loop
+    /// `{command, role, method, email, org, plan, switches, label}` of the account in use. The per-turn label in meta (what the loop
     /// really ran) wins; the diagnostics row fills what it lacks and gives the command before turn 1.
     pub fn build_current_account(&self, meta: &Value) -> Value {
         let rows = self.get_rows(false);
@@ -454,7 +436,6 @@ impl ClaudeAccountService {
             "email": or(parsed_text("email"), auth_text("email")),
             "org": or(parsed_text("org"), if same_account { auth_text("org") } else { String::new() }),
             "plan": or(parsed_text("plan"), if same_account { auth_text("plan") } else { String::new() }),
-            "cc_account": parsed_text("cc_account"),
             "auth_method": method_code(&method),
             "switches": if engine_state::notify_truthy(meta.get("claude_switches")) { meta["claude_switches"].clone() } else { json!(0) },
             "label": or(label, field_str(&row_value, "label")),
@@ -470,7 +451,7 @@ mod tests {
     fn backup_commands_are_listed_with_the_account_each_signs_in_to() {
         let rows = vec![
             json!({"name": "claude", "role": "main", "found": true, "label": "login, dev@example.com (Acme, team)", "auth": {"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team"}}),
-            json!({"name": "C:\\bin\\cc.cmd", "role": "fallback", "found": true, "label": "token, cc account claude2", "auth": {}}),
+            json!({"name": "C:\\bin\\backup.cmd", "role": "fallback", "found": true, "label": "token", "auth": {}}),
             json!({"name": "gone", "role": "fallback", "found": false, "label": "", "auth": {}}),
         ];
         let list = command_accounts(&rows);
@@ -479,21 +460,20 @@ mod tests {
             (list[0]["command"].clone(), list[0]["role"].clone(), list[0]["email"].clone(), list[0]["plan"].clone()),
             (json!("claude"), json!("main"), json!("dev@example.com"), json!("team"))
         );
-        assert_eq!((list[1]["command"].clone(), list[1]["method"].clone(), list[1]["found"].clone()), (json!("cc"), json!("token"), json!(true)));
+        assert_eq!((list[1]["command"].clone(), list[1]["method"].clone(), list[1]["found"].clone()), (json!("backup"), json!("token"), json!(true)));
         assert_eq!((list[2]["found"].clone(), list[2]["email"].clone()), (json!(false), json!("")));
         assert!(command_accounts(&[]).is_empty());
     }
 
     #[test]
     fn labels_methods_and_windows() {
-        assert_eq!(command_name("C:\\bin\\cc.CMD"), "cc");
+        assert_eq!(command_name("C:\\bin\\backup.CMD"), "backup");
         assert_eq!(command_name(""), "");
         let parsed = parse_account_label("login dev@example.com (Acme, team)");
         assert_eq!(
             (parsed["method"].clone(), parsed["email"].clone(), parsed["org"].clone(), parsed["plan"].clone()),
             (json!("login"), json!("dev@example.com"), json!("Acme"), json!("team"))
         );
-        assert_eq!(parse_account_label("token, cc account claude2")["cc_account"], "claude2");
         assert_eq!(
             (method_code("API key"), method_code("api_key"), method_code("x"), method_code("")),
             ("api_key".into(), "api_key".into(), String::new(), String::new())
@@ -515,15 +495,15 @@ mod tests {
     fn totals_and_usage_view() {
         let turns = vec![
             json!({"claude": "claude", "auth_method": "login", "cost_usd": 1.5}),
-            json!({"claude": "cc", "auth_method": "token", "cost_usd": 0.25}),
+            json!({"claude": "claude-backup", "auth_method": "token", "cost_usd": 0.25}),
             json!({"auth_method": "login"}),
         ];
-        let totals = build_usage_totals(&turns, &[json!({"claude": "cc.cmd", "cost_usd": 1})]);
+        let totals = build_usage_totals(&turns, &[json!({"claude": "claude-backup.cmd", "cost_usd": 1})]);
         assert_eq!(totals["by_method"][0]["method"], "login");
         assert_eq!((totals["turns"].clone(), totals["calls"].clone(), totals["cost_usd"].clone()), (json!(3), json!(1), json!(2.75)));
-        assert_eq!(totals["by_command"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap()).collect::<Vec<_>>(), ["claude", "cc", "unknown"]);
+        assert_eq!(totals["by_command"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap()).collect::<Vec<_>>(), ["claude", "claude-backup", "unknown"]);
         let meta = json!({"claude_usage": {"claude": {"windows": {"five_hour": {"pct": 40.0, "reset_at": 1}}, "status": "allowed", "read_at": "2026-01-01T10:00:00Z"}}});
-        let view = build_usage_view(&meta, &[json!({"name": "claude"}), json!({"name": "cc"})], &[], &[], 1_800_000_000.0);
+        let view = build_usage_view(&meta, &[json!({"name": "claude"}), json!({"name": "claude-backup"})], &[], &[], 1_800_000_000.0);
         assert_eq!(view.len(), 2);
         assert_eq!((view[0]["windows"][0]["pct"].clone(), view[0]["status"].clone()), (json!(40.0), json!("allowed")));
         assert!(view[0]["age_seconds"].as_i64().unwrap() > 0 && view[1]["age_seconds"].is_null() && view[1]["windows"] == json!([]));

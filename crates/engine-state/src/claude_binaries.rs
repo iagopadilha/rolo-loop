@@ -4,7 +4,7 @@
 //! Used by the engine and by the app's panel jobs, so the loop turns and the panel pick the command the same way.
 //!
 //! The order comes from config.json: `claude_binary` first (empty = `claude`), then `claude_fallback_binaries` (a list or one name). A name
-//! like `cc` may be a wrapper script (`cc.cmd`) that signs `claude` in with another account. When the running command fails with an account
+//! may also be a wrapper script (`.cmd`) that signs `claude` in with another account. When the running command fails with an account
 //! usage limit, the caller moves to the next one; an `overloaded` API (529) is not an account limit and never switches. An account that
 //! cannot be used at all (logged out, revoked or expired token, an organization that blocks subscription access: [`is_account_unusable`])
 //! moves the caller to the next command too, with no wait.
@@ -12,8 +12,7 @@
 //! A Windows batch wrapper (`.cmd`/`.bat`) goes through cmd.exe, which cuts an argument at its first line break and expands `%NAME%`: the
 //! prompt of such a call always goes through stdin (`claude -p` with no prompt argument reads it from there).
 //!
-//! Which account runs: `<command> auth status` (JSON, no secret: method, e-mail, organization, plan) and, for an optional account-switching
-//! wrapper (`cc`) in headless mode, the account line the wrapper prints on stderr.
+//! Which account runs: `<command> auth status` (JSON, no secret: method, e-mail, organization, plan).
 
 use crate::loop_io::{run_timeout_raw, which, which_in};
 use pycompat::Re;
@@ -30,8 +29,6 @@ const UNUSABLE_REASON_LIMIT: usize = 300;
 
 // account-side limits: switching to another account helps. `overloaded` (API capacity) is left out on purpose.
 static USAGE_LIMIT: LazyLock<Re> = LazyLock::new(|| Re::ci(r"usage limit|limit reached|rate.?limit|too many requests|\b429\b|quota"));
-// output of an optional account-switching wrapper, printed on stderr in headless mode
-static CC_ACCOUNT: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?m)^\[cc\] conta: *(\S+)"));
 // an account that cannot sign in at all (logged out, revoked or expired token, an organization that blocks subscription access): waiting
 // never fixes it, only another account does. Only specific signatures: a bare "401"/"403" may be an HTTP code of the app a turn works on.
 static ACCOUNT_UNUSABLE: LazyLock<Re> = LazyLock::new(|| {
@@ -42,8 +39,6 @@ static ACCOUNT_UNUSABLE: LazyLock<Re> = LazyLock::new(|| {
         r"|oauth_not_allowed_for_organization|OAuth authentication is currently not allowed"
     ))
 });
-// `cc` with no free account: when the first one frees up (ISO, UTC)
-static CC_RESET: LazyLock<Re> = LazyLock::new(|| Re::new(r"(?m)^\[cc\] reinicia: *(\S+)"));
 // `claude`: "Claude AI usage limit reached|<unix seconds>"
 static EPOCH_RESET: LazyLock<Re> = LazyLock::new(|| Re::ci(r"limit reached\|(\d{9,11})"));
 
@@ -100,7 +95,7 @@ fn registry_path(key: &str) -> Option<String> {
 }
 
 /// PATH folders saved for the user and the machine in the Windows registry (`[]` elsewhere or on error): a process started before the user
-/// added a folder (an editor, the panel) still finds a wrapper such as `cc` there.
+/// added a folder (an editor, the panel) still finds a wrapper there.
 pub fn user_path_entries() -> Vec<String> {
     if !cfg!(windows) {
         return vec![];
@@ -137,7 +132,7 @@ pub fn resolve(name: &str) -> String {
 }
 
 /// Command names in the order they are tried: the primary (empty = `claude`), then each fallback found on this machine, without repeats.
-/// A fallback that is not installed is skipped (another machine may not have `cc`): it never blocks a call.
+/// A fallback that is not installed is skipped (another machine may not have it): it never blocks a call.
 pub fn ordered(primary: &str, fallbacks: &[String]) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     let first = if primary.is_empty() { DEFAULT_BINARY_NAME } else { primary };
@@ -256,30 +251,11 @@ fn to_local_naive(moment: OffsetDateTime) -> PrimitiveDateTime {
     PrimitiveDateTime::new(local.date(), local.time())
 }
 
-fn parse_iso(text: &str) -> Option<PrimitiveDateTime> {
-    use time::format_description::well_known::Iso8601;
-    let fixed = text.replacen('Z', "+00:00", 1);
-    if let Ok(with_offset) = OffsetDateTime::parse(&fixed, &Iso8601::DEFAULT) {
-        return Some(to_local_naive(with_offset));
-    }
-    PrimitiveDateTime::parse(&fixed.replacen(' ', "T", 1), &Iso8601::DEFAULT).ok()
-}
-
-/// Local naive datetime of the limit reset named in the output (`[cc] reinicia: <ISO>` or `limit reached|<epoch>`); `None` when absent.
+/// Local naive datetime of the limit reset named in the output (`limit reached|<epoch>`); `None` when absent.
 pub fn reset_time(text: &str) -> Option<PrimitiveDateTime> {
-    if let Some(found) = CC_RESET.search(text) {
-        if let Some(moment) = parse_iso(found.group(1).unwrap_or("")) {
-            return Some(moment);
-        }
-    }
     let found = EPOCH_RESET.search(text)?;
     let seconds: i64 = found.group(1)?.parse().ok()?;
     OffsetDateTime::from_unix_timestamp(seconds).ok().map(to_local_naive)
-}
-
-/// Account name an optional account-switching wrapper chose (the line it prints on stderr); empty for any other command.
-pub fn account_from_stderr(text: &str) -> String {
-    CC_ACCOUNT.search(text).and_then(|m| m.group(1).map(String::from)).unwrap_or_default()
 }
 
 fn s(v: Option<&Value>) -> String {
@@ -290,16 +266,16 @@ fn s(v: Option<&Value>) -> String {
     }
 }
 
-/// `{"method", "email", "org", "plan", "account", "logged_in", "error"}` of `<name> auth status` (no secret in it); `{}` for a test `.py`
+/// `{"method", "email", "org", "plan", "logged_in", "error"}` of `<name> auth status` (no secret in it); `{}` for a test `.py`
 /// fake. Never fails: a missing command or an unreadable answer comes back as `error`.
 pub fn auth_status(name: &str) -> Value {
     if let Some(provider) = crate::providers::by_ref(name) {
         // a key or a token signs in by itself: nothing to ask the CLI (and `auth status` would describe the user's login instead)
         match provider.kind.as_str() {
             "anthropic-api-key" | "anthropic-gateway" => {
-                return json!({"method": "API key", "email": "", "org": "", "plan": provider.name, "account": "", "logged_in": true, "error": ""})
+                return json!({"method": "API key", "email": "", "org": "", "plan": provider.name, "logged_in": true, "error": ""})
             }
-            "claude-oauth-token" => return json!({"method": "token", "email": "", "org": "", "plan": "", "account": "", "logged_in": true, "error": ""}),
+            "claude-oauth-token" => return json!({"method": "token", "email": "", "org": "", "plan": "", "logged_in": true, "error": ""}),
             _ => {}
         }
     }
@@ -320,33 +296,23 @@ pub fn auth_status(name: &str) -> Value {
     let method = s(data.get("authMethod"));
     json!({
         "method": method_label(&method), "email": s(data.get("email")), "org": s(data.get("orgName")), "plan": s(data.get("subscriptionType")),
-        "account": account_from_stderr(&stderr), "logged_in": crate::notify_truthy(data.get("loggedIn")), "error": ""
+        "logged_in": crate::notify_truthy(data.get("loggedIn")), "error": ""
     })
 }
 
-/// Short text of the account: `login dev@example.com (Acme, team)`, `token, cc account claude`; empty when nothing is known.
-pub fn account_label(auth: &Value, account: &str) -> String {
-    let account = if account.is_empty() { s(auth.get("account")) } else { account.to_string() };
-    if !s(auth.get("error")).is_empty() && account.is_empty() {
+/// Short text of the account: `login dev@example.com (Acme, team)`, `token`; empty when nothing is known.
+pub fn account_label(auth: &Value) -> String {
+    if !s(auth.get("error")).is_empty() {
         return String::new();
     }
-    let who = {
-        let e = s(auth.get("email"));
-        if !e.is_empty() {
-            e
-        } else if !account.is_empty() {
-            format!("cc account {account}")
-        } else {
-            String::new()
-        }
-    };
+    let who = s(auth.get("email"));
     let extra: Vec<String> = ["org", "plan"].iter().map(|k| s(auth.get(*k))).filter(|v| !v.is_empty()).collect();
     let text: Vec<String> = [s(auth.get("method")), who].into_iter().filter(|v| !v.is_empty()).collect();
     format!("{}{}", text.join(", "), if extra.is_empty() { String::new() } else { format!(" ({})", extra.join(", ")) })
 }
 
 /// One row per configured command, missing ones included: `{"name", "role", "path", "found", "auth", "label"}`. Runs `auth status` of every
-/// command found (the `cc` picker queries each account's usage: a few seconds).
+/// command found (a few seconds).
 pub fn describe(primary: &str, fallbacks: &[String]) -> Vec<Value> {
     let mut names: Vec<String> = Vec::new();
     let first = if primary.is_empty() { DEFAULT_BINARY_NAME.to_string() } else { primary.to_string() };
@@ -361,7 +327,7 @@ pub fn describe(primary: &str, fallbacks: &[String]) -> Vec<Value> {
         .map(|(position, name)| {
             let path = resolve(name);
             let auth = if path.is_empty() { json!({}) } else { auth_status(name) };
-            json!({"name": name, "role": if position == 0 { "main" } else { "fallback" }, "path": path, "found": !path.is_empty(), "label": account_label(&auth, ""), "auth": auth})
+            json!({"name": name, "role": if position == 0 { "main" } else { "fallback" }, "path": path, "found": !path.is_empty(), "label": account_label(&auth), "auth": auth})
         })
         .collect()
 }
@@ -388,16 +354,13 @@ mod tests {
         assert!(reset_time("nothing").is_none());
         let epoch = reset_time("Claude AI usage limit reached|1700000000").unwrap();
         assert_eq!(to_local_naive(OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap()), epoch);
-        let iso = reset_time("[cc] reinicia: 2026-01-02T03:04:05Z").unwrap();
-        assert_eq!(to_local_naive(OffsetDateTime::parse("2026-01-02T03:04:05+00:00", &time::format_description::well_known::Iso8601::DEFAULT).unwrap()), iso);
-        assert!(reset_time("[cc] reinicia: garbage").is_none());
     }
 
     #[test]
     fn batch_prompt_goes_through_stdin() {
-        let argv: Vec<String> = ["C:\\bin\\cc.cmd", "-p", "do it", "--model", "x"].map(String::from).to_vec();
+        let argv: Vec<String> = ["C:\\bin\\backup.cmd", "-p", "do it", "--model", "x"].map(String::from).to_vec();
         let (new_argv, stdin) = prompt_through_stdin(&argv, "ctx");
-        assert_eq!((new_argv.join(" "), stdin.as_str()), ("C:\\bin\\cc.cmd -p --model x".to_string(), "do it\n\nctx"));
+        assert_eq!((new_argv.join(" "), stdin.as_str()), ("C:\\bin\\backup.cmd -p --model x".to_string(), "do it\n\nctx"));
         let exe: Vec<String> = ["claude.exe", "-p", "do it"].map(String::from).to_vec();
         assert_eq!(prompt_through_stdin(&exe, "in"), (exe.clone(), "in".to_string()));
         let flagged: Vec<String> = ["a.bat", "-p", "--x"].map(String::from).to_vec();
@@ -406,15 +369,14 @@ mod tests {
 
     #[test]
     fn account_text() {
-        assert_eq!(account_from_stderr("x\n[cc] conta: claude2\n"), "claude2");
         assert_eq!(
-            account_label(&json!({"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team", "error": ""}), ""),
+            account_label(&json!({"method": "login", "email": "dev@example.com", "org": "Acme", "plan": "team", "error": ""})),
             "login, dev@example.com (Acme, team)"
         );
-        assert_eq!(account_label(&json!({"method": "token", "error": ""}), "claude"), "token, cc account claude");
-        assert_eq!(account_label(&json!({"error": "boom"}), ""), "");
+        assert_eq!(account_label(&json!({"method": "token", "error": ""})), "token");
+        assert_eq!(account_label(&json!({"error": "boom"})), "");
         assert_eq!(read_fallbacks(&json!([" a ", 3, ""])), vec!["a"]);
-        assert_eq!(read_fallbacks(&json!("cc")), vec!["cc"]);
+        assert_eq!(read_fallbacks(&json!("claude-backup")), vec!["claude-backup"]);
         assert!(read_fallbacks(&json!(5)).is_empty());
         assert_eq!(ordered("", &["definitely-not-installed-xyz".to_string()]), vec!["claude"]);
     }

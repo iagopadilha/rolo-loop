@@ -34,8 +34,8 @@ const AGENT_FAILED_STATE: &str = "failed";
 /// Cut off with its turn: no return while the task is still running.
 const AGENT_INTERRUPTED_STATE: &str = "interrupted";
 /// The last four: command and sign-in inherited from the turn.
-const EXECUTOR_FIELDS: [&str; 13] =
-    ["agent_id", "role", "turn", "state", "return_status", "duration_s", "tokens", "started_at", "finished_at", "claude", "auth_method", "auth_email", "cc_account"];
+const EXECUTOR_FIELDS: [&str; 12] =
+    ["agent_id", "role", "turn", "state", "return_status", "duration_s", "tokens", "started_at", "finished_at", "claude", "auth_method", "auth_email"];
 
 fn name_by_pipeline_step(step: usize) -> &'static str {
     match step {
@@ -240,7 +240,7 @@ impl FeatureDetailService<'_> {
         block
     }
 
-    /// `{command, account, auth_method, auth_email, auth_plan, cc_account}` of the last turn; `null` without a turn.
+    /// `{command, account, auth_method, auth_email, auth_plan}` of the last turn; `null` without a turn.
     fn read_last_turn_claude(&self, work_dir: &str, numbers: &[u64]) -> Value {
         let Some(last) = numbers.last() else { return Value::Null };
         let record = Value::Object(self.app.loop_files.read_turn(work_dir, *last));

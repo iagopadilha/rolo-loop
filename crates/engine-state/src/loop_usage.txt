@@ -55,7 +55,7 @@ options:
   --claude CLAUDE       claude binary (or a test .py)
   --claude-fallback COMMAND
                         command tried when the running one hits the account
-                        usage limit (repeatable, in order; e.g. `cc`, a
+                        usage limit (repeatable, in order; e.g. `claude-backup`, a
                         wrapper signed in with another account)
   --option N            answers the question by the NUMBER of the option
                         listed in the notice (same as --answer with that

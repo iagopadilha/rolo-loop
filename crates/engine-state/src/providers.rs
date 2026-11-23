@@ -265,9 +265,9 @@ mod tests {
 
     #[test]
     fn old_keys_become_providers_and_drive_no_chain() {
-        let c = config(json!({"claude_binary": "", "claude_fallback_binaries": ["cc"]}));
+        let c = config(json!({"claude_binary": "", "claude_fallback_binaries": ["claude-backup"]}));
         let list = read(&c);
-        assert_eq!(list.iter().map(|p| (p.id.as_str(), p.kind.as_str())).collect::<Vec<_>>(), [("main", "claude-subscription"), ("cli-cc", "custom-cli")]);
+        assert_eq!(list.iter().map(|p| (p.id.as_str(), p.kind.as_str())).collect::<Vec<_>>(), [("main", "claude-subscription"), ("cli-claude-backup", "custom-cli")]);
         assert_eq!(chain(&c), None);
     }
 

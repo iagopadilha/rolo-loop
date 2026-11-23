@@ -1,7 +1,6 @@
 /* Which Claude account the loop uses: the sidebar account chip (data below) and the dialog it opens ("Claude account and usage").
-   The command (`claude` = main, `cc` = wrapper on another account), the sign-in in words ("subscription, browser login", "subscription,
-   sign-in token"; an API key is billed per token and is drawn as a warning), the e-mail (organization and plan when known) and, for `cc`,
-   the account it picked. The data is `state.meta.claude_account_info`; the 5-hour and weekly usage of every command/account
+   The command (`claude` = main, others = fallback commands), the sign-in in words ("subscription, browser login", "subscription,
+   sign-in token"; an API key is billed per token and is drawn as a warning) and the e-mail (organization and plan when known). The data is `state.meta.claude_account_info`; the 5-hour and weekly usage of every command/account
    (`state.meta.claude_usage_view`, exhausted windows in the warning colour) and the usage per sign-in method and per command are listed in the dialog. */
 import { html } from '../../util/preact.js';
 import { openBigDialog } from '../../components/big_dialog.js';
@@ -13,7 +12,7 @@ const infoOf = () => (ctx.state && ctx.state.meta && ctx.state.meta.claude_accou
 /** The Claude account of the running loop, in plain words for the sidebar chip; null before there is one. */
 export function accountChip() {
   const info = infoOf();
-  const name = info.email || (info.cc_account ? 'cc account ' + info.cc_account : '') || info.command || '';
+  const name = info.email || info.command || '';
   if (!name) return null;
   const words = METHOD_WORDS[methodCodeOf(info)] || '';
   return { name, sub: words ? words.charAt(0).toUpperCase() + words.slice(1) : '', onClick: openAccountDialog };
@@ -29,7 +28,6 @@ function accountLines(info, method) {
     info.email ? ['E-mail', info.email] : null,
     info.org ? ['Organization', info.org] : null,
     info.plan ? ['Plan', info.plan] : (extra ? ['Plan', extra] : null),
-    info.cc_account ? ['cc account', info.cc_account] : null,
     switches ? ['Account switches in this run', String(switches)] : null,
   ].filter(Boolean);
 }

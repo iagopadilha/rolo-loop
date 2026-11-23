@@ -32,19 +32,18 @@ impl ClaudeCallLogService {
         ClaudeCallLogService { account_service }
     }
 
-    /// One log line from the result of `run_prompt` (binary, account, cost_usd, ok); never a secret or the reply text.
+    /// One log line from the result of `run_prompt` (binary, cost_usd, ok); never a secret or the reply text.
     pub fn build_entry(&self, kind: &str, result: &Value) -> Value {
         let binary = text(result.get("binary"));
         let command = command_name(if binary.is_empty() { claude_binaries::DEFAULT_BINARY_NAME } else { &binary });
         let auth = self.find_command_auth(&command);
-        let cc_account = text(result.get("account"));
-        let email = if cc_account.is_empty() { text(auth.get("email")) } else { String::new() };
+        let email = text(auth.get("email"));
         let cost = result.get("cost_usd").filter(|v| v.is_number()).cloned().unwrap_or(Value::Null);
         let rate_limit = result.get("raw").and_then(|r| r.get("rate_limit")).filter(|v| engine_state::notify_truthy(Some(v))).cloned().unwrap_or(json!({}));
         json!({
             "at": loop_io::now_iso(), "kind": if kind.is_empty() { UNKNOWN_KIND } else { kind }, "claude": command,
             "auth_method": method_code(&text(auth.get("method"))), "auth_email": email, "auth_plan": text(auth.get("plan")),
-            "cc_account": cc_account, "cost_usd": cost, "ok": engine_state::notify_truthy(result.get("ok")),
+            "cost_usd": cost, "ok": engine_state::notify_truthy(result.get("ok")),
             "usage_windows": usage_windows::with_local_reset(&usage_windows::windows_of(&rate_limit)),
             "limit_status": text(rate_limit.get("status")),
         })
@@ -96,7 +95,7 @@ mod tests {
         let accounts = Arc::new(ClaudeAccountService::new(Arc::new(|| vec![json!({"name": "claude", "auth": {"method": "login", "email": "a@b.c", "plan": "pro"}})])));
         accounts.refresh();
         let service = ClaudeCallLogService::new(Some(accounts));
-        let result = json!({"binary": "claude", "ok": true, "cost_usd": 0.5, "account": "", "raw": {"rate_limit": {"status": "allowed", "windows": {"five_hour": {"pct": 10.0, "reset_at": 100}}}}});
+        let result = json!({"binary": "claude", "ok": true, "cost_usd": 0.5, "raw": {"rate_limit": {"status": "allowed", "windows": {"five_hour": {"pct": 10.0, "reset_at": 100}}}}});
         service.record_call(&folder, "chat", &result);
         service.record_call(&folder, "", &json!({"ok": false}));
         let calls = service.list_calls(&[folder.clone(), folder.clone()], PUBLIC_CALL_LIMIT);

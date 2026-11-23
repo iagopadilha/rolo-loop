@@ -613,7 +613,7 @@ pub fn guard_settings(env: &Env, guard_path: &str, profile: &str, user_settings:
 }
 
 /// Writes the settings JSON next to the bundle (name by content hash, atomic) and returns its path. A file, never the inline JSON: a batch
-/// fallback binary (`cc.cmd`) goes through cmd.exe, which splits an argument on `&`, `|`, `<`, `>` (the copied `autoMode` text has them).
+/// fallback binary (`backup.cmd`) goes through cmd.exe, which splits an argument on `&`, `|`, `<`, `>` (the copied `autoMode` text has them).
 pub fn write_settings_file(runtime_dir: &Path, settings_json: &str) -> PathBuf {
     let _ = std::fs::create_dir_all(runtime_dir);
     let path = runtime_dir.join(format!("settings-{}.json", short_hash(settings_json)));

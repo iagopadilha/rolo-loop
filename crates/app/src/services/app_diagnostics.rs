@@ -95,7 +95,7 @@ impl AppDiagnosticsService<'_> {
         self.app.accounts.get_rows(true) // cached a few minutes, shared with the loop panel
     }
 
-    /// Each command row gets `usage`: the usage-view rows of that command (one per cc account), empty when none.
+    /// Each command row gets `usage`: the usage-view rows of that command (one per command), empty when none.
     fn attach_usage(command_rows: Vec<Value>, usage_view: &[Value]) -> Vec<Value> {
         command_rows
             .into_iter()
@@ -194,7 +194,7 @@ impl AppDiagnosticsService<'_> {
         }
         let missing_files = Locator::toolkit_missing_files(Path::new(&toolkit_root));
         if !missing_files.is_empty() {
-            problems.push(format!("toolkit {toolkit_root} lacks {} (the loop calls it): /plugin update craft-dev-toolkit@craft-dev-toolkit", missing_files.join(", ")));
+            problems.push(format!("toolkit {toolkit_root} lacks {} (the loop calls it): /plugin update craft-dev-toolkit@craft-dev-toolkit, or, for a clone or source install, run tools/install-local.ps1 in the toolkit repository", missing_files.join(", ")));
         }
         let mut warnings: Vec<String> = Vec::new();
         let standards_rows = if project_folders.is_empty() { vec![] } else { self.check_standards_bindings(project_folders, &toolkit_root) };
